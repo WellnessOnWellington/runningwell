@@ -1,0 +1,2867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wellness Timesheets</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --burgundy:   #8B2535;
+    --wine:       #A63245;
+    --rose:       #C45670;
+    --dusty:      #D4899A;
+    --blush:      #F5E6EA;
+    --blush-lt:   #FAF0F2;
+    --warm-white: #FDFAF9;
+    --white:      #FFFFFF;
+    --charcoal:   #2D2426;
+    --text:       #3A2F31;
+    --muted:      #8A7A7D;
+    --border:     #EAD9DC;
+    --border-dk:  #D9C4C8;
+    --success:    #3A6B4F;
+    --success-lt: #E6F0EA;
+    --warning:    #A07228;
+    --warning-lt: #FDF3E2;
+    --radius:     18px;
+    --radius-sm:  11px;
+    --shadow:     0 2px 16px rgba(139,37,53,0.07);
+    --shadow-md:  0 6px 28px rgba(139,37,53,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--warm-white);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 65% 55% at 0% 100%, rgba(212,137,154,0.10) 0%, transparent 55%),
+      radial-gradient(ellipse 45% 45% at 100% 0%,  rgba(139,37,53,0.05)  0%, transparent 55%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .view { display: none; position: relative; z-index: 1; }
+  .view.active { display: flex; }
+
+  /* ══════════════════════════════
+     KIOSK
+  ══════════════════════════════ */
+  #view-kiosk {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    gap: 1.75rem;
+  }
+
+  .kiosk-logo-area {
+    display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+    animation: fadeUp 0.55s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .logo-wrap {
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .app-tagline {
+    font-size: 0.7rem; font-weight: 800;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--dusty);
+  }
+
+  .kiosk-time-section {
+    text-align: center;
+    animation: fadeUp 0.55s 0.08s ease both;
+  }
+
+  .kiosk-clock {
+    font-family: 'Lora', serif;
+    font-size: clamp(4.5rem, 10vw, 7rem);
+    font-weight: 400;
+    color: var(--burgundy);
+    letter-spacing: 0.02em; line-height: 1;
+  }
+
+  .kiosk-date {
+    font-size: 0.9rem; color: var(--muted);
+    font-weight: 500; margin-top: 0.35rem;
+  }
+
+  .scan-card {
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 26px;
+    padding: 2.25rem 2.75rem;
+    text-align: center;
+    width: 100%; max-width: 440px;
+    box-shadow: var(--shadow-md);
+    position: relative; overflow: hidden;
+    animation: fadeUp 0.55s 0.16s ease both;
+  }
+
+  .scan-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg,
+      var(--blush) 0%, var(--dusty) 25%, var(--wine) 50%, var(--dusty) 75%, var(--blush) 100%);
+    background-size: 200%;
+    animation: flow 5s linear infinite;
+  }
+
+  @keyframes flow { 0% { background-position: 0%; } 100% { background-position: 200%; } }
+
+  .scan-emoji {
+    font-size: 2.4rem; margin-bottom: 0.85rem; display: block;
+    animation: sway 3.5s ease-in-out infinite;
+  }
+
+  @keyframes sway {
+    0%,100% { transform: rotate(-5deg) scale(1); }
+    50%     { transform: rotate(5deg) scale(1.05); }
+  }
+
+  .scan-prompt {
+    font-family: 'Lora', serif; font-size: 1.1rem;
+    font-weight: 500; color: var(--charcoal); margin-bottom: 0.35rem;
+  }
+
+  .scan-sub {
+    font-size: 0.8rem; color: var(--muted);
+    font-weight: 400; margin-bottom: 1.75rem; line-height: 1.55;
+  }
+
+  #rfid-input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+
+  .reader-pill {
+    display: inline-flex; align-items: center; gap: 0.55rem;
+    font-size: 0.72rem; color: var(--wine); font-weight: 800;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    background: var(--blush); padding: 0.42rem 1rem;
+    border-radius: 30px; border: 1px solid var(--border);
+  }
+
+  .pulse-dot {
+    width: 7px; height: 7px; background: var(--burgundy); border-radius: 50%;
+    animation: breathe 2.2s ease-in-out infinite;
+  }
+
+  @keyframes breathe {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%     { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  .kiosk-footer-nav { position: fixed; bottom: 1.5rem; right: 1.75rem; }
+
+  .nav-btn {
+    background: rgba(255,255,255,0.85); border: 1px solid var(--border);
+    color: var(--muted); padding: 0.48rem 1rem; border-radius: 30px;
+    font-size: 0.74rem; font-family: 'Nunito',sans-serif; font-weight: 700;
+    cursor: pointer; transition: all 0.2s; backdrop-filter: blur(6px);
+    box-shadow: var(--shadow);
+  }
+  .nav-btn:hover { background: var(--white); color: var(--burgundy); border-color: var(--dusty); }
+
+  /* ══════════════════════════════
+     FLASH
+  ══════════════════════════════ */
+  .flash-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 0.4rem; opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .flash-overlay.show { opacity: 1; pointer-events: all; }
+  .flash-overlay.arrive { background: linear-gradient(160deg, #2E7D52 0%, #4CAF7D 100%); }
+  .flash-overlay.depart { background: linear-gradient(160deg, #6B1D2A 0%, var(--burgundy) 100%); }
+  .flash-overlay.error  { background: linear-gradient(160deg, #5A1520 0%, var(--burgundy) 100%); }
+
+  .flash-wave {
+    font-size: 3.5rem;
+    animation: popIn 0.5s cubic-bezier(0.34,1.4,0.64,1) both;
+    margin-bottom: 0.25rem;
+  }
+  @keyframes popIn {
+    from { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+    to   { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+
+  .flash-greeting {
+    font-family: 'Lora',serif; font-size: clamp(2rem,5vw,3.5rem);
+    font-style: italic; color: rgba(255,255,255,0.85);
+  }
+
+  .flash-name {
+    font-family: 'Lora',serif; font-size: clamp(2.8rem,7vw,5rem);
+    font-weight: 600; color: #fff; text-align: center;
+    letter-spacing: -0.02em; line-height: 1;
+    text-shadow: 0 2px 20px rgba(0,0,0,0.15);
+    animation: nameIn 0.35s 0.12s ease both;
+  }
+  @keyframes nameIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .flash-sub { font-size: 0.95rem; color: rgba(255,255,255,0.55); font-weight: 500; margin-top: 0.4rem; }
+
+  /* ══════════════════════════════
+     REASON OVERLAY
+  ══════════════════════════════ */
+  .flash-overlay.reason-bg { background: rgba(253,250,249,0.97); backdrop-filter: blur(10px); }
+
+  .reason-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 26px;
+    padding: 2.25rem 2.5rem; max-width: 460px; width: 90%;
+    box-shadow: var(--shadow-md); text-align: center;
+  }
+
+  .reason-icon { font-size: 2.2rem; margin-bottom: 0.75rem; }
+
+  .reason-title {
+    font-family: 'Lora',serif; font-size: 1.15rem; font-weight: 600;
+    color: var(--charcoal); margin-bottom: 0.4rem;
+  }
+
+  .reason-sub {
+    font-size: 0.82rem; color: var(--muted); font-weight: 500;
+    margin-bottom: 1.4rem; line-height: 1.55;
+  }
+
+  .reason-input {
+    width: 100%; background: var(--warm-white); border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: 'Nunito',sans-serif; font-size: 0.9rem; font-weight: 500;
+    padding: 0.85rem 1rem; resize: none; outline: none;
+    margin-bottom: 1rem; transition: border-color 0.2s, box-shadow 0.2s; line-height: 1.5;
+  }
+  .reason-input:focus { border-color: var(--wine); box-shadow: 0 0 0 3px rgba(139,37,53,0.08); }
+  .reason-input::placeholder { color: var(--muted); }
+  .reason-btns { display: flex; gap: 0.75rem; }
+
+  /* ══════════════════════════════
+     BUTTONS
+  ══════════════════════════════ */
+  .btn-primary {
+    flex: 1; background: var(--burgundy); color: #fff; border: none;
+    border-radius: var(--radius-sm); padding: 0.85rem;
+    font-family: 'Nunito',sans-serif; font-size: 0.9rem; font-weight: 700;
+    cursor: pointer; transition: background 0.18s, transform 0.1s; letter-spacing: 0.02em;
+  }
+  .btn-primary:hover  { background: var(--wine); }
+  .btn-primary:active { transform: scale(0.98); }
+
+  .btn-ghost {
+    flex: 1; background: transparent; color: var(--muted);
+    border: 1.5px solid var(--border-dk); border-radius: var(--radius-sm); padding: 0.85rem;
+    font-family: 'Nunito',sans-serif; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.18s;
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--dusty); }
+
+  /* ══════════════════════════════
+     LOGIN
+  ══════════════════════════════ */
+  #view-login {
+    flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 2rem;
+  }
+
+  .login-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 26px;
+    padding: 2.5rem; width: 100%; max-width: 340px;
+    box-shadow: var(--shadow-md); text-align: center;
+  }
+
+  .login-logo-wrap {
+    display: flex; align-items: center;
+    justify-content: center; margin: 0 auto 1.25rem;
+  }
+
+  .login-title { font-family: 'Lora',serif; font-size: 1.1rem; font-weight: 600; color: var(--charcoal); margin-bottom: 0.2rem; }
+  .login-sub   { font-size: 0.79rem; color: var(--muted); font-weight: 500; margin-bottom: 1.75rem; }
+
+  .pin-input {
+    width: 100%; background: var(--warm-white); border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--charcoal);
+    font-family: 'Nunito',sans-serif; font-size: 1.5rem; font-weight: 700;
+    padding: 0.75rem; outline: none; text-align: center;
+    letter-spacing: 0.4em; transition: border-color 0.2s, box-shadow 0.2s; margin-bottom: 1rem;
+  }
+  .pin-input:focus { border-color: var(--burgundy); box-shadow: 0 0 0 3px rgba(139,37,53,0.08); }
+  .login-hint { margin-top: 1rem; font-size: 0.72rem; color: var(--muted); }
+
+  /* ══════════════════════════════
+     ADMIN
+  ══════════════════════════════ */
+  #view-admin { flex-direction: column; min-height: 100vh; }
+
+  .admin-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.8rem 2rem; background: var(--white);
+    border-bottom: 1.5px solid var(--border);
+    box-shadow: 0 1px 10px rgba(139,37,53,0.06);
+    position: sticky; top: 0; z-index: 10; gap: 1rem;
+  }
+
+  .admin-brand { display: flex; align-items: center; gap: 0.5rem; }
+
+  .admin-brand-sub {
+    font-size: 0.63rem; font-weight: 800; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--dusty);
+    align-self: flex-end; padding-bottom: 2px;
+  }
+
+  .admin-tabs {
+    display: flex; gap: 0.2rem; background: var(--warm-white);
+    border-radius: 30px; padding: 0.25rem; border: 1.5px solid var(--border);
+    position: absolute; left: 50%; transform: translateX(-50%);
+  }
+
+  .tab {
+    padding: 0.44rem 1.1rem; border-radius: 30px; font-size: 0.8rem; font-weight: 700;
+    cursor: pointer; border: none; font-family: 'Nunito',sans-serif;
+    background: transparent; color: var(--muted); transition: all 0.2s; letter-spacing: 0.02em;
+  }
+  .tab.active { background: var(--burgundy); color: #fff; box-shadow: 0 2px 8px rgba(139,37,53,0.25); }
+  .tab:hover:not(.active) { color: var(--burgundy); }
+
+  .notif-badge {
+    display: inline-block; background: var(--wine); color: #fff;
+    border-radius: 30px; padding: 0 6px; font-size: 0.67rem; font-weight: 800;
+    margin-left: 4px; vertical-align: middle; line-height: 1.6;
+  }
+
+  .admin-content { flex: 1; padding: 2rem; overflow-y: auto; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .section-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; gap: 1rem; }
+  .section-title  { font-family: 'Lora',serif; font-size: 1.1rem; font-weight: 600; color: var(--charcoal); }
+  .section-hint   { font-size: 0.76rem; color: var(--muted); font-weight: 500; margin-top: 0.2rem; }
+
+  /* Stats */
+  .team-role-bar { display:flex; align-items:center; gap:1rem; margin-bottom:1.25rem; flex-wrap:wrap; }
+  .today-strip { display: flex; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; }
+
+  .stat-tile {
+    background: var(--white); border: 1.5px solid var(--border);
+    border-radius: var(--radius); padding: 1.1rem 1.4rem;
+    flex: 1; min-width: 140px; box-shadow: var(--shadow);
+  }
+
+  .stat-val   { font-family: 'Lora',serif; font-size: 2rem; font-weight: 600; color: var(--burgundy); line-height: 1; }
+  .stat-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; color: var(--muted); text-transform: uppercase; margin-top: 0.3rem; }
+  .stat-names { font-size: 0.72rem; font-weight: 600; color: var(--border-dk); margin-top: 0.5rem; line-height: 1.6; }
+
+  /* Employee cards */
+  .employees-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(265px,1fr)); gap: 0.9rem; }
+
+  .employee-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius);
+    padding: 1.05rem 1.2rem; display: flex; align-items: center; gap: 0.95rem;
+    box-shadow: var(--shadow); transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .employee-card:hover { border-color: var(--dusty); box-shadow: var(--shadow-md); }
+
+  .emp-avatar { width: 44px; height: 44px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; flex-shrink: 0; }
+
+  .c-doctor       { background: rgba(139,37,53,0.10); color: var(--burgundy); }
+  .c-nurse        { background: rgba(166,50,69,0.12); color: var(--wine); }
+  .c-receptionist { background: rgba(212,137,154,0.2);color: #7A3344; }
+  .c-manager      { background: rgba(139,37,53,0.07); color: #6B2030; }
+
+  .emp-info { flex: 1; min-width: 0; }
+  .emp-name { font-size: 0.87rem; font-weight: 700; color: var(--charcoal); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .emp-meta { font-size: 0.72rem; color: var(--muted); font-weight: 500; margin-top: 0.1rem; }
+  .emp-rfid { font-family: 'Courier New',monospace; font-size: 0.67rem; color: var(--wine); background: var(--blush); padding: 0.15rem 0.42rem; border-radius: 5px; margin-top: 0.28rem; display: inline-block; font-weight: 700; border: 1px solid var(--border); }
+
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.in  { background: #2e7d32; box-shadow: 0 0 0 3px rgba(46,125,50,0.15); }
+  .status-dot.out { background: var(--border-dk); }
+  .emp-edit-btn { background:none; border:1.5px solid var(--border); border-radius:7px; padding:0.22rem 0.5rem; font-size:0.68rem; font-weight:700; color:var(--muted); cursor:pointer; font-family:'Nunito',sans-serif; transition:all 0.15s; flex-shrink:0; }
+  .emp-edit-btn:hover { border-color:var(--burgundy); color:var(--burgundy); background:var(--blush-lt); }
+
+  .add-emp-btn {
+    background: var(--burgundy); color: #fff; border: none; border-radius: 30px;
+    padding: 0.58rem 1.25rem; font-family: 'Nunito',sans-serif; font-size: 0.8rem; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
+    box-shadow: 0 2px 10px rgba(139,37,53,0.22); transition: background 0.18s; white-space: nowrap;
+  }
+  .add-emp-btn:hover { background: var(--wine); }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(45,36,38,0.2); backdrop-filter: blur(7px);
+    z-index: 200; display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 10vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .modal-bg.show { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 24px;
+    padding: 2rem; width: 90%; max-width: 410px; box-shadow: var(--shadow-md);
+    transform: translateY(12px) scale(0.97);
+    transition: transform 0.25s cubic-bezier(0.34,1.2,0.64,1);
+  }
+  .modal-bg.show .modal { transform: translateY(0) scale(1); }
+
+  .modal-title { font-family: 'Lora',serif; font-size: 1.05rem; font-weight: 600; color: var(--charcoal); margin-bottom: 1.3rem; }
+  .form-group  { margin-bottom: 0.95rem; }
+  .form-label  { display: block; font-size: 0.7rem; font-weight: 800; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.38rem; }
+
+  .form-input, .form-select {
+    width: 100%; background: var(--warm-white); border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text); font-family: 'Nunito',sans-serif;
+    font-size: 0.9rem; font-weight: 500; padding: 0.72rem 1rem; outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s; appearance: none;
+  }
+  .form-input:focus, .form-select:focus { border-color: var(--burgundy); box-shadow: 0 0 0 3px rgba(139,37,53,0.08); }
+  .form-hint    { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.45; }
+  .modal-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+
+  /* Filters */
+  .filters-bar {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius);
+    padding: 0.9rem 1.2rem; display: flex; gap: 0.75rem; flex-wrap: wrap;
+    align-items: center; margin-bottom: 1.25rem; box-shadow: var(--shadow);
+  }
+  .filters-bar .form-input, .filters-bar .form-select { width: auto; padding: 0.48rem 0.85rem; font-size: 0.8rem; background: var(--warm-white); }
+
+  .export-btn {
+    background: var(--burgundy); color: #fff; border: none; border-radius: 30px;
+    padding: 0.52rem 1.2rem; font-family: 'Nunito',sans-serif; font-size: 0.79rem; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; gap: 0.4rem; margin-left: auto;
+    box-shadow: 0 2px 8px rgba(139,37,53,0.2); transition: background 0.18s; white-space: nowrap;
+  }
+  .export-btn:hover { background: var(--wine); }
+
+  /* Table */
+  .table-wrap { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+
+  .timesheet-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+
+  .timesheet-table th { text-align: left; padding: 0.82rem 1.1rem; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); background: var(--warm-white); border-bottom: 1.5px solid var(--border); }
+
+  .timesheet-table td { padding: 0.88rem 1.1rem; border-bottom: 1px solid rgba(234,217,220,0.7); color: var(--text); vertical-align: middle; }
+
+  .timesheet-table tr:last-child td { border-bottom: none; }
+  .timesheet-table tr:hover td { background: var(--blush-lt); }
+
+  .badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.65rem; border-radius: 30px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.03em; }
+  .badge-normal   { background: var(--success-lt); color: var(--success); }
+  .badge-pending  { background: var(--warning-lt); color: var(--warning); }
+  .badge-approved { background: var(--success-lt); color: var(--success); }
+  .badge-flagged  { background: var(--blush);      color: var(--burgundy); }
+  .mono { font-family: 'Courier New',monospace; font-size: 0.83em; }
+
+  /* Approval cards */
+  .approvals-list { display: flex; flex-direction: column; gap: 1rem; }
+
+  .approval-card {
+    background: var(--white); border: 1.5px solid var(--border);
+    border-left: 3.5px solid var(--dusty); border-radius: var(--radius);
+    padding: 1.2rem 1.5rem; box-shadow: var(--shadow);
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 1.25rem;
+  }
+
+  .approval-meta  { flex: 1; }
+  .approval-who   { font-size: 0.9rem; font-weight: 700; color: var(--charcoal); margin-bottom: 0.15rem; }
+  .approval-detail{ font-size: 0.75rem; color: var(--muted); font-weight: 500; margin-bottom: 0.65rem; }
+  .approval-reason{ font-size: 0.8rem; color: var(--text); background: var(--blush-lt); border-left: 3px solid var(--dusty); padding: 0.55rem 0.8rem; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-style: italic; line-height: 1.45; }
+  .approval-actions { display: flex; flex-direction: column; gap: 0.5rem; flex-shrink: 0; }
+
+  .acknowledge-btn { background: var(--success-lt); color: var(--success); border: 1px solid rgba(58,107,79,0.18); border-radius: 8px; padding: 0.42rem 1rem; font-family: 'Nunito',sans-serif; font-size: 0.76rem; font-weight: 800; cursor: pointer; transition: all 0.18s; white-space: nowrap; }
+  .acknowledge-btn:hover { background: var(--success); color: #fff; }
+
+  .flag-btn { background: var(--blush); color: var(--burgundy); border: 1px solid var(--border); border-radius: 8px; padding: 0.42rem 1rem; font-family: 'Nunito',sans-serif; font-size: 0.76rem; font-weight: 800; cursor: pointer; transition: all 0.18s; white-space: nowrap; }
+  .flag-btn:hover { background: var(--burgundy); color: #fff; }
+
+  /* Empty */
+  .empty-state { text-align: center; padding: 3rem 2rem; color: var(--muted); }
+  .empty-icon  { font-size: 2.4rem; margin-bottom: 0.6rem; }
+  .empty-msg   { font-size: 0.88rem; font-weight: 600; }
+  .empty-sub   { font-size: 0.76rem; font-weight: 400; margin-top: 0.25rem; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 1.75rem; left: 50%; transform: translateX(-50%) translateY(70px); background: var(--charcoal); color: #fff; border-radius: 30px; padding: 0.7rem 1.5rem; font-size: 0.82rem; font-weight: 600; z-index: 300; transition: transform 0.3s cubic-bezier(0.34,1.4,0.64,1); white-space: nowrap; box-shadow: 0 4px 20px rgba(0,0,0,0.18); }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--blush); border-radius: 10px; }
+
+  #test-rfid {
+    flex: 1;
+    display: block;
+    width: 100%;
+    padding: 0.55rem 0.85rem;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #000000;
+    background-color: #ffffff;
+    border: 2px solid #A63245;
+    border-radius: 11px;
+    outline: none;
+    box-sizing: border-box;
+    opacity: 1;
+    -webkit-text-fill-color: #000000;
+    caret-color: #000000;
+  }
+  #test-rfid::placeholder { color: #999999; -webkit-text-fill-color: #999999; }
+
+  /* ══════════════════════════════
+     STAFF ROSTER VIEW (public)
+  ══════════════════════════════ */
+  #view-staff-roster { flex-direction: column; min-height: 100vh; background: var(--warm-white); }
+
+  .sr-header {
+    background: var(--white); border-bottom: 1.5px solid var(--border);
+    padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem;
+    flex-wrap: wrap; position: sticky; top: 0; z-index: 10;
+    box-shadow: 0 2px 12px rgba(139,37,53,0.06);
+  }
+  .sr-title { font-family: 'Lora',serif; font-size: 1rem; font-weight: 600; color: var(--charcoal); background: var(--blush-lt); border: 1.5px solid var(--border); border-radius: 20px; padding: 0.3rem 0.9rem; margin-left: 0.75rem; white-space: nowrap; flex-shrink: 0; }
+  .sr-header-spacer { flex: 1; }
+  .sr-nav { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .sr-nav-btn { background: var(--white); border: 1.5px solid var(--border); border-radius: 30px; padding: 0.4rem 0.9rem; font-size: 0.8rem; font-weight: 700; color: var(--muted); cursor: pointer; font-family: 'Nunito',sans-serif; transition: all 0.2s; }
+  .sr-nav-btn:hover { border-color: var(--dusty); color: var(--burgundy); }
+  .sr-period-label { font-size: 0.82rem; font-weight: 700; color: var(--charcoal); padding: 0 0.4rem; white-space: nowrap; }
+
+  .sr-filters {
+    background: var(--white); border-bottom: 1.5px solid var(--border);
+    padding: 0.75rem 2rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  }
+  .sr-role-tabs { display: flex; gap: 0.2rem; background: var(--warm-white); border-radius: 30px; padding: 0.2rem; border: 1.5px solid var(--border); }
+  .sr-tab { padding: 0.35rem 0.9rem; border-radius: 30px; font-size: 0.76rem; font-weight: 700; cursor: pointer; border: none; font-family: 'Nunito',sans-serif; background: transparent; color: var(--muted); transition: all 0.2s; }
+  .sr-tab.active { background: var(--burgundy); color: #fff; box-shadow: 0 2px 8px rgba(139,37,53,0.22); }
+  #sr-staff-filter.individual-active { background: var(--burgundy); color: #fff; border-color: var(--burgundy); box-shadow: 0 2px 8px rgba(139,37,53,0.22); font-weight: 700; }
+  .sr-layout-toggle { display: flex; gap: 0.2rem; background: var(--warm-white); border-radius: 30px; padding: 0.2rem; border: 1.5px solid var(--border); margin-left: auto; }
+  .sr-layout-btn { padding: 0.35rem 0.9rem; border-radius: 30px; font-size: 0.76rem; font-weight: 700; cursor: pointer; border: none; font-family: 'Nunito',sans-serif; background: transparent; color: var(--muted); transition: all 0.2s; }
+  .sr-layout-btn.active { background: var(--burgundy); color: #fff; box-shadow: 0 2px 8px rgba(139,37,53,0.22); }
+
+  .sr-content { padding: 1.75rem 2rem; max-width: 1500px; margin: 0 auto; width: 100%; }
+
+  .sr-fortnight-block { margin-bottom: 2.5rem; }
+  .sr-fortnight-heading { display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; padding-bottom:0.5rem; border-bottom:2px solid var(--border); }
+  .sr-fn-badge { background:var(--burgundy); color:#fff; border-radius:999px; padding:0.22rem 0.75rem; font-size:0.7rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; flex-shrink:0; }
+  .sr-fn-dates { font-family:'Lora',serif; font-size:0.95rem; font-weight:600; color:var(--charcoal); }
+  .sr-fn-year { margin-left:auto; font-size:0.75rem; font-weight:600; color:var(--muted); }
+
+  .sr-unpublished { background: var(--white); border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 2.5rem; text-align: center; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+  .sr-unpublished-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+  /* By Day layout */
+  .sr-day-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.85rem; }
+  .sr-day-col-header { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; padding: 0.3rem 0; }
+  .sr-day-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .sr-day-card.today { border-color: var(--dusty); box-shadow: 0 0 0 3px rgba(212,137,154,0.18), var(--shadow); }
+  .sr-day-card.past { opacity: 0.42; filter: grayscale(0.4); }
+  .sr-day-card-header { padding: 0.65rem 0.9rem; background: var(--warm-white); border-bottom: 1px solid var(--border); }
+  .sr-day-name { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .sr-day-date { font-family: 'Lora',serif; font-size: 1rem; font-weight: 600; color: var(--charcoal); margin-top: 0.05rem; }
+  .sr-day-card.today .sr-day-name { color: var(--burgundy); }
+  .sr-day-card.today .sr-day-date { color: var(--burgundy); }
+  .sr-day-shifts { padding: 0.6rem 0.9rem; display: flex; flex-direction: column; gap: 0.4rem; min-height: 2.5rem; }
+  .sr-shift-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; }
+  .sr-shift-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .sr-shift-name { font-weight: 700; color: var(--charcoal); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sr-shift-time { font-size: 0.7rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .sr-no-staff { font-size: 0.73rem; color: var(--border-dk); font-style: italic; padding: 0.25rem 0; }
+
+  /* By Person layout */
+  .sr-person-list { display: flex; flex-direction: column; gap: 0.75rem; }
+  .sr-person-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .sr-person-header { padding: 0.75rem 1.1rem; background: var(--warm-white); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.75rem; }
+  .sr-person-avatar { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 800; flex-shrink: 0; }
+  .sr-person-name { font-weight: 700; font-size: 0.88rem; color: var(--charcoal); }
+  .sr-person-role { font-size: 0.7rem; color: var(--muted); font-weight: 500; }
+  .sr-person-days { display: grid; padding: 0.75rem 1.1rem; gap: 0.4rem 0.5rem; overflow-x: auto; }
+  .sr-person-day { display: flex; align-items: center; gap: 0.6rem; font-size: 0.78rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(234,217,220,0.5); }
+  .sr-person-day:last-child { border-bottom: none; }
+  .sr-person-day-label { width: 110px; flex-shrink: 0; }
+  .sr-person-day-name { font-weight: 700; color: var(--charcoal); font-size: 0.76rem; }
+  .sr-person-day-date { font-size: 0.68rem; color: var(--muted); }
+  .sr-person-day-time { font-weight: 700; color: var(--burgundy); font-size: 0.76rem; }
+  .sr-person-day-off { color: var(--muted); font-size: 0.73rem; font-style: italic; }
+  .sr-person-day.today-row .sr-person-day-name { color: var(--burgundy); }
+  .sr-person-day.today-row .sr-person-day-date { color: var(--dusty); }
+
+  /* ══════════════════════════════
+     ROSTER TAB
+  ══════════════════════════════ */
+  .roster-section { margin-bottom: 2rem; }
+  .roster-section-title { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.75rem; }
+  .roster-anchor-bar { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem; box-shadow: var(--shadow); flex-wrap: wrap; }
+  .roster-grid { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); margin-bottom: 1rem; }
+  .roster-grid-header { background: var(--warm-white); border-bottom: 1.5px solid var(--border); display: grid; grid-template-columns: 80px repeat(7, 1fr); }
+  .roster-grid-header div { padding: 0.6rem 0.5rem; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; }
+  .roster-grid-row { display: grid; grid-template-columns: 80px repeat(7, 1fr); border-top: 1px solid var(--border); }
+  .roster-week-label { padding: 0.75rem; font-size: 0.75rem; font-weight: 800; color: var(--burgundy); display: flex; align-items: center; background: var(--blush-lt); }
+  .roster-cell { padding: 0.5rem 0.35rem; display: flex; flex-direction: column; gap: 0.28rem; align-items: center; border-left: 1px solid rgba(234,217,220,0.6); }
+  .roster-cell input[type="time"] { width: 100%; font-size: 0.7rem; font-family: 'Nunito',sans-serif; border: 1.5px solid var(--border); border-radius: 7px; padding: 0.28rem 0.3rem; background: var(--warm-white); color: var(--text); text-align: center; outline: none; transition: border-color 0.2s; }
+  .roster-cell input[type="time"]:focus { border-color: var(--burgundy); }
+  .roster-cell.day-off input[type="time"] { opacity: 0.2; pointer-events: none; }
+  .roster-cell-off { font-size: 0.63rem; display: flex; align-items: center; gap: 0.25rem; color: var(--muted); font-weight: 700; cursor: pointer; }
+  .roster-cell-off input { width: 12px; height: 12px; accent-color: var(--burgundy); cursor: pointer; }
+  .roster-save-row { padding: 0.75rem 1rem; background: var(--blush-lt); border-top: 1.5px solid var(--border); display: flex; justify-content: flex-end; }
+  .overrides-list { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .override-row { display: flex; align-items: center; gap: 1rem; padding: 0.85rem 1.1rem; border-bottom: 1px solid rgba(234,217,220,0.7); font-size: 0.82rem; flex-wrap: wrap; }
+  .override-row:last-child { border-bottom: none; }
+  .override-date { font-weight: 700; color: var(--charcoal); min-width: 130px; }
+  .override-emp { color: var(--muted); font-weight: 600; min-width: 120px; }
+  .override-times { color: var(--burgundy); font-weight: 700; font-family: 'Courier New',monospace; font-size: 0.78rem; }
+  .override-note { color: var(--muted); font-style: italic; font-size: 0.75rem; flex: 1; }
+  .del-btn { background: none; border: 1px solid var(--border); border-radius: 20px; padding: 0.25rem 0.65rem; font-size: 0.7rem; color: var(--muted); cursor: pointer; font-family: 'Nunito',sans-serif; font-weight: 700; transition: all 0.2s; white-space: nowrap; }
+  .del-btn:hover { border-color: var(--burgundy); color: var(--burgundy); }
+  .empty-state { padding: 2rem; text-align: center; color: var(--muted); font-size: 0.82rem; }
+
+  /* ── Roster Builder Phase 2 ── */
+  .rb-ctrl { display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); padding:0.85rem 1.1rem; box-shadow:var(--shadow); margin-bottom:1.25rem; }
+  .rb-nav-btn { background:var(--white); border:1.5px solid var(--border); border-radius:8px; padding:0.32rem 0.7rem; cursor:pointer; font-size:0.78rem; font-weight:700; color:var(--charcoal); font-family:'Nunito',sans-serif; transition:all 0.15s; }
+  .rb-nav-btn:hover { background:var(--blush-lt); border-color:var(--burgundy); }
+  .rb-fn-label { font-size:0.85rem; font-weight:800; color:var(--charcoal); min-width:160px; text-align:center; display:flex; align-items:center; justify-content:center; gap:0.5rem; }
+  .rb-live-badge { background:#e8f5e9; border:1.5px solid #2e7d32; color:#1b5e20; border-radius:999px; padding:0.1rem 0.55rem; font-size:0.65rem; font-weight:800; letter-spacing:0.05em; white-space:nowrap; }
+  .rb-role-tabs { display:flex; gap:0.3rem; flex-wrap:wrap; }
+  .rb-role-tab { padding:0.28rem 0.7rem; border-radius:999px; border:1.5px solid var(--border); font-size:0.72rem; font-weight:700; cursor:pointer; background:var(--white); color:var(--muted); transition:all 0.15s; font-family:'Nunito',sans-serif; }
+  .rb-role-tab.active { background:var(--burgundy); color:#fff; border-color:var(--burgundy); }
+  .rb-spacer { flex:1; min-width:0.5rem; }
+  .rb-lock-btn { background:var(--warm-white); border:1.5px solid var(--border); border-radius:8px; padding:0.32rem 0.8rem; cursor:pointer; font-size:0.72rem; font-weight:700; color:var(--charcoal); font-family:'Nunito',sans-serif; transition:all 0.15s; }
+  .rb-lock-btn.locked { background:#fff3cd; border-color:#d4a017; color:#7a5200; }
+  .rb-copy-btn { background:var(--blush-lt); border:1.5px solid var(--burgundy); border-radius:8px; padding:0.32rem 0.8rem; cursor:pointer; font-size:0.72rem; font-weight:700; color:var(--burgundy); font-family:'Nunito',sans-serif; transition:all 0.15s; }
+  .rb-copy-btn:hover { background:var(--burgundy); color:#fff; }
+  .rb-publish-btn { background:#e8f5e9; border:1.5px solid #2e7d32; border-radius:8px; padding:0.32rem 0.8rem; cursor:pointer; font-size:0.72rem; font-weight:700; color:#1b5e20; font-family:'Nunito',sans-serif; transition:all 0.15s; }
+  .rb-publish-btn:hover { background:#2e7d32; color:#fff; }
+  .rb-publish-btn.published { background:#2e7d32; border-color:#1b5e20; color:#fff; }
+  .rb-publish-btn.published:hover { background:#1b5e20; color:#fff; }
+  .rb-confirm-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:3000; align-items:center; justify-content:center; }
+  .rb-confirm-overlay.show { display:flex; }
+  .rb-confirm-box { background:#fff; border-radius:14px; padding:2rem 2.2rem; max-width:380px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.22); text-align:center; }
+  .rb-confirm-box h3 { margin:0 0 0.6rem; font-size:1.1rem; color:var(--charcoal); }
+  .rb-confirm-box p { margin:0 0 1.4rem; font-size:0.88rem; color:var(--muted); line-height:1.5; }
+  .rb-confirm-actions { display:flex; gap:0.8rem; justify-content:center; }
+  .rb-confirm-actions button { border-radius:8px; padding:0.5rem 1.2rem; font-size:0.85rem; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer; border:none; }
+  .rb-confirm-cancel { background:var(--warm-white); border:1.5px solid var(--border) !important; color:var(--charcoal); }
+  .rb-confirm-ok { background:#2e7d32; color:#fff; }
+  .rb-confirm-ok.danger { background:#c0392b; }
+  /* Fortnight 14-day grid */
+  .rb-fn-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:0.45rem; margin-bottom:1.25rem; }
+  .rb-day-cell { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); padding:0.55rem 0.45rem; cursor:pointer; min-height:85px; transition:all 0.15s; display:flex; flex-direction:column; gap:0.28rem; }
+  .rb-day-cell:hover { border-color:var(--burgundy); box-shadow:0 2px 8px rgba(140,30,50,0.12); }
+  .rb-day-cell.today { border-color:var(--burgundy); background:var(--blush-lt); }
+  .rb-day-cell.past { opacity:0.5; }
+  .rb-day-hdr { font-size:0.58rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); }
+  .rb-day-date { font-size:1.1rem; font-weight:900; color:var(--charcoal); line-height:1.1; }
+  .rb-shift-pill { font-size:0.58rem; font-weight:700; padding:0.12rem 0.35rem; border-radius:4px; background:var(--blush-lt); color:var(--burgundy); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rb-cov-row { display:flex; align-items:center; gap:0.3rem; margin-top:auto; }
+  .rb-cov-dot { width:7px; height:7px; border-radius:50%; display:inline-block; flex-shrink:0; }
+  .rb-cov-dot.green { background:#4CAF7D; } .rb-cov-dot.yellow { background:#f5a623; } .rb-cov-dot.red { background:#c0392b; }
+  /* Day timeline */
+  .rb-tl-back { display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem; }
+  .rb-tl-title { font-size:1rem; font-weight:800; color:var(--charcoal); }
+  .rb-tl-wrap { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .rb-tl-header { display:flex; align-items:flex-end; height:28px; border-bottom:1.5px solid var(--border); }
+  .rb-tl-name-spacer { width:150px; flex-shrink:0; border-right:1px solid rgba(234,217,220,0.6); }
+  .rb-tl-track-header { flex:1; position:relative; overflow:hidden; height:100%; }
+  .rb-tl-tick { position:absolute; font-size:0.58rem; font-weight:700; color:var(--muted); transform:translateX(-50%); bottom:5px; white-space:nowrap; }
+  .rb-tl-rows { width:100%; }
+  .rb-tl-row { display:flex; align-items:stretch; border-bottom:1px solid rgba(234,217,220,0.6); min-height:44px; }
+  .rb-tl-row:last-child { border-bottom:none; }
+  .rb-tl-name { width:150px; flex-shrink:0; font-size:0.72rem; font-weight:700; color:var(--charcoal); padding:0 0.4rem 0 0.6rem; display:flex; align-items:center; gap:0.25rem; border-right:1px solid rgba(234,217,220,0.6); background:var(--warm-white); }
+  .rb-tl-name-text { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rb-add-shift-btn { flex-shrink:0; background:transparent; border:1.5px solid rgba(180,160,165,0.5); border-radius:5px; width:20px; height:20px; font-size:0.8rem; font-weight:900; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-family:'Nunito',sans-serif; transition:all 0.15s; line-height:1; }
+  .rb-add-shift-btn:hover { border-color:var(--burgundy); color:var(--burgundy); background:var(--blush-lt); }
+  .rb-tl-track { flex:1; position:relative; height:44px; background-image:repeating-linear-gradient(to right,rgba(190,175,180,0.22) 0px,rgba(190,175,180,0.22) 1px,transparent 1px,transparent calc(100% / 55)); }
+  .rb-shift-bar { position:absolute; top:6px; height:30px; border-radius:6px; background:linear-gradient(135deg,var(--burgundy),#c0495c); cursor:move; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,0.15); min-width:14px; user-select:none; overflow:visible; }
+  .rb-shift-bar:hover { box-shadow:0 2px 8px rgba(140,30,50,0.28); }
+  .rb-shift-bar.dragging { opacity:0.85; box-shadow:0 4px 16px rgba(0,0,0,0.22); z-index:10; }
+  .rb-shift-label { font-size:0.56rem; font-weight:800; color:#fff; pointer-events:none; white-space:nowrap; overflow:hidden; padding:0 8px; }
+  .rb-shift-handle { position:absolute; top:0; width:8px; height:100%; cursor:ew-resize; z-index:2; }
+  .rb-shift-handle.left { left:0; border-radius:6px 0 0 6px; } .rb-shift-handle.right { right:0; border-radius:0 6px 6px 0; }
+  .rb-shift-del { position:absolute; top:-5px; right:-5px; width:15px; height:15px; border-radius:50%; background:#c0392b; color:#fff; border:none; cursor:pointer; font-size:9px; display:none; align-items:center; justify-content:center; z-index:5; line-height:1; padding:0; font-family:'Nunito',sans-serif; }
+  .rb-shift-bar:hover .rb-shift-del { display:flex; }
+  .rb-tl-cov { display:flex; align-items:center; border-top:1.5px solid var(--border); height:22px; }
+  /* Advanced/Fallback toggle */
+  .rb-advanced-toggle { display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.72rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; padding:0.6rem 0; user-select:none; border-top:1.5px solid var(--border); margin-top:0.5rem; }
+  .rb-advanced-toggle:hover { color:var(--charcoal); }
+  .rb-advanced-body { display:none; } .rb-advanced-body.open { display:block; }
+  .wos-pin-boxes { display:flex; gap:0.5rem; }
+  .wos-pin-box { width:48px; height:52px; border:1.5px solid var(--border); border-radius:10px; background:var(--warm-white); text-align:center; font-size:1.4rem; font-weight:700; font-family:'Nunito',sans-serif; color:var(--charcoal); outline:none; transition:border-color 0.15s, box-shadow 0.15s; -webkit-text-security:disc; }
+  .wos-pin-box:focus { border-color:var(--burgundy); box-shadow:0 0 0 3px rgba(139,37,53,0.1); background:var(--white); }
+  .wos-pin-box.filled { border-color:var(--dusty); background:var(--blush-lt); }
+
+  /* ══════════════════════════════
+     MOBILE — Who's On view only
+  ══════════════════════════════ */
+  @media (max-width: 768px) {
+    /* Prevent iOS auto-zoom on any input — must be >= 16px */
+    input, select, textarea { font-size: 16px !important; }
+
+    /* Header: wrap logo+title on top row, nav below */
+    .sr-header {
+      padding: 0.75rem 1rem;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+    .sr-header img { height: 28px; }
+    .sr-title { font-size: 0.88rem; padding: 0.22rem 0.7rem; margin-left: 0.4rem; }
+    .sr-header-spacer { display: none; }
+    .sr-nav {
+      width: 100%;
+      order: 3;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+    .sr-nav-btn { padding: 0.45rem 0.85rem; font-size: 0.78rem; }
+    .sr-period-label { font-size: 0.76rem; }
+    /* Hide date-jump on mobile — too fiddly */
+    #sr-date-picker { display: none; }
+    /* Kiosk button: push to own row end */
+    .sr-header .nav-btn {
+      order: 2;
+      margin-left: auto;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.76rem;
+    }
+
+    /* Filters: stack and scroll */
+    .sr-filters {
+      padding: 0.6rem 1rem;
+      gap: 0.6rem;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .sr-role-tabs { overflow-x: auto; width: 100%; }
+    .sr-tab { padding: 0.35rem 0.75rem; font-size: 0.73rem; white-space: nowrap; }
+    .sr-layout-toggle { margin-left: 0; }
+
+    /* Content padding */
+    .sr-content { padding: 1rem 0.75rem; }
+
+    /* Fortnight heading */
+    .sr-fortnight-heading { flex-wrap: wrap; gap: 0.5rem; }
+    .sr-fn-year { margin-left: 0; width: 100%; font-size: 0.7rem; }
+
+    /* Day grid: single column, hide col headers (day name is in each card) */
+    .sr-day-grid {
+      grid-template-columns: 1fr;
+      gap: 0.6rem;
+    }
+    .sr-day-col-header { display: none; }
+    /* Reset the grid-column-start offset — not needed in 1-col layout */
+    .sr-day-card { grid-column-start: 1 !important; }
+    .sr-day-card-header { padding: 0.55rem 0.85rem; display: flex; align-items: baseline; gap: 0.6rem; }
+    .sr-day-name { font-size: 0.68rem; }
+    .sr-day-date { font-size: 0.92rem; margin-top: 0; }
+    .sr-day-shifts { padding: 0.5rem 0.85rem; }
+    .sr-shift-item { font-size: 0.82rem; }
+    .sr-shift-name { font-size: 0.82rem; }
+    .sr-shift-time { font-size: 0.75rem; }
+
+    /* By Person: already vertical, just tighten padding */
+    .sr-person-header { padding: 0.6rem 0.85rem; }
+    .sr-person-days { padding: 0.5rem 0.85rem; }
+    .sr-person-day { font-size: 0.8rem; }
+
+    /* Past day cards: slightly less faded so they're still readable */
+    .sr-day-card.past { opacity: 0.55; }
+  }
+</style>
+</head>
+<body>
+
+<!-- KIOSK -->
+<div id="view-kiosk" class="view active">
+  <div class="kiosk-logo-area">
+    <div class="logo-wrap">
+      <img src="Logo.png" alt="Wellness on Wellington" style="height:70px;width:auto;display:block;">
+    </div>
+    <div class="app-tagline">Wellness Timesheets</div>
+  </div>
+
+  <div class="kiosk-time-section">
+    <div class="kiosk-clock" id="kiosk-time">--:--</div>
+    <div class="kiosk-date"  id="kiosk-date"></div>
+  </div>
+
+  <div class="scan-card">
+    <span class="scan-emoji">🪪</span>
+    <div class="scan-prompt">Tap your card to check in or out</div>
+    <div class="scan-sub">Hold your card near the reader — it only takes a moment</div>
+    <input type="text" id="rfid-input" autocomplete="off" tabindex="-1" />
+    <div class="reader-pill"><div class="pulse-dot"></div>Reader ready</div>
+
+    <!-- TESTING ONLY — remove when RFID reader arrives -->
+    <div style="margin-top:1.25rem; padding-top:1.25rem; border-top:1px dashed var(--border);">
+      <div style="font-size:0.68rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--dusty);margin-bottom:0.5rem;">⌨ Test mode — type card number</div>
+      <div style="display:flex;gap:0.5rem;">
+        <input id="test-rfid" type="text" placeholder="e.g. 0001234567"
+               onkeydown="if(event.key==='Enter'){testScan();}" />
+        <button onclick="testScan()"
+          style="background:var(--blush);color:var(--burgundy);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0.55rem 1rem;font-family:'Nunito',sans-serif;font-size:0.8rem;font-weight:800;cursor:pointer;">
+          Scan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="kiosk-footer-nav" style="display:flex;gap:0.5rem;">
+    <button class="nav-btn" onclick="openRosterPIN()">📅 Who's On</button>
+    <button class="nav-btn" onclick="showView('login')">Manager login</button>
+  </div>
+</div>
+
+<!-- PUBLISH CONFIRM OVERLAY -->
+<div class="rb-confirm-overlay" id="rb-confirm-overlay">
+  <div class="rb-confirm-box">
+    <h3 id="rb-confirm-title">Publish Roster?</h3>
+    <p id="rb-confirm-msg">This will make the roster visible to staff in the Who's On view.</p>
+    <div class="rb-confirm-actions">
+      <button class="rb-confirm-cancel" onclick="rbConfirmClose()">Cancel</button>
+      <button class="rb-confirm-ok" id="rb-confirm-ok" onclick="rbConfirmProceed()">Publish</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROSTER VIEW PIN MODAL -->
+<div class="modal-bg" id="roster-pin-modal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal" style="max-width:320px;text-align:center;">
+    <div class="modal-title" style="text-align:center;">📅 Who's On</div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:1.5rem;">Enter the 4-digit staff PIN</div>
+    <div style="display:flex;justify-content:center;gap:0.6rem;margin-bottom:1rem;">
+      <input class="wos-pin-box" type="tel" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" data-group="roster" data-idx="0" style="width:54px;height:58px;font-size:1.6rem;" />
+      <input class="wos-pin-box" type="tel" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" data-group="roster" data-idx="1" style="width:54px;height:58px;font-size:1.6rem;" />
+      <input class="wos-pin-box" type="tel" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" data-group="roster" data-idx="2" style="width:54px;height:58px;font-size:1.6rem;" />
+      <input class="wos-pin-box" type="tel" maxlength="1" autocomplete="off" autocorrect="off" autocapitalize="off" data-group="roster" data-idx="3" style="width:54px;height:58px;font-size:1.6rem;" />
+    </div>
+    <div style="font-size:0.75rem;color:var(--wine);min-height:1rem;margin-bottom:0.75rem;" id="roster-pin-error"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="document.getElementById('roster-pin-modal').classList.remove('show')">Cancel</button>
+      <button class="btn-primary" onclick="checkRosterPIN()">View Roster</button>
+    </div>
+  </div>
+</div>
+
+<!-- STAFF ROSTER (public read-only) -->
+<div id="view-staff-roster" class="view">
+  <div class="sr-header">
+    <img src="Logo.png" alt="Wellness on Wellington" style="height:36px;width:auto;cursor:pointer;" onclick="showView('kiosk')" title="Return to kiosk">
+    <div class="sr-title">Who's On</div>
+    <div class="sr-header-spacer"></div>
+    <div class="sr-nav">
+      <button class="sr-nav-btn" onclick="srNav(-1)">← Prev</button>
+      <span class="sr-period-label" id="sr-period-label"></span>
+      <button class="sr-nav-btn" onclick="srNav(1)">Next →</button>
+      <input class="form-input" type="date" id="sr-date-picker" onchange="srJumpToDate()" style="width:auto;padding:0.38rem 0.7rem;font-size:0.78rem;" title="Jump to date">
+    </div>
+    <button class="nav-btn" onclick="showView('kiosk')">← Kiosk</button>
+  </div>
+
+  <div class="sr-filters">
+    <div class="sr-role-tabs">
+      <button class="sr-tab active" onclick="srToggleRole('Receptionist',this)">Receptionists</button>
+      <button class="sr-tab active" onclick="srToggleRole('Nurse',this)">Nurses</button>
+      <button class="sr-tab active" onclick="srToggleRole('Manager',this)">Managers</button>
+    </div>
+    <select class="form-select" id="sr-staff-filter" onchange="srSelectIndividual()" style="width:auto;padding:0.38rem 0.85rem;font-size:0.78rem;">
+      <option value="">Individual view</option>
+    </select>
+    <div class="sr-layout-toggle">
+      <button class="sr-layout-btn active" id="sr-btn-day" onclick="srSetLayout('day')">By Day</button>
+      <button class="sr-layout-btn" id="sr-btn-person" onclick="srSetLayout('person')">By Person</button>
+    </div>
+  </div>
+
+  <div class="sr-content" id="sr-content"></div>
+</div>
+
+<!-- FLASH -->
+<div class="flash-overlay" id="flash">
+  <div class="flash-wave"     id="flash-wave"></div>
+  <div class="flash-greeting" id="flash-greeting"></div>
+  <div class="flash-name"     id="flash-name"></div>
+  <div class="flash-sub"      id="flash-sub"></div>
+</div>
+
+<!-- REASON -->
+<div class="flash-overlay reason-bg" id="reason-overlay">
+  <div class="reason-card">
+    <div class="reason-icon">💬</div>
+    <div class="reason-title" id="reason-title">Just a quick note</div>
+    <div class="reason-sub"   id="reason-sub"></div>
+    <textarea class="reason-input" id="reason-text" rows="3"
+      placeholder="e.g. School drop-off, early patient, traffic on Wellington Rd…"></textarea>
+    <div class="reason-btns">
+      <button class="btn-ghost"   onclick="cancelReason()">Cancel</button>
+      <button class="btn-primary" id="reason-submit-btn" onclick="submitReason()">Submit &amp; check in</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="view-login" class="view">
+  <div class="login-card">
+    <div class="login-logo-wrap">
+      <img src="Logo.png" alt="Wellness on Wellington" style="height:48px;width:auto;display:block;margin:0 auto;">
+    </div>
+    <div class="login-title" id="login-title">Manager Login</div>
+    <div class="login-sub"   id="login-sub">Select your name, then enter your PIN</div>
+
+    <!-- Step 1: pick manager -->
+    <div id="login-step-select">
+      <select class="form-select" id="manager-select" style="margin-bottom:1rem;" onchange="onManagerSelect()">
+        <option value="">— Select your name —</option>
+      </select>
+    </div>
+
+    <!-- Step 2: enter PIN (shown after name selected) -->
+    <div id="login-step-pin" style="display:none;">
+      <div style="font-size:0.8rem;font-weight:700;color:var(--muted);margin-bottom:0.6rem;" id="login-name-label"></div>
+      <input class="pin-input" type="password" id="manager-pin" placeholder="••••" maxlength="8" inputmode="numeric" />
+      <div style="font-size:0.72rem;color:var(--danger);margin-top:0.4rem;min-height:1rem;" id="login-error"></div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:0.75rem;">
+      <button class="btn-ghost"   onclick="showView('kiosk')">Back</button>
+      <button class="btn-primary" id="login-btn" onclick="managerLogin()" disabled>Continue</button>
+    </div>
+
+    <div class="login-hint" id="login-hint"></div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div id="view-admin" class="view">
+  <div class="admin-bar">
+    <div class="admin-brand">
+      <img src="Logo.png" alt="Wellness on Wellington" style="height:36px;width:auto;display:block;cursor:pointer;" onclick="showView('kiosk')" title="Return to kiosk">
+      <div class="sr-title">Manager Dashboard</div>
+    </div>
+    <div class="admin-tabs">
+      <button class="tab active" onclick="switchTab('team',this)">Our Team</button>
+      <button class="tab"        onclick="switchTab('timesheets',this)">Timesheets</button>
+      <button class="tab"        onclick="switchTab('notes',this)">Notes<span class="notif-badge" id="notif-badge" style="display:none"></span></button>
+      <button class="tab"        onclick="switchTab('logins',this)">Logins</button>
+      <button class="tab"        onclick="switchTab('roster',this)">Roster</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <div style="font-size:0.75rem;color:var(--muted);font-weight:600;">Logged in: <span id="current-user-label" style="color:var(--burgundy);font-weight:700;"></span></div>
+      <button class="nav-btn" onclick="showView('kiosk')">← Kiosk</button>
+    </div>
+  </div>
+
+  <div class="admin-content">
+    <div id="tab-team" class="tab-panel active">
+      <div class="team-role-bar">
+        <div class="sr-role-tabs">
+          <button class="sr-tab active" onclick="teamToggleRole('Receptionist',this)">Receptionists</button>
+          <button class="sr-tab active" onclick="teamToggleRole('Nurse',this)">Nurses</button>
+          <button class="sr-tab active" onclick="teamToggleRole('Manager',this)">Managers</button>
+        </div>
+        <button class="add-emp-btn" style="margin-left:auto;" onclick="openAddEmployee()">+ Add person</button>
+      </div>
+      <div class="today-strip" id="today-strip"></div>
+      <hr style="border:none;border-top:1.5px solid var(--border);margin-bottom:1.75rem;">
+      <div class="employees-grid" id="employees-grid"></div>
+    </div>
+
+    <div id="tab-timesheets" class="tab-panel">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Timesheet Records</div>
+          <div class="section-hint">Filter by person or date range, then export for MYOB</div>
+        </div>
+      </div>
+      <div class="filters-bar">
+        <select class="form-select" id="filter-employee" onchange="renderTimesheets()"><option value="">All staff</option></select>
+        <input class="form-input" type="date" id="filter-from" onchange="renderTimesheets()" />
+        <span style="font-size:0.78rem;color:var(--muted);font-weight:600;">to</span>
+        <input class="form-input" type="date" id="filter-to" onchange="renderTimesheets()" />
+        <button class="export-btn" onclick="exportMYOB()">⬇ Export for MYOB</button>
+      </div>
+      <div class="table-wrap">
+        <table class="timesheet-table">
+          <thead><tr><th>Team member</th><th>Role</th><th>Date</th><th>Arrived</th><th>Left</th><th>Hours</th><th>Status</th></tr></thead>
+          <tbody id="timesheet-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="tab-notes" class="tab-panel">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Team Notes</div>
+          <div class="section-hint">Notes left by staff when checking in or out outside their usual hours</div>
+        </div>
+      </div>
+      <div class="approvals-list" id="approvals-list"></div>
+    </div>
+
+    <!-- LOGINS TAB -->
+    <div id="tab-logins" class="tab-panel">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Manager Logins</div>
+          <div class="section-hint">Each manager has their own name and PIN. PINs must be 4–8 digits and cannot be simple sequences.</div>
+        </div>
+        <button class="add-emp-btn" onclick="openAddManager()">+ Add manager</button>
+      </div>
+      <div class="table-wrap">
+        <table class="timesheet-table">
+          <thead><tr><th>Name</th><th>Last login</th><th>Actions</th></tr></thead>
+          <tbody id="managers-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="tab-roster" class="tab-panel">
+
+      <!-- Control bar -->
+      <div class="rb-ctrl">
+        <button class="rb-nav-btn" onclick="rbNavFn(-1)">&#8592; Prev</button>
+        <div class="rb-fn-label" id="rb-fn-label">—</div>
+        <button class="rb-nav-btn" onclick="rbNavFn(1)">Next &#8594;</button>
+        <div class="rb-role-tabs">
+          <div class="rb-role-tab active" onclick="rbSetRole('All')">All</div>
+          <div class="rb-role-tab" onclick="rbSetRole('Receptionist')">Receptionists</div>
+          <div class="rb-role-tab" onclick="rbSetRole('Nurse')">Nurses</div>
+          <div class="rb-role-tab" onclick="rbSetRole('Manager')">Managers</div>
+        </div>
+        <div class="rb-spacer"></div>
+        <button class="rb-lock-btn" id="rb-lock-btn" onclick="rbToggleLock()">&#128275; Unlocked</button>
+        <button class="rb-publish-btn" id="rb-publish-btn" onclick="rbTogglePublish()">&#10003; Publish Roster</button>
+        <button class="rb-copy-btn" onclick="rbCopyLastFn()">Copy Last Fortnight</button>
+      </div>
+
+      <!-- 14-day fortnight grid -->
+      <div id="rb-grid-view">
+        <div class="rb-fn-grid" id="rb-fn-grid"></div>
+      </div>
+
+      <!-- Day timeline (shown when a day cell is clicked) -->
+      <div id="rb-tl-view" style="display:none;">
+        <div class="rb-tl-back">
+          <button class="rb-nav-btn" onclick="rbCloseTl()">&#8592; Overview</button>
+          <button class="rb-nav-btn" onclick="rbNavDay(-1)">&#8592; Prev day</button>
+          <div class="rb-tl-title" id="rb-tl-title"></div>
+          <button class="rb-nav-btn" onclick="rbNavDay(1)">Next day &#8594;</button>
+          <div style="flex:1"></div>
+          <button class="rb-nav-btn" onclick="rbGoToday()">Today</button>
+        </div>
+        <div class="rb-tl-wrap">
+          <div class="rb-tl-header" id="rb-tl-header"></div>
+          <div class="rb-tl-rows" id="rb-tl-rows"></div>
+          <div class="rb-tl-cov" id="rb-tl-cov"><span class="rb-tl-cov-label">Coverage</span></div>
+        </div>
+      </div>
+
+      <!-- Advanced / Settings section -->
+      <div class="rb-advanced-toggle" onclick="rbToggleAdvanced()">
+        <span id="rb-adv-arrow">&#9658;</span> Advanced Settings
+      </div>
+      <div class="rb-advanced-body" id="rb-advanced-body">
+        <div class="roster-section" style="margin-bottom:1.5rem;margin-top:1rem;">
+          <div class="roster-section-title">Fortnight Cycle Start Date</div>
+          <div class="roster-anchor-bar">
+            <label class="form-label" style="margin:0;white-space:nowrap;">Cycle starts</label>
+            <input class="form-input" type="date" id="anchor-date" style="width:auto;" />
+            <button class="add-emp-btn" onclick="saveAnchorDate()">Save</button>
+            <span style="font-size:0.75rem;color:var(--muted);font-weight:500;">Sets the Monday that Week A begins. All fortnights are calculated from this date.</span>
+          </div>
+        </div>
+        <div class="roster-section" style="margin-bottom:1rem;">
+          <div class="roster-section-title">Who's On PIN</div>
+          <div class="roster-anchor-bar" style="flex-direction:column;align-items:flex-start;gap:1rem;">
+            <div style="font-size:0.8rem;color:var(--muted);font-weight:500;line-height:1.5;">This PIN is what staff enter to access the Who's On roster view. Choose something easy for staff to remember but not obvious.</div>
+            <div style="display:flex;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;">
+              <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                <label class="form-label" style="margin:0;">New PIN</label>
+                <div class="wos-pin-boxes" id="wos-pin-new-wrap">
+                  <input class="wos-pin-box" type="tel" maxlength="1" autocomplete="off" autocorrect="off" data-group="new" data-idx="0" />
+                  <input class="wos-pin-box" type="tel" maxlength="1" autocomplete="off" autocorrect="off" data-group="new" data-idx="1" />
+                  <input class="wos-pin-box" type="tel" maxlength="1" autocomplete="off" autocorrect="off" data-group="new" data-idx="2" />
+                  <input class="wos-pin-box" type="tel" maxlength="1" autocomplete="off" autocorrect="off" data-group="new" data-idx="3" />
+                </div>
+              </div>
+              <button class="add-emp-btn" id="whos-on-pin-save" onclick="saveWhosOnPIN()" disabled style="opacity:0.4;cursor:not-allowed;margin-bottom:2px;">Save PIN</button>
+            </div>
+            <div id="whos-on-pin-feedback" style="font-size:0.78rem;font-weight:600;min-height:1rem;"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ADD EMPLOYEE MODAL -->
+<div class="modal-bg" id="emp-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-title" id="emp-modal-title">Add team member</div>
+    <div class="form-group" style="display:flex;gap:0.75rem;">
+      <div style="flex:1;">
+        <label class="form-label">First Name</label>
+        <input class="form-input" type="text" id="emp-firstname" placeholder="e.g. Sarah" />
+      </div>
+      <div style="flex:1;">
+        <label class="form-label">Surname</label>
+        <input class="form-input" type="text" id="emp-surname" placeholder="e.g. Chen" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Role</label>
+      <select class="form-select" id="emp-role">
+        <option>Doctor</option><option>Nurse</option><option>Receptionist</option><option>Manager</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">RFID Card Number</label>
+      <input class="form-input" type="text" id="emp-rfid" placeholder="Tap card on reader, or type ID…" />
+      <div class="form-hint">Click this field then tap the card on the reader — the number will appear automatically.</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Employment Type</label>
+      <select class="form-select" id="emp-type">
+        <option>Full Time</option><option>Part Time</option><option>Casual</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" id="emp-save-btn" onclick="saveEmployee()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD MANAGER MODAL -->
+<div class="modal-bg" id="mgr-modal" onclick="if(event.target===this)closeMgrModal()">
+  <div class="modal">
+    <div class="modal-title" id="mgr-modal-title">Add manager login</div>
+    <div class="form-group">
+      <label class="form-label">Full Name</label>
+      <input class="form-input" type="text" id="mgr-name" placeholder="e.g. Rob Stone" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">PIN <span style="font-weight:400;text-transform:none;letter-spacing:0;">(4–8 digits)</span></label>
+      <input class="form-input" type="password" id="mgr-pin" placeholder="Choose a PIN" maxlength="8" inputmode="numeric" />
+      <div class="form-hint">Avoid simple PINs like 1234 or 0000. Pick something only you know.</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Confirm PIN</label>
+      <input class="form-input" type="password" id="mgr-pin2" placeholder="Re-enter PIN" maxlength="8" inputmode="numeric" />
+    </div>
+    <div style="font-size:0.75rem;color:var(--danger);min-height:1rem;margin-bottom:0.5rem;" id="mgr-error"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost"   onclick="closeMgrModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveManager()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE PIN MODAL -->
+<div class="modal-bg" id="pin-modal" onclick="if(event.target===this)closePinModal()">
+  <div class="modal">
+    <div class="modal-title">Change PIN — <span id="pin-modal-name" style="color:var(--wine)"></span></div>
+    <div class="form-group">
+      <label class="form-label">New PIN <span style="font-weight:400;text-transform:none;letter-spacing:0;">(4–8 digits)</span></label>
+      <input class="form-input" type="password" id="new-pin" placeholder="New PIN" maxlength="8" inputmode="numeric" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Confirm New PIN</label>
+      <input class="form-input" type="password" id="new-pin2" placeholder="Re-enter new PIN" maxlength="8" inputmode="numeric" />
+    </div>
+    <div style="font-size:0.75rem;color:var(--danger);min-height:1rem;margin-bottom:0.5rem;" id="pin-error"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost"   onclick="closePinModal()">Cancel</button>
+      <button class="btn-primary" onclick="savePinChange()">Update PIN</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════
+   SUPABASE CONFIG
+═══════════════════════════════════════════ */
+const SUPABASE_URL = 'https://vlpbyvxcurcdoxkadgwu.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZscGJ5dnhjdXJjZG94a2FkZ3d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDMwMDEsImV4cCI6MjA4ODcxOTAwMX0.9-h-VczU2Zy922qRGTwX7WcR0iHVm42yOn1SpSPQCt0';
+
+const db = {
+  async get(table, filters={}) {
+    let url = `${SUPABASE_URL}/rest/v1/${table}?select=*`;
+    Object.entries(filters).forEach(([k,v]) => url += `&${k}=eq.${encodeURIComponent(v)}`);
+    const r = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }});
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async insert(table, row) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify(row)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async update(table, id, row) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify(row)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async delete(table, id) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+    if (!r.ok) throw new Error(await r.text());
+  },
+  async deleteWhere(table, field, value) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${field}=eq.${encodeURIComponent(value)}`, {
+      method: 'DELETE',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+    if (!r.ok) throw new Error(await r.text());
+  },
+  async bulkInsert(table, rows) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(rows)
+    });
+    if (!r.ok) throw new Error(await r.text());
+  }
+};
+
+/* ═══════════════════════════════════════════
+   IN-MEMORY CACHE (fast UI, synced to cloud)
+═══════════════════════════════════════════ */
+let _emps=[], _entries=[], _notes=[], _mgrs=[];
+let _editingEmpId=null;
+let _rosterConfig=null, _rosterTemplates=[], _rosterOverrides=[];
+let _rosterShifts=[], _rosterFortnights=[], _coverageRules=[];
+
+// Roster builder state
+const TL_START=465, TL_END=1290, TL_RANGE=825, TL_SNAP=15;
+let rFnOffset=0, rRole='All', rSelectedDay=null, rAdvancedOpen=false, _rbDrag=null;
+
+async function loadAll() {
+  showLoading(true);
+  try {
+    const [emps, entries, notes, mgrs, rosterCfg, rosterTmpl, rosterOv, rosterShifts, rosterFn, covRules] = await Promise.all([
+      db.get('employees'),
+      db.get('entries'),
+      db.get('notes'),
+      db.get('managers'),
+      db.get('roster_config'),
+      db.get('roster_templates'),
+      db.get('roster_overrides'),
+      db.get('roster_shifts'),
+      db.get('roster_fortnights'),
+      db.get('coverage_rules')
+    ]);
+    _emps    = emps;
+    _entries = entries.map(normaliseEntry);
+    _notes   = notes.map(normaliseNote);
+    _mgrs    = mgrs.map(normaliseMgr);
+    _rosterConfig    = rosterCfg[0] || null;
+    _rosterTemplates = rosterTmpl;
+    _rosterOverrides = rosterOv;
+    _rosterShifts    = rosterShifts;
+    _rosterFortnights= rosterFn;
+    _coverageRules   = covRules;
+  } catch(e) {
+    showToast('⚠ Could not connect to database — check your internet connection');
+    console.error(e);
+  }
+  showLoading(false);
+}
+
+function normaliseEntry(r) {
+  return {
+    id: r.id, employeeId: r.employee_id, employeeName: r.employee_name,
+    role: r.role, date: r.date, clockIn: r.clock_in, clockInISO: r.clock_in_iso,
+    clockOut: r.clock_out, clockOutISO: r.clock_out_iso, hours: r.hours,
+    reasonIn: r.reason_in, reasonOut: r.reason_out, status: r.status
+  };
+}
+
+function normaliseNote(r) {
+  return {
+    id: r.id, entryId: r.entry_id, employeeId: r.employee_id,
+    employeeName: r.employee_name, role: r.role, type: r.type,
+    time: r.time, date: r.date, reason: r.reason, status: r.status
+  };
+}
+
+function normaliseMgr(r) {
+  return { id: r.id, name: r.name, pinHash: r.pin_hash, lastLogin: r.last_login };
+}
+
+function showLoading(on) {
+  let el = document.getElementById('loading-bar');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'loading-bar';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--burgundy),var(--dusty),var(--burgundy));background-size:200%;animation:flow 1.5s linear infinite;z-index:9999;transition:opacity 0.3s;';
+    document.body.appendChild(el);
+  }
+  el.style.opacity = on ? '1' : '0';
+}
+
+const GRACE = 10;
+const ROUND_WINDOW = 5; // minutes — clock times within this window of rostered time are rounded to roster time on timesheets
+
+function roundToRoster(actualTimeStr, scheduledMin){
+  if(scheduledMin===null) return actualTimeStr;
+  if(Math.abs(timeToMin(actualTimeStr)-scheduledMin)<=ROUND_WINDOW){
+    return String(Math.floor(scheduledMin/60)).padStart(2,'0')+':'+String(scheduledMin%60).padStart(2,'0');
+  }
+  return actualTimeStr;
+}
+
+/* ═══════════════════════════════════════════
+   VIEWS
+═══════════════════════════════════════════ */
+function showView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  if(v==='kiosk') setTimeout(focusRFID,80);
+  if(v==='login') populateManagerSelect();
+  if(v==='admin'){
+    document.getElementById('current-user-label').textContent = currentManager?.name || '';
+    loadAll().then(()=>{ renderTeam();renderTimesheets();renderApprovals();renderManagersTab();renderRoster();setDefaultDates(); });
+  }
+}
+
+/* ═══════════════════════════════════════════
+   CLOCK
+═══════════════════════════════════════════ */
+function tick(){
+  try {
+    const n = new Date();
+    const h = String(n.getHours()).padStart(2,'0');
+    const m = String(n.getMinutes()).padStart(2,'0');
+    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const dateStr = days[n.getDay()]+' '+n.getDate()+' '+months[n.getMonth()]+' '+n.getFullYear();
+    const timeEl = document.getElementById('kiosk-time');
+    const dateEl = document.getElementById('kiosk-date');
+    if(timeEl) timeEl.textContent = h+':'+m;
+    if(dateEl) dateEl.textContent = dateStr;
+  } catch(e){ console.error('Clock error:',e); }
+}
+tick();
+setInterval(tick, 1000);
+
+/* ═══════════════════════════════════════════
+   RFID
+═══════════════════════════════════════════ */
+const rfidEl=document.getElementById('rfid-input');
+let buf='',rfidT=null;
+function focusRFID(){
+  if(document.activeElement===document.getElementById('test-rfid')) return;
+  rfidEl.value='';rfidEl.focus();
+}
+document.addEventListener('click',e=>{
+  if(!document.getElementById('view-kiosk').classList.contains('active'))return;
+  if(e.target.closest('.kiosk-footer-nav'))return;
+  if(e.target.closest('.reason-card'))return;
+  if(e.target.id==='test-rfid'||e.target.closest('[id="test-rfid"]'))return;
+  if(e.target.tagName==='BUTTON'&&e.target.onclick?.toString().includes('testScan'))return;
+  if(!document.getElementById('reason-overlay').classList.contains('show'))focusRFID();
+});
+rfidEl.addEventListener('input',()=>{
+  buf=rfidEl.value.replace(/\D/g,'').trim();
+  clearTimeout(rfidT);
+  rfidT=setTimeout(()=>{if(buf.length>=4)processRFID(buf);buf='';rfidEl.value='';},150);
+});
+rfidEl.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&buf.length>=4){clearTimeout(rfidT);processRFID(buf);buf='';rfidEl.value='';}
+});
+
+/* ═══════════════════════════════════════════
+   CLOCK IN / OUT
+═══════════════════════════════════════════ */
+let pending=null;
+
+async function processRFID(card){
+  // Use cache for instant response — only fetch if card not recognised (new employee)
+  let emp=_emps.find(e=>e.rfid===card);
+  if(!emp){
+    try { _emps = await db.get('employees'); } catch(e){}
+    emp=_emps.find(e=>e.rfid===card);
+  }
+  if(!emp){showFlash('error','🤷','','Card not recognised','Please see reception');return;}
+  const now=new Date();
+  const todayKey=now.toISOString().slice(0,10);
+  const timeStr=now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false});
+  const isoNow=now.toISOString();
+  const open=_entries.find(en=>en.employeeId===emp.id&&en.date===todayKey&&!en.clockOut);
+  const action=open?'out':'in';
+  const scheduled=getScheduledTimes(emp.id,todayKey);
+  const scheduledMin=scheduled?(action==='in'?scheduled.startMin:scheduled.endMin):null;
+  const actualMin=now.getHours()*60+now.getMinutes();
+  const diff=scheduledMin!==null?Math.abs(actualMin-scheduledMin):0;
+  const isAfter=scheduledMin!==null?actualMin>scheduledMin:false;
+  const sheetTimeStr=roundToRoster(timeStr,scheduledMin);
+  if(scheduledMin!==null&&diff>GRACE){
+    const label=diff+' min '+(isAfter?'after':'before')+' scheduled time';
+    pending={emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey};
+    showReasonPrompt(emp.name.split(' ')[0],action,label);
+  }else{
+    await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,null);
+  }
+  // Silently refresh cache in background for next scan
+  Promise.all([db.get('employees'),db.get('entries')]).then(([emps,entries])=>{
+    _emps=emps; _entries=entries.map(normaliseEntry);
+  }).catch(()=>{});
+}
+
+async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason){
+  try {
+    if(action==='in'){
+      const row = {
+        id:'T'+Date.now(), employee_id:emp.id, employee_name:emp.name, role:emp.role,
+        date:todayKey, clock_in:sheetTimeStr, clock_in_iso:isoNow,
+        reason_in:reason||null, status:reason?'pending':'normal'
+      };
+      await db.insert('entries', row);
+      if(reason) await addNote(emp,'Arrival note',timeStr,reason,row.id,todayKey);
+      showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr);
+    } else {
+      const[ih,im]=open.clockIn.split(':').map(Number);
+      const[oh,om]=sheetTimeStr.split(':').map(Number);
+      const hrs=((oh*60+om)-(ih*60+im))/60;
+      const hoursStr=hrs>0?hrs.toFixed(2):'0.00';
+      const patch = {
+        clock_out:sheetTimeStr, clock_out_iso:isoNow,
+        hours:hoursStr, reason_out:reason||null,
+        status:reason?'pending':open.status
+      };
+      await db.update('entries', open.id, patch);
+      if(reason) await addNote(emp,'Departure note',timeStr,reason,open.id,todayKey);
+      showFlash('depart','🌸','See you next time,',emp.name.split(' ')[0],'Checked out · '+timeStr+' · '+hoursStr+'h');
+    }
+  } catch(e) {
+    showFlash('error','⚠','','Database error','Please try again');
+    console.error(e);
+  }
+}
+
+function greet(d){const h=d.getHours();return h<12?'Good morning,':h<17?'Good afternoon,':'Good evening,';}
+
+async function addNote(emp,type,time,reason,entryId,date){
+  await db.insert('notes',{
+    id:'A'+Date.now(), entry_id:entryId, employee_id:emp.id,
+    employee_name:emp.name, role:emp.role, type, time, date, reason, status:'pending'
+  });
+}
+
+/* ═══════════════════════════════════════════
+   FLASH + REASON
+═══════════════════════════════════════════ */
+let flashT=null;
+function showFlash(type,wave,greeting,name,sub){
+  const o=document.getElementById('flash');
+  o.className='flash-overlay show '+type;
+  document.getElementById('flash-wave').textContent=wave;
+  document.getElementById('flash-greeting').textContent=greeting;
+  document.getElementById('flash-name').textContent=name;
+  document.getElementById('flash-sub').textContent=sub;
+  clearTimeout(flashT);
+  flashT=setTimeout(()=>{o.classList.remove('show');focusRFID();},2800);
+}
+
+function showReasonPrompt(firstName,action,label){
+  document.getElementById('reason-overlay').classList.add('show');
+  document.getElementById('reason-title').textContent=action==='in'?'Just let us know, '+firstName+' 😊':'Quick note before you go, '+firstName;
+  document.getElementById('reason-sub').textContent="You're "+label+". No problem at all — just pop a quick note below so your manager is across it.";
+  document.getElementById('reason-submit-btn').textContent=action==='in'?'Submit & check in':'Submit & check out';
+  document.getElementById('reason-text').value='';
+  setTimeout(()=>document.getElementById('reason-text').focus(),120);
+}
+
+function cancelReason(){document.getElementById('reason-overlay').classList.remove('show');pending=null;focusRFID();}
+
+async function submitReason(){
+  const txt=document.getElementById('reason-text').value.trim();
+  if(!txt){document.getElementById('reason-text').style.borderColor='var(--wine)';return;}
+  document.getElementById('reason-text').style.borderColor='';
+  document.getElementById('reason-overlay').classList.remove('show');
+  if(pending){
+    const{emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey}=pending;
+    await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,txt);
+    pending=null;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   MANAGER AUTH
+═══════════════════════════════════════════ */
+const SETUP_PIN      = '9999';
+const ROSTER_VIEW_PIN = '1101';
+const WEAK_PINS      = new Set(['0000','1111','2222','3333','4444','5555','6666','7777','8888','9999','1234','4321','1212','0101','1122','0123','9876']);
+const AUTO_LOGOUT_MS = 30*60*1000;
+
+let currentManager=null, logoutTimer=null;
+
+function hashPIN(pin){
+  let h=0;
+  for(let i=0;i<pin.length;i++) h=(Math.imul(31,h)+pin.charCodeAt(i))|0;
+  return h.toString(16)+pin.length;
+}
+
+function validatePIN(pin){
+  if(!/^\d{4,8}$/.test(pin))   return 'PIN must be 4–8 digits.';
+  if(WEAK_PINS.has(pin))        return 'That PIN is too simple — please choose something less predictable.';
+  if(/^(\d)\1+$/.test(pin))    return 'Repeated digits aren\'t allowed.';
+  return null;
+}
+
+function isFirstRun(){ return _mgrs.length===0; }
+
+async function populateManagerSelect(){
+  try { _mgrs=(await db.get('managers')).map(normaliseMgr); } catch(e){}
+  const sel=document.getElementById('manager-select');
+  sel.innerHTML='<option value="">— Select your name —</option>';
+  const hint=document.getElementById('login-hint');
+  if(isFirstRun()){
+    document.getElementById('login-title').textContent='First-time Setup';
+    document.getElementById('login-sub').textContent='Enter the setup PIN to create your first manager account.';
+    document.getElementById('login-step-select').style.display='none';
+    document.getElementById('login-step-pin').style.display='block';
+    document.getElementById('login-name-label').textContent='Setup PIN';
+    document.getElementById('login-btn').disabled=false;
+    hint.innerHTML='Setup PIN: <strong>9999</strong> — you\'ll create a real PIN right after.';
+  } else {
+    document.getElementById('login-title').textContent='Manager Login';
+    document.getElementById('login-sub').textContent='Select your name, then enter your PIN.';
+    document.getElementById('login-step-select').style.display='block';
+    document.getElementById('login-step-pin').style.display='none';
+    document.getElementById('login-btn').disabled=true;
+    hint.textContent='';
+    _mgrs.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;sel.appendChild(o);});
+  }
+  document.getElementById('login-error').textContent='';
+  document.getElementById('manager-pin').value='';
+}
+
+function onManagerSelect(){
+  const val=document.getElementById('manager-select').value;
+  const pinStep=document.getElementById('login-step-pin');
+  const btn=document.getElementById('login-btn');
+  if(val){
+    const mgr=_mgrs.find(m=>m.id===val);
+    document.getElementById('login-name-label').textContent='PIN for '+mgr.name;
+    document.getElementById('manager-pin').value='';
+    document.getElementById('login-error').textContent='';
+    pinStep.style.display='block'; btn.disabled=false;
+    setTimeout(()=>document.getElementById('manager-pin').focus(),80);
+  } else { pinStep.style.display='none'; btn.disabled=true; }
+}
+
+async function managerLogin(){
+  const pin=document.getElementById('manager-pin').value;
+  const errEl=document.getElementById('login-error');
+  errEl.textContent='';
+  if(isFirstRun()){
+    if(pin!==SETUP_PIN){errEl.textContent='Incorrect setup PIN.';document.getElementById('manager-pin').value='';return;}
+    document.getElementById('manager-pin').value='';
+    currentManager={id:'setup',name:'Setup'};
+    showView('admin');
+    setTimeout(()=>{showToast('Welcome! Please create your first manager account.');openAddManager(true);},300);
+    return;
+  }
+  const selId=document.getElementById('manager-select').value;
+  if(!selId){errEl.textContent='Please select your name.';return;}
+  const mgr=_mgrs.find(m=>m.id===selId);
+  if(!mgr){errEl.textContent='Manager not found.';return;}
+  if(mgr.pinHash!==hashPIN(pin)){
+    document.getElementById('manager-pin').value='';
+    const el=document.getElementById('manager-pin');
+    el.style.borderColor='var(--burgundy)';el.style.boxShadow='0 0 0 3px rgba(139,37,53,0.15)';
+    setTimeout(()=>{el.style.borderColor='';el.style.boxShadow='';},1400);
+    errEl.textContent='Incorrect PIN — please try again.';
+    return;
+  }
+  currentManager={id:mgr.id,name:mgr.name};
+  document.getElementById('manager-pin').value='';
+  try { await db.update('managers',mgr.id,{last_login:new Date().toISOString()}); } catch(e){}
+  showView('admin');
+  resetLogoutTimer();
+}
+
+function managerLogout(){currentManager=null;clearTimeout(logoutTimer);showView('kiosk');}
+
+function resetLogoutTimer(){
+  clearTimeout(logoutTimer);
+  logoutTimer=setTimeout(()=>{if(currentManager){managerLogout();showToast('Session timed out — please log in again');}},AUTO_LOGOUT_MS);
+}
+document.addEventListener('click',()=>{if(currentManager)resetLogoutTimer();});
+document.getElementById('manager-pin').addEventListener('keydown',e=>{if(e.key==='Enter')managerLogin();});
+
+/* ── MANAGER CRUD ── */
+let editingMgrId=null, firstRunMode=false, changePinMgrId=null;
+
+function openAddManager(isFirstRun){
+  firstRunMode=!!isFirstRun; editingMgrId=null;
+  document.getElementById('mgr-modal-title').textContent='Add manager login';
+  document.getElementById('mgr-name').value='';
+  document.getElementById('mgr-pin').value='';
+  document.getElementById('mgr-pin2').value='';
+  document.getElementById('mgr-error').textContent='';
+  document.getElementById('mgr-modal').classList.add('show');
+  document.querySelector('#mgr-modal .btn-ghost').style.display=firstRunMode?'none':'';
+  setTimeout(()=>document.getElementById('mgr-name').focus(),120);
+}
+
+function closeMgrModal(){if(firstRunMode)return;document.getElementById('mgr-modal').classList.remove('show');}
+
+async function saveManager(){
+  const name=document.getElementById('mgr-name').value.trim();
+  const pin=document.getElementById('mgr-pin').value;
+  const pin2=document.getElementById('mgr-pin2').value;
+  const errEl=document.getElementById('mgr-error');
+  errEl.textContent='';
+  if(!name){errEl.textContent='Please enter a name.';return;}
+  const pinErr=validatePIN(pin);
+  if(pinErr){errEl.textContent=pinErr;return;}
+  if(pin!==pin2){errEl.textContent='PINs don\'t match — please re-enter.';return;}
+  try {
+    const row={id:'M'+Date.now(),name,pin_hash:hashPIN(pin),last_login:null};
+    await db.insert('managers',row);
+    _mgrs.push({id:row.id,name,pinHash:row.pin_hash,lastLogin:null});
+    document.getElementById('mgr-modal').classList.remove('show');
+    firstRunMode=false;
+    if(currentManager?.id==='setup') currentManager={id:row.id,name};
+    renderManagersTab();
+    document.getElementById('current-user-label').textContent=currentManager?.name||'';
+    showToast(name+' added ✓');
+  } catch(e){ errEl.textContent='Could not save — please try again.'; console.error(e); }
+}
+
+async function deleteManager(id){
+  if(_mgrs.length<=1){showToast('You must keep at least one manager account.');return;}
+  if(id===currentManager?.id){showToast('You can\'t delete your own account while logged in.');return;}
+  if(!confirm('Remove this manager login? This cannot be undone.'))return;
+  try {
+    await db.delete('managers',id);
+    _mgrs=_mgrs.filter(m=>m.id!==id);
+    renderManagersTab(); showToast('Manager login removed.');
+  } catch(e){ showToast('Could not remove — please try again.'); }
+}
+
+function openChangePIN(id){
+  changePinMgrId=id;
+  const mgr=_mgrs.find(m=>m.id===id);
+  document.getElementById('pin-modal-name').textContent=mgr?.name||'';
+  document.getElementById('new-pin').value='';
+  document.getElementById('new-pin2').value='';
+  document.getElementById('pin-error').textContent='';
+  document.getElementById('pin-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('new-pin').focus(),120);
+}
+
+function closePinModal(){document.getElementById('pin-modal').classList.remove('show');}
+
+async function savePinChange(){
+  const pin=document.getElementById('new-pin').value;
+  const pin2=document.getElementById('new-pin2').value;
+  const errEl=document.getElementById('pin-error');
+  errEl.textContent='';
+  const pinErr=validatePIN(pin);
+  if(pinErr){errEl.textContent=pinErr;return;}
+  if(pin!==pin2){errEl.textContent='PINs don\'t match.';return;}
+  try {
+    await db.update('managers',changePinMgrId,{pin_hash:hashPIN(pin)});
+    const idx=_mgrs.findIndex(m=>m.id===changePinMgrId);
+    if(idx>=0) _mgrs[idx].pinHash=hashPIN(pin);
+    closePinModal(); showToast('PIN updated ✓');
+  } catch(e){ errEl.textContent='Could not update — please try again.'; }
+}
+
+function renderManagersTab(){
+  const tbody=document.getElementById('managers-body');
+  if(!_mgrs.length){tbody.innerHTML=`<tr><td colspan="3"><div class="empty-state"><div class="empty-icon">🔑</div><div class="empty-msg">No manager accounts yet</div></div></td></tr>`;return;}
+  tbody.innerHTML=_mgrs.map(m=>{
+    const last=m.lastLogin?new Date(m.lastLogin).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'Never';
+    const isMe=m.id===currentManager?.id;
+    return`<tr>
+      <td><strong>${m.name}</strong>${isMe?' <span style="font-size:0.7rem;background:var(--blush);color:var(--burgundy);padding:0.1rem 0.45rem;border-radius:20px;font-weight:700;">You</span>':''}</td>
+      <td style="color:var(--muted);font-size:0.8rem;">${last}</td>
+      <td>
+        <button onclick="openChangePIN('${m.id}')" style="background:var(--blush);color:var(--burgundy);border:1px solid var(--border);border-radius:7px;padding:0.3rem 0.75rem;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;margin-right:0.5rem;">Change PIN</button>
+        ${!isMe?`<button onclick="deleteManager('${m.id}')" style="background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:0.3rem 0.75rem;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">Remove</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function switchTab(name,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  if(name==='timesheets') renderTimesheets();
+  if(name==='notes')      renderApprovals();
+  if(name==='team')       renderTeam();
+  if(name==='logins')     renderManagersTab();
+  if(name==='roster')     renderRoster();
+}
+
+/* ═══════════════════════════════════════════
+   TEAM
+═══════════════════════════════════════════ */
+const ROLE_C={Doctor:'c-doctor',Nurse:'c-nurse',Receptionist:'c-receptionist',Manager:'c-manager'};
+
+function renderTeam(){
+  const today=new Date().toISOString().slice(0,10);
+  const filtered=_emps.filter(e=>teamRoles.has(e.role));
+  const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut).map(e=>e.employeeId));
+  const doneNow=new Set(_entries.filter(e=>e.date===today&&e.clockOut).map(e=>e.employeeId));
+  const dnMap=buildDisplayNames(_emps);
+  const displayName=emp=>dnMap[emp.id]||empFirstName(emp);
+  const inNames=filtered.filter(e=>inNow.has(e.id)).map(displayName);
+  const doneNames=filtered.filter(e=>doneNow.has(e.id)).map(displayName);
+  const notYetEmps=filtered.filter(e=>!inNow.has(e.id)&&!doneNow.has(e.id));
+  const notYetNames=notYetEmps.map(displayName);
+  const nameList=names=>names.length?`<div class="stat-names">${names.join('<br>')}</div>`:'';
+  document.getElementById('today-strip').innerHTML=`
+    <div class="stat-tile"><div class="stat-val">${filtered.length}</div><div class="stat-label">Total staff</div></div>
+    <div class="stat-tile"><div class="stat-val">${inNames.length}</div><div class="stat-label">Currently in</div>${nameList(inNames)}</div>
+    <div class="stat-tile"><div class="stat-val">${doneNames.length}</div><div class="stat-label">Finished today</div>${nameList(doneNames)}</div>
+    <div class="stat-tile"><div class="stat-val">${notYetEmps.length}</div><div class="stat-label">Not yet in</div>${nameList(notYetNames)}</div>`;
+  const sel=document.getElementById('filter-employee');
+  const prev=sel.value; sel.innerHTML='<option value="">All staff</option>';
+  _emps.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.name;sel.appendChild(o);});
+  sel.value=prev;
+  document.getElementById('employees-grid').innerHTML=filtered.map(emp=>{
+    const initials=emp.name.replace(/^(Dr\.|Nurse|Reception|Practice Mgr)\s*/i,'').split(' ').slice(0,2).map(n=>n[0]).join('');
+    const cc=ROLE_C[emp.role]||'c-doctor'; const isIn=inNow.has(emp.id);
+    return`<div class="employee-card"><div class="emp-avatar ${cc}">${initials}</div><div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-meta">${emp.role} · ${emp.type}</div><div class="emp-rfid">${emp.rfid}</div></div><button class="emp-edit-btn" onclick="openEditEmployee('${emp.id}')">Edit</button><div class="status-dot ${isIn?'in':'out'}" title="${isIn?'Checked in':'Not in today'}"></div></div>`;
+  }).join('');
+}
+
+function openAddEmployee(){
+  _editingEmpId=null;
+  document.getElementById('emp-modal-title').textContent='Add team member';
+  document.getElementById('emp-save-btn').textContent='Save';
+  ['emp-firstname','emp-surname','emp-rfid'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('emp-role').value='Doctor';
+  document.getElementById('emp-type').value='Full Time';
+  document.getElementById('emp-modal').classList.add('show');
+  document.getElementById('emp-firstname').focus();
+}
+
+function openEditEmployee(empId){
+  const emp=_emps.find(e=>e.id===empId);
+  if(!emp) return;
+  _editingEmpId=empId;
+  document.getElementById('emp-modal-title').textContent='Edit team member';
+  document.getElementById('emp-save-btn').textContent='Save changes';
+  const nameParts=emp.name.trim().split(' ');
+  document.getElementById('emp-firstname').value=nameParts[0]||'';
+  document.getElementById('emp-surname').value=nameParts.slice(1).join(' ')||'';
+  document.getElementById('emp-role').value=emp.role;
+  document.getElementById('emp-rfid').value=emp.rfid;
+  document.getElementById('emp-type').value=emp.type;
+  document.getElementById('emp-modal').classList.add('show');
+  document.getElementById('emp-firstname').focus();
+}
+
+function closeModal(){document.querySelectorAll('.modal-bg').forEach(m=>m.classList.remove('show'));}
+
+async function saveEmployee(){
+  const firstName=document.getElementById('emp-firstname').value.trim();
+  const surname=document.getElementById('emp-surname').value.trim();
+  const name=[firstName,surname].filter(Boolean).join(' ');
+  const role=document.getElementById('emp-role').value;
+  const rfid=document.getElementById('emp-rfid').value.trim().replace(/\D/g,'');
+  const type=document.getElementById('emp-type').value;
+  if(!firstName||!rfid){showToast('Please fill in first name and RFID card number');return;}
+  // Check RFID clash (exclude self when editing)
+  if(_emps.find(e=>e.rfid===rfid&&e.id!==_editingEmpId)){showToast('That card is already registered to someone');return;}
+  try{
+    if(_editingEmpId){
+      await db.update('employees',_editingEmpId,{name,role,rfid,type});
+      const emp=_emps.find(e=>e.id===_editingEmpId);
+      if(emp){emp.name=name;emp.role=role;emp.rfid=rfid;emp.type=type;}
+      closeModal(); renderTeam();
+      showToast(name+' updated ✓');
+    } else {
+      const row={id:'E'+Date.now(),name,role,rfid,type};
+      await db.insert('employees',row);
+      _emps.push(row); closeModal(); renderTeam();
+      showToast(name+' added to the team ✓');
+    }
+  }catch(e){showToast('Could not save — please try again.');console.error(e);}
+}
+
+/* ═══════════════════════════════════════════
+   TIMESHEETS
+═══════════════════════════════════════════ */
+function setDefaultDates(){
+  const today=new Date().toISOString().slice(0,10);
+  const wkAgo=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  if(!document.getElementById('filter-from').value)document.getElementById('filter-from').value=wkAgo;
+  if(!document.getElementById('filter-to').value)document.getElementById('filter-to').value=today;
+}
+
+function groupEntriesByDay(entries){
+  const map={};
+  entries.forEach(r=>{
+    const key=r.employeeId+'_'+r.date;
+    if(!map[key]) map[key]=[];
+    map[key].push(r);
+  });
+  return Object.values(map).map(group=>{
+    if(group.length===1) return{...group[0],breakCount:0,breakMins:0};
+    const sorted=group.slice().sort((a,b)=>a.clockIn.localeCompare(b.clockIn));
+    const completed=sorted.filter(r=>r.clockOut&&r.hours);
+    const totalPaidMins=completed.reduce((s,r)=>s+parseFloat(r.hours)*60,0);
+    const earliest=sorted[0];
+    const latest=sorted.slice().sort((a,b)=>(b.clockOut||'99:99').localeCompare(a.clockOut||'99:99'))[0];
+    const stillIn=sorted.some(r=>!r.clockOut);
+    const spanMins=stillIn?null:(timeToMin(latest.clockOut)-timeToMin(earliest.clockIn));
+    const breakMins=spanMins!==null?Math.max(0,Math.round(spanMins-totalPaidMins)):null;
+    const worstStatus=sorted.some(r=>r.status==='flagged')?'flagged':sorted.some(r=>r.status==='pending')?'pending':sorted.some(r=>r.status==='approved')?'approved':'normal';
+    return{
+      ...earliest,
+      clockIn:earliest.clockIn,
+      clockOut:stillIn?null:latest.clockOut,
+      hours:totalPaidMins>0?(totalPaidMins/60).toFixed(2):null,
+      status:worstStatus,
+      breakCount:sorted.length-1,
+      breakMins
+    };
+  });
+}
+
+function renderTimesheets(){
+  let rows=[..._entries];
+  const ef=document.getElementById('filter-employee')?.value;
+  const df=document.getElementById('filter-from')?.value;
+  const dt=document.getElementById('filter-to')?.value;
+  if(ef)rows=rows.filter(r=>r.employeeId===ef);
+  if(df)rows=rows.filter(r=>r.date>=df);
+  if(dt)rows=rows.filter(r=>r.date<=dt);
+  const grouped=groupEntriesByDay(rows).sort((a,b)=>b.date.localeCompare(a.date)||a.employeeName.localeCompare(b.employeeName));
+  const tbody=document.getElementById('timesheet-body');
+  if(!grouped.length){tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">No records for this period</div><div class="empty-sub">Try widening the date range</div></div></td></tr>`;return;}
+  tbody.innerHTML=grouped.map(r=>{
+    const dateF=new Date(r.date+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
+    const out=r.clockOut?`<span class="mono">${r.clockOut}</span>`:`<span style="color:var(--dusty)">Still in</span>`;
+    const breakNote=r.breakCount>0?`<div style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem;">${r.breakCount} break${r.breakCount>1?'s':''}${r.breakMins!==null?' · '+r.breakMins+' min unpaid':''}</div>`:'';
+    const hrs=r.hours?`<span class="mono">${r.hours}h</span>`:'—';
+    const badge=r.status==='pending'?'<span class="badge badge-pending">Note pending</span>':r.status==='approved'?'<span class="badge badge-approved">✓ Acknowledged</span>':r.status==='flagged'?'<span class="badge badge-flagged">Flagged</span>':'<span class="badge badge-normal">✓ Normal</span>';
+    return`<tr><td><strong>${r.employeeName}</strong></td><td style="color:var(--muted)">${r.role}</td><td>${dateF}</td><td><span class="mono">${r.clockIn}</span></td><td>${out}</td><td>${hrs}${breakNote}</td><td>${badge}</td></tr>`;
+  }).join('');
+}
+
+function exportMYOB(){
+  let rows=[..._entries];
+  const ef=document.getElementById('filter-employee')?.value;
+  const df=document.getElementById('filter-from')?.value;
+  const dt=document.getElementById('filter-to')?.value;
+  if(ef)rows=rows.filter(r=>r.employeeId===ef);
+  if(df)rows=rows.filter(r=>r.date>=df);
+  if(dt)rows=rows.filter(r=>r.date<=dt);
+  const done=groupEntriesByDay(rows).filter(r=>r.clockOut&&r.hours);
+  if(!done.length){showToast('No completed entries to export');return;}
+  const csv=[['Employee Name','Date','Start Time','Finish Time','Hours','Activity'].join(','),...done.map(r=>[`"${r.employeeName}"`,r.date.split('-').reverse().join('/'),r.clockIn,r.clockOut,r.hours,`"${r.role}"`].join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`wellness-timesheets-${df||'all'}-to-${dt||'all'}.csv`;
+  a.click();
+  showToast(`Exported ${done.length} entries for MYOB ✓`);
+}
+
+/* ═══════════════════════════════════════════
+   NOTES / APPROVALS
+═══════════════════════════════════════════ */
+function renderApprovals(){
+  const pend=_notes.filter(a=>a.status==='pending');
+  const badge=document.getElementById('notif-badge');
+  badge.textContent=pend.length; badge.style.display=pend.length?'inline':'none';
+  const list=document.getElementById('approvals-list');
+  if(!pend.length){list.innerHTML=`<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-msg">All clear — no notes waiting</div><div class="empty-sub">Staff notes appear here when someone checks in or out outside their usual hours</div></div>`;return;}
+  list.innerHTML=pend.map(a=>{
+    const dateF=new Date(a.date+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+    return`<div class="approval-card"><div class="approval-meta"><div class="approval-who">${a.employeeName} <span style="color:var(--muted);font-weight:500;font-size:0.78rem">· ${a.role}</span></div><div class="approval-detail">${a.type} · ${dateF} at ${a.time}</div><div class="approval-reason">${a.reason}</div></div><div class="approval-actions"><button class="acknowledge-btn" onclick="resolveNote('${a.id}','approved')">✓ Acknowledge</button><button class="flag-btn" onclick="resolveNote('${a.id}','flagged')">Flag for follow-up</button></div></div>`;
+  }).join('');
+}
+
+async function resolveNote(id,status){
+  const note=_notes.find(a=>a.id===id);
+  if(!note)return;
+  try {
+    await db.update('notes',id,{status});
+    await db.update('entries',note.entryId,{status});
+    note.status=status;
+    const entry=_entries.find(e=>e.id===note.entryId);
+    if(entry) entry.status=status;
+    renderApprovals(); renderTimesheets();
+    showToast(status==='approved'?'Note acknowledged ✓':'Flagged for follow-up');
+  } catch(e){ showToast('Could not update — please try again.'); }
+}
+
+/* ═══════════════════════════════════════════
+   TOAST + TEST SCAN
+═══════════════════════════════════════════ */
+let toastT=null;
+function showToast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+function testScan(){
+  const el=document.getElementById('test-rfid');
+  const val=el.value.replace(/\D/g,'').trim();
+  if(val.length>=4){processRFID(val);el.value='';setTimeout(()=>el.focus(),100);}
+  else{el.style.borderColor='var(--wine)';setTimeout(()=>{el.style.borderColor='';el.focus();},1200);}
+}
+
+/* ═══════════════════════════════════════════
+   STAFF ROSTER VIEW (public)
+═══════════════════════════════════════════ */
+let srOffset=0, srRoles=new Set(['Receptionist','Nurse','Manager']), srLayout='day', _srDnMap={};
+let teamRoles=new Set(['Receptionist','Nurse','Manager']);
+function teamToggleRole(role,btn){
+  if(teamRoles.has(role)) teamRoles.delete(role); else teamRoles.add(role);
+  btn.classList.toggle('active', teamRoles.has(role));
+  renderTeam();
+}
+
+function empFirstName(emp){
+  return emp.name.replace(/^(Dr\.|Nurse|Reception|Practice Mgr)\s*/i,'').split(' ')[0];
+}
+function buildDisplayNames(emps){
+  const counts={};
+  emps.forEach(e=>{const fn=empFirstName(e);counts[fn]=(counts[fn]||0)+1;});
+  const map={};
+  emps.forEach(e=>{
+    const fn=empFirstName(e);
+    if(counts[fn]>1){
+      const parts=e.name.trim().split(' ');
+      const init=parts.length>1?parts[parts.length-1][0]+'.':'';
+      map[e.id]=init?`${fn} ${init}`:fn;
+    } else { map[e.id]=fn; }
+  });
+  return map;
+}
+
+const SR_DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const SR_MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const SR_ROLE_COLORS={Doctor:'#8B2535',Nurse:'#A63245',Receptionist:'#C45670',Manager:'#6B2030'};
+const SR_ROLE_BG={Doctor:'rgba(139,37,53,0.10)',Nurse:'rgba(166,50,69,0.12)',Receptionist:'rgba(212,137,154,0.2)',Manager:'rgba(139,37,53,0.07)'};
+
+function getFortnightStart(offsetFortnights){
+  const toMonday=d=>{const day=d.getDay();const diff=day===0?-6:1-day;return new Date(d.getFullYear(),d.getMonth(),d.getDate()+diff);};
+  let base;
+  if(_rosterConfig){
+    const anchor=toMonday(new Date(_rosterConfig.cycle_start_date+'T12:00:00'));
+    const today=toMonday(new Date());
+    const daysDiff=Math.floor((today-anchor)/86400000);
+    const fnNum=Math.floor(daysDiff/14);
+    base=new Date(anchor);
+    base.setDate(anchor.getDate()+fnNum*14);
+  }else{
+    base=toMonday(new Date());
+  }
+  base.setDate(base.getDate()+offsetFortnights*14);
+  return base.toISOString().slice(0,10);
+}
+
+function getFortnight14Days(startDateStr){
+  const days=[];const start=new Date(startDateStr+'T12:00:00');
+  for(let i=0;i<14;i++){const d=new Date(start);d.setDate(start.getDate()+i);days.push(d.toISOString().slice(0,10));}
+  return days;
+}
+
+function srFortnightLabel(startDateStr){
+  const s=new Date(startDateStr+'T12:00:00');
+  const e=new Date(s);e.setDate(s.getDate()+13);
+  return `${s.getDate()} ${SR_MONTHS[s.getMonth()].slice(0,3)} – ${e.getDate()} ${SR_MONTHS[e.getMonth()].slice(0,3)}`;
+}
+
+function srIsPublished(fnStart){
+  // accepts Date object or ISO string
+  const key=typeof fnStart==='string'?fnStart.slice(0,10):fnStart.toISOString().slice(0,10);
+  return _rosterFortnights.some(f=>f.fn_start===key&&f.is_published);
+}
+
+function openRosterPIN(){
+  document.querySelectorAll('.wos-pin-box[data-group="roster"]').forEach(b=>{b.value='';b.classList.remove('filled');});
+  document.getElementById('roster-pin-error').textContent='';
+  document.getElementById('roster-pin-modal').classList.add('show');
+  // Wire up box behaviour each time modal opens
+  document.querySelectorAll('.wos-pin-box[data-group="roster"]').forEach(input=>{
+    input.oninput=e=>{
+      e.target.value=e.target.value.replace(/[^0-9]/g,'');
+      e.target.classList.toggle('filled',e.target.value!=='');
+      if(e.target.value){
+        const next=document.querySelector(`.wos-pin-box[data-group="roster"][data-idx="${+e.target.dataset.idx+1}"]`);
+        if(next) next.focus(); else checkRosterPIN();
+      }
+    };
+    input.onkeydown=e=>{
+      if(e.key==='Backspace'&&!e.target.value){
+        const prev=document.querySelector(`.wos-pin-box[data-group="roster"][data-idx="${+e.target.dataset.idx-1}"]`);
+        if(prev){prev.value='';prev.classList.remove('filled');prev.focus();}
+      }
+    };
+  });
+  // Focus synchronously — must be in same call stack as user tap for iOS to open keyboard
+  document.querySelector('.wos-pin-box[data-group="roster"][data-idx="0"]').focus();
+}
+
+function checkRosterPIN(){
+  const val=[...document.querySelectorAll('.wos-pin-box[data-group="roster"]')].map(b=>b.value).join('');
+  const activePin=_rosterConfig?.roster_view_pin||ROSTER_VIEW_PIN;
+  if(val===activePin){
+    document.getElementById('roster-pin-modal').classList.remove('show');
+    showStaffRoster();
+  }else{
+    document.getElementById('roster-pin-error').textContent='Incorrect PIN — please try again';
+    document.querySelectorAll('.wos-pin-box[data-group="roster"]').forEach(b=>{b.value='';b.classList.remove('filled');});
+    setTimeout(()=>document.querySelector('.wos-pin-box[data-group="roster"][data-idx="0"]').focus(),50);
+  }
+}
+
+async function showStaffRoster(){
+  srOffset=0;
+  try{
+    const [emps,shifts,fortnights,config]=await Promise.all([
+      _emps.length?Promise.resolve(_emps):db.get('employees'),
+      _rosterShifts.length?Promise.resolve(_rosterShifts):db.get('roster_shifts'),
+      _rosterFortnights.length?Promise.resolve(_rosterFortnights):db.get('roster_fortnights'),
+      _rosterConfig?Promise.resolve(_rosterConfig):db.get('roster_config').then(r=>r[0]||null)
+    ]);
+    _emps=emps; _rosterShifts=shifts; _rosterFortnights=fortnights; _rosterConfig=config;
+  }catch(e){ console.error('Could not load roster data',e); }
+  // Reset filters to defaults every time the page is opened
+  srRoles=new Set(['Receptionist','Nurse','Manager']);
+  document.querySelectorAll('.sr-tab').forEach(t=>t.classList.add('active'));
+  const srSel=document.getElementById('sr-staff-filter');
+  if(srSel){ srSel.value=''; srSel.classList.remove('individual-active'); }
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-staff-roster').classList.add('active');
+  renderStaffRoster();
+}
+
+function srNav(dir){srOffset+=dir;renderStaffRoster();}
+
+function srJumpToDate(){
+  const val=document.getElementById('sr-date-picker').value;
+  if(!val)return;
+  const toMonday=d=>{const day=d.getDay();const diff=day===0?-6:1-day;return new Date(d.getFullYear(),d.getMonth(),d.getDate()+diff);};
+  if(_rosterConfig){
+    const anchor=toMonday(new Date(_rosterConfig.cycle_start_date+'T12:00:00'));
+    const picked=toMonday(new Date(val+'T12:00:00'));
+    const weeksDiff=Math.round((picked-anchor)/(7*86400000));
+    srOffset=Math.floor(weeksDiff/2)-Math.floor(Math.round((toMonday(new Date())-anchor)/(7*86400000))/2);
+  }
+  renderStaffRoster();
+}
+
+function srToggleRole(role,btn){
+  // Clear individual selection when switching to group view
+  const sel=document.getElementById('sr-staff-filter');
+  if(sel&&sel.value){ sel.value=''; sel.classList.remove('individual-active'); }
+  if(srRoles.has(role)) srRoles.delete(role); else srRoles.add(role);
+  btn.classList.toggle('active', srRoles.has(role));
+  renderStaffRoster();
+}
+
+function srSelectIndividual(){
+  const sel=document.getElementById('sr-staff-filter');
+  if(sel&&sel.value){
+    srRoles.clear();
+    document.querySelectorAll('.sr-tab').forEach(t=>t.classList.remove('active'));
+    sel.classList.add('individual-active');
+  } else {
+    srRoles=new Set(['Receptionist','Nurse','Manager']);
+    document.querySelectorAll('.sr-tab').forEach(t=>t.classList.add('active'));
+    sel.classList.remove('individual-active');
+  }
+  renderStaffRoster();
+}
+
+function srSetLayout(layout){
+  srLayout=layout;
+  document.getElementById('sr-btn-day').classList.toggle('active',layout==='day');
+  document.getElementById('sr-btn-person').classList.toggle('active',layout==='person');
+  renderStaffRoster();
+}
+
+function renderStaffRoster(){
+  _srDnMap=buildDisplayNames(_emps);
+  const today=new Date().toISOString().slice(0,10);
+  const fn1Start=getFortnightStart(srOffset);
+  const fn2Start=getFortnightStart(srOffset+1);
+  const fn1Days=getFortnight14Days(fn1Start);
+  const fn2Days=getFortnight14Days(fn2Start);
+
+  // Show all fn1 days — past ones are greyed out in the render
+  const fn1Visible=fn1Days;
+  const fn2Visible=fn2Days; // always show all of fn2
+
+  // Period label
+  document.getElementById('sr-period-label').textContent=`${srFortnightLabel(fn1Start)}  ·  ${srFortnightLabel(fn2Start)}`;
+
+  // Filter employees — individual selection bypasses role tabs
+  let emps=[..._emps];
+  const staffFilter=document.getElementById('sr-staff-filter')?.value;
+  if(staffFilter) emps=emps.filter(e=>e.id===staffFilter);
+  else emps=emps.filter(e=>srRoles.has(e.role));
+
+  // Populate staff dropdown (preserve selection)
+  const sel=document.getElementById('sr-staff-filter');
+  if(sel){
+    const cur=sel.value;
+    sel.innerHTML='<option value="">Individual view</option>'+
+      [..._emps].sort((a,b)=>a.name.localeCompare(b.name))
+      .map(e=>`<option value="${e.id}">${buildDisplayNames(_emps)[e.id]}</option>`).join('');
+    if(cur)sel.value=cur;
+  }
+
+  const fn1Published=srIsPublished(fn1Start);
+  const fn2Published=srIsPublished(fn2Start);
+
+  const content=document.getElementById('sr-content');
+  content.innerHTML=
+    srRenderFortnight(1,fn1Start, fn1Visible.length?fn1Visible:fn1Days, emps, fn1Published, today)+
+    srRenderFortnight(2,fn2Start, fn2Visible, emps, fn2Published, today);
+}
+
+function srRenderFortnight(num, startStr, days, emps, published, today){
+  const e=new Date(startStr+'T12:00:00'); e.setDate(e.getDate()+13);
+  const year=e.getFullYear();
+  const heading=`<div class="sr-fortnight-heading">
+    <span class="sr-fn-badge">Fortnight ${num}</span>
+    <span class="sr-fn-dates">${srFortnightLabel(startStr)}</span>
+    <span class="sr-fn-year">${year}</span>
+  </div>`;
+  const unpub=`<div class="sr-unpublished"><div class="sr-unpublished-icon">📅</div><div>Roster not yet published for this period</div></div>`;
+  const body=published?(srLayout==='day'?srByDay(days,emps,today):srByPerson(days,emps,today)):unpub;
+  return`<div class="sr-fortnight-block">${heading}${body}</div>`;
+}
+
+function srShiftForEmp(empId,date){
+  const shift=_rosterShifts.find(s=>s.employee_id===empId&&s.date===date);
+  if(shift){if(shift.is_day_off)return'off';if(shift.start_time&&shift.end_time)return{start:shift.start_time,end:shift.end_time};}
+  return null;
+}
+
+function srByDay(days,emps,today){
+  if(!days.length)return'<div class="sr-unpublished"><div>No upcoming days to show in this fortnight</div></div>';
+  // Mon-anchored column headers
+  const headers=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(h=>`<div class="sr-day-col-header">${h}</div>`).join('');
+  // Place first day in the correct Mon-anchored column (Mon=1…Sun=7)
+  const firstD=new Date(days[0]+'T12:00:00');
+  const startCol=firstD.getDay()===0?7:firstD.getDay();
+  const cards=days.map((date,i)=>{
+    const d=new Date(date+'T12:00:00');
+    const isToday=date===today;
+    const shifts=emps.map(e=>({emp:e,shift:srShiftForEmp(e.id,date)})).filter(x=>x.shift&&x.shift!=='off');
+    shifts.sort((a,b)=>a.shift.start.localeCompare(b.shift.start));
+    const items=shifts.length
+      ?shifts.map(({emp,shift})=>`<div class="sr-shift-item"><div class="sr-shift-dot" style="background:${SR_ROLE_COLORS[emp.role]||'var(--dusty)'}"></div><span class="sr-shift-name">${_srDnMap[emp.id]||empFirstName(emp)}</span><span class="sr-shift-time">${shift.start}–${shift.end}</span></div>`).join('')
+      :`<div class="sr-no-staff">No staff scheduled</div>`;
+    const isPast=date<today;
+    const colStyle=i===0?` style="grid-column-start:${startCol}"`:'';
+    return`<div class="sr-day-card${isToday?' today':''}${isPast?' past':''}"${colStyle}><div class="sr-day-card-header"><div class="sr-day-name">${SR_DAYS[d.getDay()]}${isToday?' · Today':''}</div><div class="sr-day-date">${d.getDate()} ${SR_MONTHS[d.getMonth()]}</div></div><div class="sr-day-shifts">${items}</div></div>`;
+  }).join('');
+  return`<div class="sr-day-grid">${headers}${cards}</div>`;
+}
+
+function srByPerson(days,emps,today){
+  if(!emps.length)return'<div class="sr-unpublished"><div>No staff to display</div></div>';
+  const cards=emps.sort((a,b)=>a.name.localeCompare(b.name)).map(emp=>{
+    const initials=emp.name.split(' ').map(w=>w[0]).slice(0,2).join('');
+    const roleClass='c-'+emp.role.toLowerCase();
+    const dayRows=days.map(date=>{
+      const d=new Date(date+'T12:00:00');
+      const isToday=date===today;
+      const shift=srShiftForEmp(emp.id,date);
+      const timeCell=!shift?`<span class="sr-person-day-off">—</span>`:shift==='off'?`<span class="sr-person-day-off">Day off</span>`:`<span class="sr-person-day-time">${shift.start} – ${shift.end}</span>`;
+      return`<div class="sr-person-day${isToday?' today-row':''}"><div class="sr-person-day-label"><div class="sr-person-day-name">${SR_DAYS[d.getDay()].slice(0,3)}${isToday?' ·':''}</div><div class="sr-person-day-date">${d.getDate()} ${SR_MONTHS[d.getMonth()].slice(0,3)}</div></div>${timeCell}</div>`;
+    }).join('');
+    return`<div class="sr-person-card"><div class="sr-person-header"><div class="sr-person-avatar ${roleClass}">${initials}</div><div><div class="sr-person-name">${emp.name}</div><div class="sr-person-role">${emp.role}</div></div></div><div class="sr-person-days">${dayRows}</div></div>`;
+  }).join('');
+  return`<div class="sr-person-list">${cards}</div>`;
+}
+
+/* ═══════════════════════════════════════════
+   ROSTER HELPERS
+═══════════════════════════════════════════ */
+function timeToMin(t){ const[h,m]=t.split(':').map(Number); return h*60+m; }
+
+function getWeekType(dateStr){
+  if(!_rosterConfig) return null;
+  const toMonday=d=>{
+    const day=d.getDay();
+    const diff=day===0?-6:1-day;
+    return new Date(d.getFullYear(),d.getMonth(),d.getDate()+diff);
+  };
+  const anchor=toMonday(new Date(_rosterConfig.cycle_start_date+'T12:00:00'));
+  const date=toMonday(new Date(dateStr+'T12:00:00'));
+  const weeksDiff=Math.round((date-anchor)/(7*86400000));
+  return weeksDiff%2===0?'A':'B';
+}
+
+function getScheduledTimes(employeeId,dateStr){
+  // 1. Check explicit roster_shifts first (fortnight-by-fortnight roster)
+  const shift=_rosterShifts.find(s=>s.employee_id===employeeId&&s.date===dateStr);
+  if(shift){ if(shift.is_day_off||!shift.start_time||!shift.end_time) return null; return{startMin:timeToMin(shift.start_time),endMin:timeToMin(shift.end_time)}; }
+  // 2. Check one-off overrides
+  const ov=_rosterOverrides.find(o=>o.employee_id===employeeId&&o.date===dateStr);
+  if(ov){ if(ov.is_day_off) return null; return{startMin:timeToMin(ov.start_time),endMin:timeToMin(ov.end_time)}; }
+  // 3. Fall back to A/B templates
+  const weekType=getWeekType(dateStr);
+  if(!weekType) return null;
+  const jsDay=new Date(dateStr+'T12:00:00').getDay();
+  const dayOfWeek=jsDay===0?7:jsDay;
+  const tmpl=_rosterTemplates.find(t=>t.employee_id===employeeId&&t.week_type===weekType&&t.day_of_week===dayOfWeek);
+  if(!tmpl||tmpl.is_day_off||!tmpl.start_time||!tmpl.end_time) return null;
+  return{startMin:timeToMin(tmpl.start_time),endMin:timeToMin(tmpl.end_time)};
+}
+
+/* ═══════════════════════════════════════════
+   ROSTER UI – PHASE 2 BUILDER
+═══════════════════════════════════════════ */
+function renderRoster(){
+  // Update advanced section anchor field (if visible)
+  const anchorEl=document.getElementById('anchor-date');
+  if(anchorEl&&_rosterConfig) anchorEl.value=_rosterConfig.cycle_start_date;
+  // Update control bar
+  const fnStart=rbGetFnStart();
+  const labelEl=document.getElementById('rb-fn-label');
+  if(labelEl){
+    const published=rbIsPublished(fnStart);
+    labelEl.innerHTML=rbFnLabel(fnStart)+(published?'<span class="rb-live-badge">&#9679; Live</span>':'');
+  }
+  const lockBtn=document.getElementById('rb-lock-btn');
+  if(lockBtn){
+    const locked=rbIsLocked(fnStart);
+    lockBtn.innerHTML=locked?'&#128274; Locked':'&#128275; Unlocked';
+    lockBtn.classList.toggle('locked',locked);
+  }
+  const pubBtn=document.getElementById('rb-publish-btn');
+  if(pubBtn){
+    const published=rbIsPublished(fnStart);
+    pubBtn.innerHTML=published?'&#10003; Live &middot; Unpublish':'&#10003; Publish Roster';
+    pubBtn.classList.toggle('published',published);
+  }
+  document.querySelectorAll('.rb-role-tab').forEach(t=>{
+    const map={'All':'All','Receptionists':'Receptionist','Nurses':'Nurse','Managers':'Manager'};
+    t.classList.toggle('active',map[t.textContent]===rRole||(rRole==='All'&&t.textContent==='All'));
+  });
+  // Show grid or timeline
+  if(rSelectedDay){
+    document.getElementById('rb-grid-view').style.display='none';
+    document.getElementById('rb-tl-view').style.display='block';
+    renderDayTimeline();
+  } else {
+    document.getElementById('rb-tl-view').style.display='none';
+    document.getElementById('rb-grid-view').style.display='block';
+    renderFnGrid();
+  }
+}
+
+function rbGetFnStart(){
+  const toMonday=d=>{const day=d.getDay();const diff=day===0?-6:1-day;return new Date(d.getFullYear(),d.getMonth(),d.getDate()+diff);};
+  const anchor=_rosterConfig?.cycle_start_date;
+  if(!anchor){const t=toMonday(new Date());return t;}
+  const a=toMonday(new Date(anchor+'T12:00:00'));
+  // In day view, derive fortnight from the selected day so they stay in sync
+  const ref=rSelectedDay?toMonday(new Date(rSelectedDay+'T12:00:00')):toMonday(new Date());
+  const daysDiff=Math.floor((ref-a)/86400000);
+  const fnNum=Math.floor(daysDiff/14);
+  const base=new Date(a);
+  base.setDate(base.getDate()+(fnNum+rFnOffset)*14);
+  return base;
+}
+
+function rbFnLabel(start){
+  const end=new Date(start); end.setDate(end.getDate()+13);
+  const fmt=d=>d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  const locked=rbIsLocked(start);
+  return fmt(start)+' – '+fmt(end)+(locked?' 🔒':'');
+}
+
+function rbIsLocked(fnStart){
+  const key=fnStart.toISOString().slice(0,10);
+  return _rosterFortnights.some(f=>f.fn_start===key&&f.is_locked);
+}
+
+function rbIsPublished(fnStart){
+  const key=fnStart.toISOString().slice(0,10);
+  return _rosterFortnights.some(f=>f.fn_start===key&&f.is_published);
+}
+
+let _rbConfirmCallback=null;
+function rbConfirmClose(){ document.getElementById('rb-confirm-overlay').classList.remove('show'); _rbConfirmCallback=null; }
+function rbConfirmProceed(){ document.getElementById('rb-confirm-overlay').classList.remove('show'); if(_rbConfirmCallback) _rbConfirmCallback(); _rbConfirmCallback=null; }
+
+function rbTogglePublish(){
+  const fnStart=rbGetFnStart();
+  const key=fnStart.toISOString().slice(0,10);
+  const end=new Date(fnStart); end.setDate(end.getDate()+13);
+  const fmt=d=>d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  const dateRange=fmt(fnStart)+' – '+fmt(end);
+  const published=rbIsPublished(fnStart);
+  const overlay=document.getElementById('rb-confirm-overlay');
+  const titleEl=document.getElementById('rb-confirm-title');
+  const msgEl=document.getElementById('rb-confirm-msg');
+  const okBtn=document.getElementById('rb-confirm-ok');
+  if(!published){
+    titleEl.textContent='Publish Roster?';
+    msgEl.textContent=`This will make the ${dateRange} roster visible to staff in the Who's On view.`;
+    okBtn.textContent='Publish';
+    okBtn.className='rb-confirm-ok';
+    _rbConfirmCallback=()=>rbSetPublished(key,true);
+  } else {
+    titleEl.textContent='Unpublish Roster?';
+    msgEl.textContent=`This will hide the ${dateRange} roster from staff. Your saved shifts will not be deleted.`;
+    okBtn.textContent='Unpublish';
+    okBtn.className='rb-confirm-ok danger';
+    _rbConfirmCallback=()=>rbSetPublished(key,false);
+  }
+  overlay.classList.add('show');
+}
+
+async function rbSetPublished(fnKey,published){
+  const existing=_rosterFortnights.find(f=>f.fn_start===fnKey);
+  try{
+    if(existing){
+      await db.update('roster_fortnights',existing.id,{is_published:published});
+      existing.is_published=published;
+    } else {
+      const row={id:'FN'+Date.now(),fn_start:fnKey,is_locked:false,is_published:published};
+      await db.insert('roster_fortnights',row);
+      _rosterFortnights.push(row);
+    }
+    renderRoster();
+    showToast(published?'Roster published — now visible to staff':'Live roster cleared');
+  }catch(e){
+    showToast('Publish error: '+e.message.slice(0,80));
+    console.error(e);
+  }
+}
+
+function rbNavFn(dir){
+  if(rSelectedDay){
+    // In day view: advance the day by ±14 days, fortnight label follows automatically
+    const d=new Date(rSelectedDay+'T12:00:00');
+    d.setDate(d.getDate()+dir*14);
+    rSelectedDay=d.toISOString().slice(0,10);
+    rFnOffset=0;
+    renderRoster();
+  } else {
+    rFnOffset+=dir;
+    renderRoster();
+  }
+}
+
+function rbSetRole(role){
+  rRole=role;
+  document.querySelectorAll('.rb-role-tab').forEach(t=>{
+    const map={'All':'All','Receptionists':'Receptionist','Nurses':'Nurse','Managers':'Manager'};
+    t.classList.toggle('active',map[t.textContent]===rRole||(rRole==='All'&&t.textContent==='All'));
+  });
+  if(rSelectedDay) renderDayTimeline(); else renderFnGrid();
+}
+
+function rbGetEmps(){
+  if(rRole==='All') return _emps;
+  return _emps.filter(e=>e.role===rRole);
+}
+
+function rbToggleLock(){
+  const fnStart=rbGetFnStart();
+  const key=fnStart.toISOString().slice(0,10);
+  const existing=_rosterFortnights.find(f=>f.fn_start===key);
+  rbSaveFnLock(key,!(existing?.is_locked));
+}
+
+async function rbSaveFnLock(fnStart,locked){
+  const existing=_rosterFortnights.find(f=>f.fn_start===fnStart);
+  try{
+    if(existing){
+      await db.update('roster_fortnights',existing.id,{is_locked:locked});
+      existing.is_locked=locked;
+    } else {
+      const row={id:'FN'+Date.now(),fn_start:fnStart,is_locked:locked};
+      await db.insert('roster_fortnights',row);
+      _rosterFortnights.push(row);
+    }
+    renderRoster();
+    showToast(locked?'Fortnight locked':'Fortnight unlocked');
+  }catch(e){
+    showToast('Lock error: '+e.message.slice(0,80));
+    console.error(e);
+  }
+}
+
+async function rbCopyLastFn(){
+  const fnStart=rbGetFnStart();
+  const prevStart=new Date(fnStart); prevStart.setDate(prevStart.getDate()-14);
+  const fnKey=fnStart.toISOString().slice(0,10);
+  const prevKey=prevStart.toISOString().slice(0,10);
+  const prevShifts=_rosterShifts.filter(s=>s.date>=prevKey&&s.date<fnKey);
+  if(!prevShifts.length){showToast('No shifts found in previous fortnight');return;}
+  const base=Date.now();
+  const newShifts=prevShifts.map((s,i)=>{
+    const d=new Date(s.date+'T12:00:00'); d.setDate(d.getDate()+14);
+    // Only include known columns — avoid spreading any DB-generated fields
+    return{id:'SH'+(base+i),employee_id:s.employee_id,date:d.toISOString().slice(0,10),start_time:s.start_time,end_time:s.end_time,is_day_off:s.is_day_off};
+  });
+  try{
+    await db.bulkInsert('roster_shifts',newShifts);
+    _rosterShifts.push(...newShifts);
+    renderRoster();
+    showToast(`Copied ${newShifts.length} shifts from previous fortnight`);
+  }catch(e){showToast('Copy error: '+e.message.slice(0,80));console.error(e);}
+}
+
+function renderFnGrid(){
+  const grid=document.getElementById('rb-fn-grid');
+  if(!grid) return;
+  const fnStart=rbGetFnStart();
+  const today=new Date(new Date().toDateString());
+  const emps=rbGetEmps();
+  const days=[];
+  for(let i=0;i<14;i++){ const d=new Date(fnStart); d.setDate(d.getDate()+i); days.push(d); }
+  grid.innerHTML=days.map(d=>{
+    const key=d.toISOString().slice(0,10);
+    const dayShifts=_rosterShifts.filter(s=>s.date===key&&!s.is_day_off&&emps.some(e=>e.id===s.employee_id));
+    const isToday=d.getTime()===today.getTime();
+    const isPast=d<today;
+    const covCount=dayShifts.length;
+    const covCls=covCount>=3?'green':covCount>=2?'yellow':'red';
+    const dayName=d.toLocaleDateString('en-AU',{weekday:'short'});
+    const monthStr=d.toLocaleDateString('en-AU',{month:'short'});
+    const pills=dayShifts.slice(0,3).map(s=>{
+      const emp=_emps.find(e=>e.id===s.employee_id);
+      const dnMap=buildDisplayNames(_emps);
+      return`<div class="rb-shift-pill">${emp?dnMap[emp.id]||empFirstName(emp):'?'} ${(s.start_time||'').slice(0,5)}</div>`;
+    }).join('');
+    const more=dayShifts.length>3?`<div class="rb-shift-pill" style="opacity:0.55;">+${dayShifts.length-3}</div>`:'';
+    return`<div class="rb-day-cell${isToday?' today':''}${isPast?' past':''}" onclick="rbOpenDay('${key}')">
+      <div class="rb-day-hdr">${dayName} ${monthStr}</div>
+      <div class="rb-day-date">${d.getDate()}</div>
+      ${pills}${more}
+      <div class="rb-cov-row"><span class="rb-cov-dot ${covCls}" title="${covCount} staff rostered"></span><span style="font-size:0.58rem;color:var(--muted);font-weight:700;">${covCount}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function rbOpenDay(dateKey){
+  rSelectedDay=dateKey;
+  document.getElementById('rb-grid-view').style.display='none';
+  document.getElementById('rb-tl-view').style.display='block';
+  const d=new Date(dateKey+'T12:00:00');
+  document.getElementById('rb-tl-title').textContent=d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  renderDayTimeline();
+}
+
+function rbCloseTl(){
+  rSelectedDay=null;
+  document.getElementById('rb-tl-view').style.display='none';
+  document.getElementById('rb-grid-view').style.display='block';
+  renderFnGrid();
+}
+
+function rbGoToday(){
+  rSelectedDay=new Date().toISOString().slice(0,10);
+  rFnOffset=0;
+  renderRoster();
+}
+
+function rbNavDay(dir){
+  const d=new Date(rSelectedDay+'T12:00:00');
+  d.setDate(d.getDate()+dir);
+  rSelectedDay=d.toISOString().slice(0,10);
+  rFnOffset=0; // fortnight label now derived from rSelectedDay
+  renderRoster();
+}
+
+function minToTimeStr(min){ return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0'); }
+function timeStrToMin(t){ if(!t) return null; const[h,m]=t.split(':').map(Number); return h*60+m; }
+function snapMin(min){ return Math.round(min/TL_SNAP)*TL_SNAP; }
+
+function renderDayTimeline(){
+  const header=document.getElementById('rb-tl-header');
+  const rows=document.getElementById('rb-tl-rows');
+  const cov=document.getElementById('rb-tl-cov');
+  if(!header||!rows||!cov||!rSelectedDay) return;
+  const isLocked=rbIsLocked(rbGetFnStart());
+  // Sync title with current selected day
+  const titleEl=document.getElementById('rb-tl-title');
+  if(titleEl&&rSelectedDay) titleEl.textContent=new Date(rSelectedDay+'T12:00:00').toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  // Time axis — tick mark every 15 min, label every whole hour, edges at 7:45am/9:30pm
+  let ticks='';
+  for(let m=TL_START;m<=TL_END;m+=TL_SNAP){
+    const pct=((m-TL_START)/TL_RANGE)*100;
+    const isHour=m%60===0, isHalf=m%30===0;
+    const xShift=m===TL_START?'0':m===TL_END?'-100%':'-50%';
+    // Tick mark (taller at hours, medium at half-hours, short at quarters)
+    const tickH=isHour?10:isHalf?6:3;
+    const tickOp=isHour?0.45:isHalf?0.28:0.16;
+    ticks+=`<div style="position:absolute;left:${pct.toFixed(2)}%;bottom:0;width:1px;height:${tickH}px;background:rgba(160,140,148,${tickOp});transform:translateX(${xShift});"></div>`;
+    // Label whole hours only (8am–9pm), no label at 7:45am or 9:30pm edges
+    if(isHour&&m>=480&&m<=1260){
+      const h=Math.floor(m/60); const lh=h>12?h-12:h; const suf=h>=12?'pm':'am';
+      ticks+=`<span class="rb-tl-tick" style="left:${pct.toFixed(2)}%;transform:translateX(-50%)">${lh}${suf}</span>`;
+    }
+  }
+  header.innerHTML=`<div class="rb-tl-name-spacer"></div><div class="rb-tl-track-header">${ticks}</div>`;
+  // Staff rows
+  const emps=rbGetEmps();
+  rows.innerHTML=emps.map(emp=>{
+    const shifts=_rosterShifts.filter(s=>s.date===rSelectedDay&&s.employee_id===emp.id&&!s.is_day_off);
+    const bars=shifts.map(s=>{
+      const sMin=timeStrToMin(s.start_time)||TL_START, eMin=timeStrToMin(s.end_time)||TL_END;
+      const lPct=((sMin-TL_START)/TL_RANGE)*100, wPct=((eMin-sMin)/TL_RANGE)*100;
+      const lbl=`${(s.start_time||'').slice(0,5)}–${(s.end_time||'').slice(0,5)}`;
+      const drag=isLocked?'':` onmousedown="rbStartDrag(event,'${s.id}','move')"`;
+      const delBtn=!isLocked?`<button class="rb-shift-del" onclick="event.stopPropagation();rbDeleteShift('${s.id}')" title="Remove">&#215;</button>`:'';
+      const lHandle=!isLocked?`<div class="rb-shift-handle left" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','left')"></div>`:'';
+      const rHandle=!isLocked?`<div class="rb-shift-handle right" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','right')"></div>`:'';
+      return`<div class="rb-shift-bar" data-shift-id="${s.id}" style="left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%"${drag} title="${emp.name}: ${lbl}">
+        ${lHandle}<span class="rb-shift-label">${lbl}</span>${rHandle}${delBtn}
+      </div>`;
+    }).join('');
+    const addBtn=!isLocked?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${rSelectedDay}')" title="Add shift">+</button>`:'';
+    return`<div class="rb-tl-row">
+      <div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}</div>
+      <div class="rb-tl-track" data-emp-id="${emp.id}">${bars}</div>
+    </div>`;
+  }).join('');
+  // Coverage segments
+  let slots='';
+  for(let m=TL_START;m<TL_END;m+=TL_SNAP){
+    const cnt=_rosterShifts.filter(s=>s.date===rSelectedDay&&!s.is_day_off&&emps.some(e=>e.id===s.employee_id)
+      &&(timeStrToMin(s.start_time)||TL_START)<=m&&(timeStrToMin(s.end_time)||TL_END)>m).length;
+    const col=cnt>=3?'#4CAF7D':cnt>=2?'#f5a623':'#c0392b';
+    const lPct=((m-TL_START)/TL_RANGE)*100, wPct=(TL_SNAP/TL_RANGE)*100;
+    slots+=`<div style="position:absolute;left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%;height:14px;background:${col};opacity:0.4;border-radius:1px;" title="${cnt} staff at ${minToTimeStr(m)}"></div>`;
+  }
+  cov.innerHTML=`<div class="rb-tl-name-spacer" style="font-size:0.6rem;font-weight:700;color:var(--muted);display:flex;align-items:center;padding-left:6px;border-right:1px solid rgba(234,217,220,0.6);">Coverage</div><div style="flex:1;position:relative;height:100%;">${slots}</div>`;
+}
+
+async function rbAddShift(empId,date){
+  try{
+    const sched=await getScheduledTimes(empId,date);
+    const start=sched?.startMin!=null?minToTimeStr(sched.startMin):'09:00';
+    const end=sched?.endMin!=null?minToTimeStr(sched.endMin):'17:00';
+    const row={id:'SH'+Date.now(),employee_id:empId,date,start_time:start,end_time:end,is_day_off:false};
+    await db.insert('roster_shifts',row);
+    _rosterShifts.push(row);
+    renderDayTimeline();
+    showToast('Shift added');
+  }catch(e){showToast('Could not add shift');console.error(e);}
+}
+
+async function rbDeleteShift(shiftId){
+  try{
+    await db.delete('roster_shifts',shiftId);
+    _rosterShifts=_rosterShifts.filter(s=>s.id!==shiftId);
+    renderDayTimeline();
+    showToast('Shift removed');
+  }catch(e){showToast('Could not remove');console.error(e);}
+}
+
+async function rbSaveShiftTimes(shiftId,startTime,endTime){
+  const shift=_rosterShifts.find(s=>s.id===shiftId);
+  if(!shift) return;
+  shift.start_time=startTime; shift.end_time=endTime;
+  try{ await db.update('roster_shifts',shiftId,{start_time:startTime,end_time:endTime}); }
+  catch(e){showToast('Could not save shift');console.error(e);}
+}
+
+function rbStartDrag(e,shiftId,type){
+  if(rbIsLocked(rbGetFnStart())) return;
+  e.preventDefault();
+  const shift=_rosterShifts.find(s=>s.id===shiftId);
+  if(!shift) return;
+  let el=e.target; while(el&&!el.classList.contains('rb-tl-track')) el=el.parentElement;
+  if(!el) return;
+  _rbDrag={shiftId,type,trackEl:el,startX:e.clientX,
+    origStart:timeStrToMin(shift.start_time)||TL_START,
+    origEnd:timeStrToMin(shift.end_time)||TL_END,
+    curStart:null,curEnd:null};
+  const bar=el.querySelector(`.rb-shift-bar[data-shift-id="${shiftId}"]`);
+  if(bar) bar.classList.add('dragging');
+}
+
+function rbOnMouseMove(e){
+  if(!_rbDrag) return;
+  const trackW=_rbDrag.trackEl.getBoundingClientRect().width;
+  const dMin=((e.clientX-_rbDrag.startX)/trackW)*TL_RANGE;
+  let s=_rbDrag.origStart, en=_rbDrag.origEnd;
+  if(_rbDrag.type==='move'){
+    const dur=en-s;
+    s=Math.max(TL_START,Math.min(TL_END-dur,snapMin(s+dMin)));
+    en=s+dur;
+  } else if(_rbDrag.type==='left'){
+    s=Math.max(TL_START,Math.min(en-TL_SNAP,snapMin(s+dMin)));
+  } else {
+    en=Math.min(TL_END,Math.max(s+TL_SNAP,snapMin(en+dMin)));
+  }
+  _rbDrag.curStart=s; _rbDrag.curEnd=en;
+  const bar=_rbDrag.trackEl.querySelector(`.rb-shift-bar[data-shift-id="${_rbDrag.shiftId}"]`);
+  if(bar){
+    bar.style.left=((s-TL_START)/TL_RANGE*100)+'%';
+    bar.style.width=((en-s)/TL_RANGE*100)+'%';
+    const lbl=bar.querySelector('.rb-shift-label');
+    if(lbl) lbl.textContent=minToTimeStr(s)+'–'+minToTimeStr(en);
+  }
+}
+
+function rbOnMouseUp(){
+  if(!_rbDrag) return;
+  const{shiftId,curStart,curEnd}=_rbDrag;
+  document.querySelectorAll('.rb-shift-bar.dragging').forEach(b=>b.classList.remove('dragging'));
+  _rbDrag=null;
+  if(curStart!=null&&curEnd!=null) rbSaveShiftTimes(shiftId,minToTimeStr(curStart),minToTimeStr(curEnd));
+}
+
+function rbToggleAdvanced(){
+  rAdvancedOpen=!rAdvancedOpen;
+  document.getElementById('rb-advanced-body').classList.toggle('open',rAdvancedOpen);
+  document.getElementById('rb-adv-arrow').innerHTML=rAdvancedOpen?'&#9660;':'&#9658;';
+  if(rAdvancedOpen){ renderRosterGrid(); renderOverrides(); wosInitPinBoxes(); }
+}
+
+function renderRosterGrid(){
+  const wrap=document.getElementById('roster-grid-wrap');
+  if(!wrap) return;
+  const empId=document.getElementById('roster-emp-select')?.value;
+  if(!empId){ wrap.innerHTML='<div class="empty-state">Select a staff member above to edit their schedule.</div>'; return; }
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const cellHtml=(wt,d)=>{
+    const tmpl=_rosterTemplates.find(t=>t.employee_id===empId&&t.week_type===wt&&t.day_of_week===d);
+    const isOff=tmpl?.is_day_off||false;
+    const start=tmpl?.start_time||'09:00';
+    const end=tmpl?.end_time||'17:00';
+    return`<div class="roster-cell${isOff?' day-off':''}" id="cell-${wt}-${d}">
+      <input type="time" id="rt-${wt}-${d}-start" value="${start}"${isOff?' disabled':''}>
+      <input type="time" id="rt-${wt}-${d}-end" value="${end}"${isOff?' disabled':''}>
+      <label class="roster-cell-off"><input type="checkbox" id="rt-${wt}-${d}-off"${isOff?' checked':''} onchange="toggleRosterDayOff('${wt}',${d})"> Off</label>
+    </div>`;
+  };
+  wrap.innerHTML=`<div class="roster-grid">
+    <div class="roster-grid-header"><div></div>${days.map(d=>`<div>${d}</div>`).join('')}</div>
+    <div class="roster-grid-row"><div class="roster-week-label">Week A</div>${[1,2,3,4,5,6,7].map(d=>cellHtml('A',d)).join('')}</div>
+    <div class="roster-grid-row"><div class="roster-week-label">Week B</div>${[1,2,3,4,5,6,7].map(d=>cellHtml('B',d)).join('')}</div>
+    <div class="roster-save-row"><button class="add-emp-btn" onclick="saveRosterTemplate()">Save schedule</button></div>
+  </div>`;
+}
+
+function toggleRosterDayOff(wt,d){
+  const isOff=document.getElementById(`rt-${wt}-${d}-off`).checked;
+  document.getElementById(`cell-${wt}-${d}`).classList.toggle('day-off',isOff);
+  document.getElementById(`rt-${wt}-${d}-start`).disabled=isOff;
+  document.getElementById(`rt-${wt}-${d}-end`).disabled=isOff;
+}
+
+function wosGetPin(group){
+  return [...document.querySelectorAll(`.wos-pin-box[data-group="${group}"]`)].map(i=>i.value).join('');
+}
+
+function wosUpdatePinFeedback(){
+  const newPin=wosGetPin('new');
+  const feedback=document.getElementById('whos-on-pin-feedback');
+  const saveBtn=document.getElementById('whos-on-pin-save');
+  const weakPins=new Set(['0000','1111','2222','3333','4444','5555','6666','7777','8888','9999','1234','4321','0123','1212']);
+  let msg='', ok=false;
+  if(newPin.length===4 && weakPins.has(newPin)){ msg='That PIN is too easy to guess — try something less predictable'; }
+  else if(newPin.length===4){ msg='✓ Ready to save'; ok=true; }
+  feedback.textContent=msg;
+  feedback.style.color=ok?'#2e7d32':'#c0392b';
+  saveBtn.disabled=!ok;
+  saveBtn.style.opacity=ok?'1':'0.4';
+  saveBtn.style.cursor=ok?'pointer':'not-allowed';
+}
+
+function wosInitPinBoxes(){
+  document.querySelectorAll('.wos-pin-box').forEach(input=>{
+    input.addEventListener('input',e=>{
+      e.target.value=e.target.value.replace(/[^0-9]/g,'');
+      e.target.classList.toggle('filled', e.target.value!=='');
+      if(e.target.value){ // auto-advance
+        const idx=+e.target.dataset.idx;
+        const next=document.querySelector(`.wos-pin-box[data-group="${e.target.dataset.group}"][data-idx="${idx+1}"]`);
+        if(next) next.focus();
+      }
+      wosUpdatePinFeedback();
+    });
+    input.addEventListener('keydown',e=>{
+      if(e.key==='Backspace'&&!e.target.value){
+        const idx=+e.target.dataset.idx;
+        const prev=document.querySelector(`.wos-pin-box[data-group="${e.target.dataset.group}"][data-idx="${idx-1}"]`);
+        if(prev){prev.value='';prev.classList.remove('filled');prev.focus();}
+        wosUpdatePinFeedback();
+      }
+    });
+  });
+}
+
+async function saveWhosOnPIN(){
+  const newPin=wosGetPin('new');
+  try{
+    if(_rosterConfig) await db.update('roster_config','default',{roster_view_pin:newPin});
+    else await db.insert('roster_config',{id:'default',roster_view_pin:newPin});
+    if(!_rosterConfig) _rosterConfig={id:'default'};
+    _rosterConfig.roster_view_pin=newPin;
+    document.querySelectorAll('.wos-pin-box').forEach(i=>{i.value='';i.classList.remove('filled');});
+    document.getElementById('whos-on-pin-feedback').textContent='';
+    document.getElementById('whos-on-pin-save').disabled=true;
+    document.getElementById('whos-on-pin-save').style.opacity='0.4';
+    showToast('Who\'s On PIN updated');
+  }catch(e){showToast('Could not save PIN — check connection');console.error(e);}
+}
+
+async function saveAnchorDate(){
+  const v=document.getElementById('anchor-date').value;
+  if(!v){showToast('Please select a date');return;}
+  try{
+    if(_rosterConfig) await db.update('roster_config','default',{cycle_start_date:v});
+    else await db.insert('roster_config',{id:'default',cycle_start_date:v});
+    _rosterConfig={id:'default',cycle_start_date:v};
+    showToast('Cycle anchor saved');
+  }catch(e){showToast('Could not save — check connection');console.error(e);}
+}
+
+async function saveRosterTemplate(){
+  const empId=document.getElementById('roster-emp-select').value;
+  if(!empId) return;
+  const rows=[];
+  for(const wt of['A','B']){
+    for(let d=1;d<=7;d++){
+      const isOff=document.getElementById(`rt-${wt}-${d}-off`).checked;
+      const start=document.getElementById(`rt-${wt}-${d}-start`).value;
+      const end=document.getElementById(`rt-${wt}-${d}-end`).value;
+      if(isOff||(start&&end)){
+        rows.push({id:`RT-${empId}-${wt}-${d}`,employee_id:empId,week_type:wt,day_of_week:d,start_time:isOff?null:start,end_time:isOff?null:end,is_day_off:isOff});
+      }
+    }
+  }
+  try{
+    await db.deleteWhere('roster_templates','employee_id',empId);
+    if(rows.length) await db.bulkInsert('roster_templates',rows);
+    _rosterTemplates=_rosterTemplates.filter(t=>t.employee_id!==empId).concat(rows);
+    showToast('Schedule saved');
+  }catch(e){showToast('Could not save — check connection');console.error(e);}
+}
+
+function renderOverrides(){
+  const el=document.getElementById('overrides-wrap');
+  if(!el) return;
+  const sorted=[..._rosterOverrides].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted.length){
+    el.innerHTML='<div class="empty-state" style="background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);">No overrides yet</div>';
+    return;
+  }
+  el.innerHTML='<div class="overrides-list">'+sorted.map(o=>{
+    const emp=_emps.find(e=>e.id===o.employee_id);
+    const dateF=new Date(o.date+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    const times=o.is_day_off?'<span style="color:var(--muted)">Day off</span>':`<span class="override-times">${o.start_time} – ${o.end_time}</span>`;
+    return`<div class="override-row">
+      <span class="override-date">${dateF}</span>
+      <span class="override-emp">${emp?.name||o.employee_id}</span>
+      ${times}
+      <span class="override-note">${o.note||''}</span>
+      <button class="del-btn" onclick="deleteOverride('${o.id}')">Remove</button>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+function openOverrideForm(){
+  document.getElementById('ov-emp').innerHTML=_emps.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  document.getElementById('ov-date').value='';
+  document.getElementById('ov-start').value='';
+  document.getElementById('ov-end').value='';
+  document.getElementById('ov-dayoff').checked=false;
+  document.getElementById('ov-note').value='';
+  document.getElementById('ov-times-group').style.display='';
+  document.getElementById('override-modal').classList.add('show');
+}
+
+function toggleOverrideDayOff(){
+  document.getElementById('ov-times-group').style.display=document.getElementById('ov-dayoff').checked?'none':'';
+}
+
+async function saveOverride(){
+  const empId=document.getElementById('ov-emp').value;
+  const date=document.getElementById('ov-date').value;
+  const isOff=document.getElementById('ov-dayoff').checked;
+  const start=document.getElementById('ov-start').value;
+  const end=document.getElementById('ov-end').value;
+  const note=document.getElementById('ov-note').value.trim();
+  if(!empId||!date){showToast('Please fill in employee and date');return;}
+  if(!isOff&&(!start||!end)){showToast('Please enter start and end times');return;}
+  const row={id:'OV'+Date.now(),employee_id:empId,date,start_time:isOff?null:start,end_time:isOff?null:end,is_day_off:isOff,note:note||null};
+  try{
+    await db.insert('roster_overrides',row);
+    _rosterOverrides.push(row);
+    closeModal();
+    renderOverrides();
+    showToast('Override saved');
+  }catch(e){showToast('Could not save — check connection');console.error(e);}
+}
+
+async function deleteOverride(id){
+  try{
+    await db.delete('roster_overrides',id);
+    _rosterOverrides=_rosterOverrides.filter(o=>o.id!==id);
+    renderOverrides();
+    showToast('Override removed');
+  }catch(e){showToast('Could not remove — check connection');console.error(e);}
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════ */
+focusRFID(); setDefaultDates();
+
+// Load roster data on startup so clock-in grace period checks work from the kiosk
+(async()=>{
+  try{
+    const[cfg,tmpl,ov,shifts]=await Promise.all([db.get('roster_config'),db.get('roster_templates'),db.get('roster_overrides'),db.get('roster_shifts')]);
+    _rosterConfig=cfg[0]||null; _rosterTemplates=tmpl; _rosterOverrides=ov; _rosterShifts=shifts;
+  }catch(e){console.error('Roster load error:',e);}
+})();
+
+// Roster drag event listeners
+document.addEventListener('mousemove', rbOnMouseMove);
+document.addEventListener('mouseup', rbOnMouseUp);
+document.addEventListener('touchmove', e=>{if(_rbDrag){e.preventDefault();rbOnMouseMove(e.touches[0]);}},{passive:false});
+document.addEventListener('touchend', ()=>{if(_rbDrag) rbOnMouseUp();});
+
+</script>
+</body>
+</html>
