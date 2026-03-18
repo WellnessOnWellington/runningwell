@@ -165,16 +165,16 @@
     50%     { opacity: 0.4; transform: scale(0.7); }
   }
 
-  .kiosk-footer-nav { position: fixed; bottom: 1.5rem; right: 1.75rem; }
+  .kiosk-footer-nav { display: flex; gap: 0.75rem; width: 100%; max-width: 440px; }
 
   .nav-btn {
-    background: rgba(255,255,255,0.85); border: 1px solid var(--border);
-    color: var(--muted); padding: 0.48rem 1rem; border-radius: 30px;
-    font-size: 0.74rem; font-family: 'Nunito',sans-serif; font-weight: 700;
-    cursor: pointer; transition: all 0.2s; backdrop-filter: blur(6px);
-    box-shadow: var(--shadow);
+    flex: 1; background: var(--white); border: 1.5px solid var(--border);
+    color: var(--charcoal); padding: 0.9rem 1rem; border-radius: 14px;
+    font-size: 1.1rem; font-family: 'Nunito',sans-serif; font-weight: 700;
+    cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow);
+    text-align: center;
   }
-  .nav-btn:hover { background: var(--white); color: var(--burgundy); border-color: var(--dusty); }
+  .nav-btn:hover { background: var(--blush-lt); color: var(--burgundy); border-color: var(--dusty); }
 
   /* ══════════════════════════════
      FLASH
@@ -273,6 +273,8 @@
     cursor: pointer; transition: all 0.18s;
   }
   .btn-ghost:hover { color: var(--text); border-color: var(--dusty); }
+  .btn-remove-emp { position:absolute; top:1rem; right:1rem; background:var(--warm-white); color:var(--muted); border:1.5px solid var(--border); border-radius:999px; padding:0.28rem 0.75rem; font-family:'Nunito',sans-serif; font-size:0.68rem; font-weight:700; cursor:pointer; letter-spacing:0.02em; transition:border-color 0.18s; }
+  .btn-remove-emp:hover { border-color:var(--danger); color:var(--danger); background:var(--warm-white); }
 
   /* ══════════════════════════════
      LOGIN
@@ -412,7 +414,7 @@
   .emp-rfid { font-family: 'Courier New',monospace; font-size: 0.67rem; color: var(--wine); background: var(--blush); padding: 0.15rem 0.42rem; border-radius: 5px; margin-top: 0.28rem; display: inline-block; font-weight: 700; border: 1px solid var(--border); }
 
   .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .status-dot.in  { background: #2e7d32; box-shadow: 0 0 0 3px rgba(46,125,50,0.15); }
+  .status-dot.in  { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.25); }
   .status-dot.out { background: var(--border-dk); }
   .emp-edit-btn { background:none; border:1.5px solid var(--border); border-radius:7px; padding:0.22rem 0.5rem; font-size:0.68rem; font-weight:700; color:var(--muted); cursor:pointer; font-family:'Nunito',sans-serif; transition:all 0.15s; flex-shrink:0; }
   .emp-edit-btn:hover { border-color:var(--burgundy); color:var(--burgundy); background:var(--blush-lt); }
@@ -436,7 +438,7 @@
 
   .modal {
     background: var(--white); border: 1.5px solid var(--border); border-radius: 24px;
-    padding: 2rem; width: 90%; max-width: 410px; box-shadow: var(--shadow-md);
+    padding: 2rem; width: 90%; max-width: 410px; box-shadow: var(--shadow-md); position: relative;
     transform: translateY(12px) scale(0.97);
     transition: transform 0.25s cubic-bezier(0.34,1.2,0.64,1);
   }
@@ -711,7 +713,9 @@
   /* Day timeline */
   .rb-tl-back { display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem; }
   .rb-tl-title { font-size:1rem; font-weight:800; color:var(--charcoal); }
-  .rb-tl-wrap { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .rb-tl-wrap { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; position:relative; }
+  .rb-drag-line { position:absolute; top:0; width:2px; height:100%; background:rgba(40,40,40,0.65); pointer-events:none; z-index:20; }
+  .rb-drag-line-label { position:absolute; top:3px; left:50%; transform:translateX(-50%); background:rgba(30,30,30,0.88); color:#fff; font-size:0.58rem; font-weight:700; padding:2px 6px; border-radius:4px; white-space:nowrap; font-family:'Nunito',sans-serif; line-height:1.4; }
   .rb-tl-header { display:flex; align-items:flex-end; height:28px; border-bottom:1.5px solid var(--border); }
   .rb-tl-name-spacer { width:150px; flex-shrink:0; border-right:1px solid rgba(234,217,220,0.6); }
   .rb-tl-track-header { flex:1; position:relative; overflow:hidden; height:100%; }
@@ -719,6 +723,8 @@
   .rb-tl-rows { width:100%; }
   .rb-tl-row { display:flex; align-items:stretch; border-bottom:1px solid rgba(234,217,220,0.6); min-height:44px; }
   .rb-tl-row:last-child { border-bottom:none; }
+  .rb-tl-row.clinic .rb-tl-name { background:rgba(91,122,94,0.09); border-right:1px solid rgba(91,122,94,0.25); }
+  .rb-tl-row.clinic .rb-tl-track { background-image:repeating-linear-gradient(to right,rgba(91,122,94,0.18) 0px,rgba(91,122,94,0.18) 1px,transparent 1px,transparent calc(100% / 55)); background-color:rgba(91,122,94,0.04); }
   .rb-tl-name { width:150px; flex-shrink:0; font-size:0.72rem; font-weight:700; color:var(--charcoal); padding:0 0.4rem 0 0.6rem; display:flex; align-items:center; gap:0.25rem; border-right:1px solid rgba(234,217,220,0.6); background:var(--warm-white); }
   .rb-tl-name-text { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .rb-add-shift-btn { flex-shrink:0; background:transparent; border:1.5px solid rgba(180,160,165,0.5); border-radius:5px; width:20px; height:20px; font-size:0.8rem; font-weight:900; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-family:'Nunito',sans-serif; transition:all 0.15s; line-height:1; }
@@ -732,6 +738,8 @@
   .rb-shift-handle.left { left:0; border-radius:6px 0 0 6px; } .rb-shift-handle.right { right:0; border-radius:0 6px 6px 0; }
   .rb-shift-del { position:absolute; top:-5px; right:-5px; width:15px; height:15px; border-radius:50%; background:#c0392b; color:#fff; border:none; cursor:pointer; font-size:9px; display:none; align-items:center; justify-content:center; z-index:5; line-height:1; padding:0; font-family:'Nunito',sans-serif; }
   .rb-shift-bar:hover .rb-shift-del { display:flex; }
+  .rb-lane-badge { flex-shrink:0; font-size:0.58rem; font-weight:700; color:var(--muted); background:rgba(0,0,0,0.05); border:1px solid rgba(0,0,0,0.1); border-radius:4px; padding:2px 5px; cursor:pointer; white-space:nowrap; transition:background 0.15s,color 0.15s; line-height:1.3; }
+  .rb-lane-badge:hover { background:rgba(0,0,0,0.1); color:var(--charcoal); }
   .rb-shift-bar.on-leave { cursor:move; }
   .rb-shift-bar.annual-leave { background:linear-gradient(135deg,#f5c030,#f0a820); }
   .rb-shift-bar.annual-leave:hover { box-shadow:0 2px 8px rgba(200,140,0,0.28); }
@@ -913,9 +921,9 @@
     </div>
   </div>
 
-  <div class="kiosk-footer-nav" style="display:flex;gap:0.5rem;">
-    <button class="nav-btn" onclick="openRosterPIN()">📅 Who's On</button>
-    <button class="nav-btn" onclick="showView('login')">Manager login</button>
+  <div class="kiosk-footer-nav">
+    <button class="nav-btn" onclick="openRosterPIN()">👥 Who's On</button>
+    <button class="nav-btn" onclick="showView('login')">⚙️ Manager Login</button>
   </div>
 </div>
 
@@ -1277,6 +1285,19 @@
       </div>
 
       <!-- Help Guide -->
+      <div class="settings-section" id="ss-inactive">
+        <div class="settings-section-header" onclick="toggleSettingsSection('inactive')">
+          <div class="settings-section-chevron" id="ss-chevron-inactive">&#9658;</div>
+          <div style="flex:1;">
+            <div class="settings-section-title">Inactive Staff</div>
+            <div class="settings-section-hint">Staff members who have been removed. Reactivate to restore access.</div>
+          </div>
+        </div>
+        <div class="settings-section-body" id="ss-body-inactive" style="display:none;">
+          <div id="ss-inactive-list"></div>
+        </div>
+      </div>
+
       <div class="settings-section" id="ss-help">
         <div class="settings-section-header" onclick="toggleSettingsSection('help')">
           <div class="settings-section-chevron" id="ss-chevron-help">&#9658;</div>
@@ -1342,6 +1363,7 @@
 <!-- ADD EMPLOYEE MODAL -->
 <div class="modal-bg" id="emp-modal" onclick="if(event.target===this)closeModal()">
   <div class="modal">
+    <button class="btn-remove-emp" id="emp-remove-btn" style="display:none;" onclick="removeEmployee()">Remove staff member</button>
     <div class="modal-title" id="emp-modal-title">Add team member</div>
     <div class="form-group" style="display:flex;gap:0.75rem;">
       <div style="flex:1;">
@@ -1512,7 +1534,7 @@ async function loadAll() {
       db.get('roster_fortnights'),
       db.get('coverage_rules')
     ]);
-    _emps    = emps;
+    _emps    = emps.filter(e=>e.active!==false);
     _entries = entries.map(normaliseEntry);
     _notes   = notes.map(normaliseNote);
     _mgrs    = mgrs.map(normaliseMgr);
@@ -1645,7 +1667,7 @@ async function processRFID(card){
   // Use cache for instant response — only fetch if card not recognised (new employee)
   let emp=_emps.find(e=>e.rfid===card);
   if(!emp){
-    try { _emps = await db.get('employees'); } catch(e){}
+    try { _emps = (await db.get('employees')).filter(e=>e.active!==false); } catch(e){}
     emp=_emps.find(e=>e.rfid===card);
   }
   if(!emp){showFlash('error','🤷','','Card not recognised','Please see reception');return;}
@@ -1670,7 +1692,7 @@ async function processRFID(card){
   }
   // Silently refresh cache in background for next scan
   Promise.all([db.get('employees'),db.get('entries')]).then(([emps,entries])=>{
-    _emps=emps; _entries=entries.map(normaliseEntry);
+    _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry);
   }).catch(()=>{});
 }
 
@@ -2036,6 +2058,7 @@ function openAddEmployee(){
   ['emp-firstname','emp-surname','emp-rfid'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('emp-role').value='Doctor';
   document.getElementById('emp-type').value='Full Time';
+  document.getElementById('emp-remove-btn').style.display='none';
   document.getElementById('emp-modal').classList.add('show');
   document.getElementById('emp-firstname').focus();
 }
@@ -2052,6 +2075,7 @@ function openEditEmployee(empId){
   document.getElementById('emp-role').value=emp.role;
   document.getElementById('emp-rfid').value=emp.rfid;
   document.getElementById('emp-type').value=emp.type;
+  document.getElementById('emp-remove-btn').style.display='';
   document.getElementById('emp-modal').classList.add('show');
   document.getElementById('emp-firstname').focus();
 }
@@ -2082,6 +2106,54 @@ async function saveEmployee(){
       showToast(name+' added to the team ✓');
     }
   }catch(e){showToast('Could not save — please try again.');console.error(e);}
+}
+
+async function renderInactiveStaff(){
+  const el=document.getElementById('ss-inactive-list');
+  if(!el) return;
+  el.innerHTML='<div style="color:var(--muted);font-size:0.85rem;">Loading…</div>';
+  try{
+    const all=await db.get('employees');
+    const inactive=all.filter(e=>e.active===false);
+    if(!inactive.length){
+      el.innerHTML='<div class="empty-state" style="padding:1.5rem 0;"><div class="empty-msg">No inactive staff members</div></div>';
+      return;
+    }
+    el.innerHTML=inactive.map(e=>`
+      <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem 0;border-bottom:1px solid var(--border);">
+        <div style="flex:1;">
+          <div style="font-weight:700;color:var(--charcoal);font-size:0.9rem;">${e.name}</div>
+          <div style="font-size:0.75rem;color:var(--muted);margin-top:0.1rem;">${e.role} · ${e.type}</div>
+        </div>
+        <button class="btn-ghost" style="flex:none;padding:0.45rem 1rem;font-size:0.8rem;" onclick="reactivateEmployee('${e.id}','${e.name.replace(/'/g,"\\'")}')">Reactivate</button>
+      </div>`).join('');
+  }catch(err){el.innerHTML='<div style="color:var(--danger);font-size:0.85rem;">Could not load inactive staff.</div>';console.error(err);}
+}
+
+async function reactivateEmployee(id, name){
+  if(!confirm(`Reactivate ${name}?\n\nThey will be restored to the team and can clock in again.`)) return;
+  try{
+    await db.update('employees',id,{active:true});
+    const all=await db.get('employees');
+    _emps=all.filter(e=>e.active!==false);
+    renderTeam();
+    renderInactiveStaff();
+    showToast(name+' reactivated ✓');
+  }catch(e){showToast('Could not reactivate — please try again.');console.error(e);}
+}
+
+async function removeEmployee(){
+  if(!_editingEmpId) return;
+  const emp=_emps.find(e=>e.id===_editingEmpId);
+  if(!emp) return;
+  if(!confirm(`Remove ${emp.name} from the team?\n\nTheir clock history and notes will be preserved in audit logs.`)) return;
+  try{
+    await db.update('employees',_editingEmpId,{active:false});
+    _emps=_emps.filter(e=>e.id!==_editingEmpId);
+    closeModal();
+    renderTeam();
+    showToast(emp.name+' removed from team');
+  }catch(e){showToast('Could not remove — please try again.');console.error(e);}
 }
 
 /* ═══════════════════════════════════════════
@@ -2483,11 +2555,12 @@ function buildDisplayNames(emps){
 
 const SR_DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const SR_MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const SR_ROLE_COLORS={Doctor:'#8B2535',Nurse:'#5B7A5E',Receptionist:'#B85C38',Manager:'#4A5568'};
+const SR_ROLE_COLORS={Doctor:'#C0392B',Nurse:'#2471A3',Receptionist:'#27AE60',Manager:'#7D3C98'};
 const SR_ROLE_BG={Doctor:'rgba(139,37,53,0.10)',Nurse:'rgba(166,50,69,0.12)',Receptionist:'rgba(212,137,154,0.2)',Manager:'rgba(139,37,53,0.07)'};
 
 function getFortnightStart(offsetFortnights){
   const toMonday=d=>{const day=d.getDay();const diff=day===0?-6:1-day;return new Date(d.getFullYear(),d.getMonth(),d.getDate()+diff);};
+  const localDateStr=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   let base;
   if(_rosterConfig){
     const anchor=toMonday(new Date(_rosterConfig.cycle_start_date+'T12:00:00'));
@@ -2500,7 +2573,7 @@ function getFortnightStart(offsetFortnights){
     base=toMonday(new Date());
   }
   base.setDate(base.getDate()+offsetFortnights*14);
-  return base.toISOString().slice(0,10);
+  return localDateStr(base);
 }
 
 function getFortnight14Days(startDateStr){
@@ -2517,7 +2590,7 @@ function srFortnightLabel(startDateStr){
 
 function srIsPublished(fnStart){
   // accepts Date object or ISO string
-  const key=typeof fnStart==='string'?fnStart.slice(0,10):fnStart.toISOString().slice(0,10);
+  const key=typeof fnStart==='string'?fnStart.slice(0,10):rbDateKey(fnStart);
   return _rosterFortnights.some(f=>f.fn_start===key&&f.is_published);
 }
 
@@ -2568,7 +2641,7 @@ async function showStaffRoster(){
       _rosterFortnights.length?Promise.resolve(_rosterFortnights):db.get('roster_fortnights'),
       _rosterConfig?Promise.resolve(_rosterConfig):db.get('roster_config').then(r=>r[0]||null)
     ]);
-    _emps=emps; _rosterShifts=shifts; _rosterFortnights=fortnights; _rosterConfig=config;
+    _emps=emps.filter(e=>e.active!==false); _rosterShifts=shifts; _rosterFortnights=fortnights; _rosterConfig=config;
   }catch(e){ console.error('Could not load roster data',e); }
   // Reset filters to defaults every time the page is opened
   srRoles=new Set(['Receptionist','Nurse','Manager']);
@@ -2846,6 +2919,8 @@ function rbGetFnStart(){
   return base;
 }
 
+function rbDateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
 function rbFnLabel(start){
   const end=new Date(start); end.setDate(end.getDate()+13);
   const fmt=d=>d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
@@ -2853,12 +2928,12 @@ function rbFnLabel(start){
 }
 
 function rbIsLockedForRole(fnStart,role){
-  const key=fnStart instanceof Date?fnStart.toISOString().slice(0,10):fnStart;
+  const key=fnStart instanceof Date?rbDateKey(fnStart):fnStart;
   return _rosterFortnights.some(f=>f.fn_start===key&&f.role===role&&f.is_locked);
 }
 
 function rbIsPublishedForRole(fnStart,role){
-  const key=fnStart instanceof Date?fnStart.toISOString().slice(0,10):fnStart;
+  const key=fnStart instanceof Date?rbDateKey(fnStart):fnStart;
   return _rosterFortnights.some(f=>f.fn_start===key&&f.role===role&&f.is_published);
 }
 
@@ -2872,7 +2947,7 @@ function rbConfirmProceed(){ document.getElementById('rb-confirm-overlay').class
 
 function rbTogglePublishForRole(role){
   const fnStart=rbGetFnStart();
-  const key=fnStart.toISOString().slice(0,10);
+  const key=rbDateKey(fnStart);
   const end=new Date(fnStart); end.setDate(end.getDate()+13);
   const fmt=d=>d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
   const dateRange=fmt(fnStart)+' – '+fmt(end);
@@ -2907,6 +2982,11 @@ async function rbSetPublishedForRole(fnKey,role,published){
 
 function rbNavFn(dir){
   rFnOffset+=dir;
+  if(rbSelectedDay){
+    const d=new Date(rbSelectedDay+'T12:00:00');
+    d.setDate(d.getDate()+dir*14);
+    rbSelectedDay=d.toISOString().slice(0,10);
+  }
   renderRoster();
 }
 
@@ -2919,7 +2999,7 @@ function rbGetEmpsForRole(role){ return _emps.filter(e=>e.role===role); }
 
 function rbToggleLockForRole(role){
   const fnStart=rbGetFnStart();
-  const key=fnStart.toISOString().slice(0,10);
+  const key=rbDateKey(fnStart);
   rbSaveFnLockForRole(key,role,!rbIsLockedForRole(fnStart,role));
 }
 
@@ -2942,8 +3022,8 @@ async function rbSaveFnLockForRole(fnStart,role,locked){
 async function rbCopyLastFnForRole(role){
   const fnStart=rbGetFnStart();
   const prevStart=new Date(fnStart); prevStart.setDate(prevStart.getDate()-14);
-  const fnKey=fnStart.toISOString().slice(0,10);
-  const prevKey=prevStart.toISOString().slice(0,10);
+  const fnKey=rbDateKey(fnStart);
+  const prevKey=rbDateKey(prevStart);
   const roleEmps=rbGetEmpsForRole(role).map(e=>e.id);
   const prevShifts=_rosterShifts.filter(s=>s.date>=prevKey&&s.date<fnKey&&roleEmps.includes(s.employee_id));
   if(!prevShifts.length){showToast('No shifts found in previous fortnight for '+RB_ROLE_LABELS[role]);return;}
@@ -2968,7 +3048,7 @@ function renderFnGridForRole(role){
   const emps=rbGetEmpsForRole(role);
   const dnMap=buildDisplayNames(_emps);
   const days=[];
-  for(let i=0;i<14;i++){ const d=new Date(fnStart); d.setDate(d.getDate()+i); days.push(d); }
+  for(let i=0;i<14;i++){ const d=new Date(fnStart.getFullYear(),fnStart.getMonth(),fnStart.getDate()+i,12,0,0); days.push(d); }
   grid.innerHTML=days.map(d=>{
     const key=d.toISOString().slice(0,10);
     const dayShifts=_rosterShifts.filter(s=>s.date===key&&!s.is_day_off&&emps.some(e=>e.id===s.employee_id));
@@ -3004,6 +3084,7 @@ function rbCloseAllDays(){
 
 function rbGoToday(){
   rFnOffset=0;
+  if(rbSelectedDay){ const n=new Date(); rbSelectedDay=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; }
   renderRoster();
 }
 
@@ -3012,7 +3093,19 @@ function rbNavDay(dir){
   const d=new Date(rbSelectedDay+'T12:00:00');
   d.setDate(d.getDate()+dir);
   rbSelectedDay=d.toISOString().slice(0,10);
+  rbSyncFnOffset();
   renderRoster();
+}
+
+function rbSyncFnOffset(){
+  if(!rbSelectedDay||!_rosterConfig?.cycle_start_date) return;
+  const toMonday=d=>{const day=d.getDay();const diff=day===0?-6:1-day;return new Date(d.getFullYear(),d.getMonth(),d.getDate()+diff);};
+  const a=toMonday(new Date(_rosterConfig.cycle_start_date+'T12:00:00'));
+  const today=toMonday(new Date());
+  const sel=toMonday(new Date(rbSelectedDay+'T12:00:00'));
+  const fnNum=Math.floor((today-a)/86400000/14);
+  const selFnNum=Math.floor((sel-a)/86400000/14);
+  rFnOffset=selFnNum-fnNum;
 }
 
 function minToTimeStr(min){ return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0'); }
@@ -3026,55 +3119,77 @@ function renderDayTimelineForRole(role){
   const cov=document.getElementById('rb-tl-cov-'+role);
   if(!header||!rows||!cov||!selectedDay) return;
   const isLocked=rbIsLockedForRole(rbGetFnStart(),role);
+  const isNurse=role==='Nurse';
   // Time axis — tick mark every 15 min, label every whole hour, edges at 7:45am/9:30pm
   let ticks='';
   for(let m=TL_START;m<=TL_END;m+=TL_SNAP){
     const pct=((m-TL_START)/TL_RANGE)*100;
     const isHour=m%60===0, isHalf=m%30===0;
-    const xShift=m===TL_START?'0':m===TL_END?'-100%':'-50%';
-    // Tick mark (taller at hours, medium at half-hours, short at quarters)
     const tickH=isHour?10:isHalf?6:3;
     const tickOp=isHour?0.45:isHalf?0.28:0.16;
-    ticks+=`<div style="position:absolute;left:${pct.toFixed(2)}%;bottom:0;width:1px;height:${tickH}px;background:rgba(160,140,148,${tickOp});transform:translateX(${xShift});"></div>`;
-    // Label whole hours only (8am–9pm), no label at 7:45am or 9:30pm edges
+    ticks+=`<div style="position:absolute;left:${pct.toFixed(2)}%;bottom:0;width:1px;height:${tickH}px;background:rgba(160,140,148,${tickOp});"></div>`;
     if(isHour&&m>=480&&m<=1260){
       const h=Math.floor(m/60); const lh=h>12?h-12:h; const suf=h>=12?'pm':'am';
       ticks+=`<span class="rb-tl-tick" style="left:${pct.toFixed(2)}%;transform:translateX(-50%)">${lh}${suf}</span>`;
     }
   }
   header.innerHTML=`<div class="rb-tl-name-spacer"></div><div class="rb-tl-track-header">${ticks}</div>`;
-  // Staff rows
   const emps=rbGetEmpsForRole(role);
-  rows.innerHTML=emps.map(emp=>{
-    const shifts=_rosterShifts.filter(s=>s.date===selectedDay&&s.employee_id===emp.id&&!s.is_day_off);
+  // Shared shift bar builder
+  function makeBar(s, emp){
+    const sMin=timeStrToMin(s.start_time)||TL_START, eMin=timeStrToMin(s.end_time)||TL_END;
+    const lPct=((sMin-TL_START)/TL_RANGE)*100, wPct=((eMin-sMin)/TL_RANGE)*100;
+    const lbl=`${(s.start_time||'').slice(0,5)}–${(s.end_time||'').slice(0,5)}`;
     const leaveEntry=_entries.find(e=>e.employeeId===emp.id&&e.date===selectedDay&&e.leaveType);
     const currentLeave=leaveEntry?.leaveType||'';
-    const bars=shifts.map(s=>{
-      const sMin=timeStrToMin(s.start_time)||TL_START, eMin=timeStrToMin(s.end_time)||TL_END;
-      const lPct=((sMin-TL_START)/TL_RANGE)*100, wPct=((eMin-sMin)/TL_RANGE)*100;
-      const lbl=`${(s.start_time||'').slice(0,5)}–${(s.end_time||'').slice(0,5)}`;
-      const drag=isLocked?'':` onmousedown="rbStartDrag(event,'${s.id}','move')"`;
-      const delBtn=!isLocked?`<button class="rb-shift-del" onclick="event.stopPropagation();rbDeleteShift('${s.id}','${role}')" title="Remove">&#215;</button>`:'';
-      const lHandle=!isLocked?`<div class="rb-shift-handle left" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','left')"></div>`:'';
-      const rHandle=!isLocked?`<div class="rb-shift-handle right" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','right')"></div>`:'';
-      const leaveOpts=`<option value="">Worked Shift</option>`+Object.entries(LEAVE_TYPES).map(([v,l])=>`<option value="${v}"${currentLeave===v?' selected':''}>${l}</option>`).join('');
-      const leaveBtn=!isLocked?`<select class="rb-leave-select" onmousedown="event.stopPropagation()" onchange="event.stopPropagation();rbMarkLeave('${emp.id}','${selectedDay}','${s.id}',this.value)">${leaveOpts}</select>`:'';
-      const leaveClass=currentLeave?' on-leave '+currentLeave.replace(/_/g,'-'):'';
-      return`<div class="rb-shift-bar${leaveClass}" data-shift-id="${s.id}" style="left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%"${drag} title="${emp.name}: ${lbl}${currentLeave?' ('+formatLeaveType(currentLeave)+')':''}">
-        ${lHandle}<span class="rb-shift-label">${lbl}</span>${rHandle}${leaveBtn}${delBtn}
-      </div>`;
-    }).join('');
-    const hasShift=_rosterShifts.some(s=>s.employee_id===emp.id&&s.date===selectedDay&&!s.is_day_off);
-    const addBtn=!isLocked&&!hasShift?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
-    return`<div class="rb-tl-row">
-      <div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}</div>
-      <div class="rb-tl-track" data-emp-id="${emp.id}">${bars}</div>
+    const drag=isLocked?'':` onmousedown="rbStartDrag(event,'${s.id}','move')"`;
+    const delBtn=!isLocked?`<button class="rb-shift-del" onclick="event.stopPropagation();rbDeleteShift('${s.id}','${role}')" title="Remove">&#215;</button>`:'';
+    const lHandle=!isLocked?`<div class="rb-shift-handle left" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','left')"></div>`:'';
+    const rHandle=!isLocked?`<div class="rb-shift-handle right" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','right')"></div>`:'';
+    const leaveOpts=`<option value="">Worked Shift</option>`+Object.entries(LEAVE_TYPES).map(([v,l])=>`<option value="${v}"${currentLeave===v?' selected':''}>${l}</option>`).join('');
+    const leaveBtn=!isLocked?`<select class="rb-leave-select" onmousedown="event.stopPropagation()" onchange="event.stopPropagation();rbMarkLeave('${emp.id}','${selectedDay}','${s.id}',this.value)">${leaveOpts}</select>`:'';
+    const leaveClass=currentLeave?' on-leave '+currentLeave.replace(/_/g,'-'):'';
+    return`<div class="rb-shift-bar${leaveClass}" data-shift-id="${s.id}" style="left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%"${drag} title="${emp.name}: ${lbl}${currentLeave?' ('+formatLeaveType(currentLeave)+')':''}">
+      ${lHandle}<span class="rb-shift-label">${lbl}</span>${rHandle}${leaveBtn}${delBtn}
     </div>`;
-  }).join('');
-  // Coverage segments
+  }
+  // Staff rows
+  if(isNurse){
+    const getFloor=id=>_rosterShifts.filter(s=>s.date===selectedDay&&s.employee_id===id&&!s.is_day_off&&(s.lane==='floor'||!s.lane));
+    const getClinic=id=>_rosterShifts.filter(s=>s.date===selectedDay&&s.employee_id===id&&!s.is_day_off&&s.lane==='75plus');
+    const floorRows=emps.map(emp=>{
+      const floorShifts=getFloor(emp.id);
+      const bars=floorShifts.map(s=>makeBar(s,emp)).join('');
+      const addBtn=!isLocked&&!floorShifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
+      const badge=!isLocked&&floorShifts.length?`<button class="rb-lane-badge" onclick="rbToggleLane('${floorShifts[0].id}','${role}')" title="Move to 75+ Clinic">→ 75+</button>`:'';
+      return`<div class="rb-tl-row"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}${badge}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${bars}</div></div>`;
+    }).join('');
+    const has75=emps.some(emp=>getClinic(emp.id).length>0);
+    const clinicEmps=has75?emps.filter(emp=>getClinic(emp.id).length>0):[];
+    const clinicRows=clinicEmps.map((emp,i)=>{
+      const clinicShifts=getClinic(emp.id);
+      const bars=clinicShifts.map(s=>makeBar(s,emp)).join('');
+      const badge=!isLocked?`<button class="rb-lane-badge" onclick="rbToggleLane('${clinicShifts[0].id}','${role}')" title="Move back to Floor">← Floor</button>`:'';
+      const pill=i===0?`<span style="position:absolute;top:0;left:0.6rem;transform:translateY(-50%);background:var(--white);border:1.5px solid rgba(91,122,94,0.5);border-radius:999px;padding:1px 9px;font-size:0.58rem;font-weight:700;color:#5B7A5E;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;z-index:2;">75+ Clinic</span>`:'';
+      const borderTop=i===0?'position:relative;border-top:2px solid rgba(91,122,94,0.35);':'';
+      return`<div class="rb-tl-row clinic" style="${borderTop}">${pill}<div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${badge}</div><div class="rb-tl-track" data-emp-id="${emp.id}-75plus">${bars}</div></div>`;
+    }).join('');
+    rows.innerHTML=
+      `${floorRows}`+
+      (has75?`${clinicRows}`:'');
+  } else {
+    rows.innerHTML=emps.map(emp=>{
+      const shifts=_rosterShifts.filter(s=>s.date===selectedDay&&s.employee_id===emp.id&&!s.is_day_off);
+      const bars=shifts.map(s=>makeBar(s,emp)).join('');
+      const addBtn=!isLocked&&!shifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
+      return`<div class="rb-tl-row"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${bars}</div></div>`;
+    }).join('');
+  }
+  // Coverage segments — floor-only for Nurses
   let slots='';
   for(let m=TL_START;m<TL_END;m+=TL_SNAP){
     const cnt=_rosterShifts.filter(s=>s.date===selectedDay&&!s.is_day_off&&emps.some(e=>e.id===s.employee_id)
+      &&(!isNurse||s.lane==='floor'||!s.lane)
       &&(timeStrToMin(s.start_time)||TL_START)<=m&&(timeStrToMin(s.end_time)||TL_END)>m).length;
     const col=cnt>=3?'#4CAF7D':cnt>=2?'#f5a623':'#c0392b';
     const lPct=((m-TL_START)/TL_RANGE)*100, wPct=(TL_SNAP/TL_RANGE)*100;
@@ -3086,7 +3201,11 @@ function renderDayTimelineForRole(role){
 function rbRoleForEmp(empId){ const e=_emps.find(e=>e.id===empId); return e?.role||null; }
 
 async function rbAddShift(empId,date,role){
-  const existing=_rosterShifts.find(s=>s.employee_id===empId&&s.date===date&&!s.is_day_off);
+  const r=role||rbRoleForEmp(empId);
+  const isNurseRole=r==='Nurse';
+  // For nurses, only block if a floor shift already exists (75+ shifts don't block adding a floor shift)
+  const existing=_rosterShifts.find(s=>s.employee_id===empId&&s.date===date&&!s.is_day_off
+    &&(!isNurseRole||(s.lane==='floor'||!s.lane)));
   if(existing){showToast('Already has a shift on this day');return;}
   const sched=getScheduledTimes(empId,date);
   const start=sched?.startMin!=null?minToTimeStr(sched.startMin):'09:00';
@@ -3114,6 +3233,22 @@ async function rbDeleteShift(shiftId,role){
     renderDayTimelineForRole(r);
     showToast('Shift removed');
   }catch(e){showToast('Could not remove');console.error(e);}
+}
+
+async function rbToggleLane(shiftId, role){
+  const shift=_rosterShifts.find(s=>s.id===shiftId);
+  if(!shift) return;
+  const newLane=shift.lane==='75plus'?'floor':'75plus';
+  const prevLane=shift.lane;
+  shift.lane=newLane;
+  renderDayTimelineForRole(role);
+  try{
+    await db.update('roster_shifts',shiftId,{lane:newLane});
+  }catch(e){
+    shift.lane=prevLane;
+    renderDayTimelineForRole(role);
+    showToast('Could not move shift');console.error(e);
+  }
 }
 
 async function rbSaveShiftTimes(shiftId,startTime,endTime){
@@ -3164,6 +3299,7 @@ function rbOnMouseMove(e){
     const lbl=bar.querySelector('.rb-shift-label');
     if(lbl) lbl.textContent=minToTimeStr(s)+'–'+minToTimeStr(en);
   }
+  rbShowDragIndicators(s,en,_rbDrag.type);
 }
 
 function rbOnMouseUp(){
@@ -3171,7 +3307,33 @@ function rbOnMouseUp(){
   const{shiftId,curStart,curEnd}=_rbDrag;
   document.querySelectorAll('.rb-shift-bar.dragging').forEach(b=>b.classList.remove('dragging'));
   _rbDrag=null;
+  rbRemoveDragIndicators();
   if(curStart!=null&&curEnd!=null) rbSaveShiftTimes(shiftId,minToTimeStr(curStart),minToTimeStr(curEnd));
+}
+
+function rbRemoveDragIndicators(){
+  document.querySelectorAll('.rb-drag-line').forEach(el=>el.remove());
+}
+
+function rbShowDragIndicators(s, en, type){
+  if(!_rbDrag) return;
+  let wrap=_rbDrag.trackEl;
+  while(wrap&&!wrap.classList.contains('rb-tl-wrap')) wrap=wrap.parentElement;
+  if(!wrap) return;
+  rbRemoveDragIndicators();
+  const trackW=wrap.clientWidth-150;
+  const toLeft=min=>150+(min-TL_START)/TL_RANGE*trackW;
+  const times=type==='move'?[s,en]:type==='left'?[s]:[en];
+  times.forEach(min=>{
+    const line=document.createElement('div');
+    line.className='rb-drag-line';
+    line.style.left=toLeft(min)+'px';
+    const lbl=document.createElement('div');
+    lbl.className='rb-drag-line-label';
+    lbl.textContent=minToTimeStr(min);
+    line.appendChild(lbl);
+    wrap.appendChild(line);
+  });
 }
 
 function toggleSettingsSection(key){
@@ -3182,6 +3344,7 @@ function toggleSettingsSection(key){
   chevron.innerHTML=open?'&#9660;':'&#9658;';
   if(open&&key==='clockaudit') renderClockAudit();
   if(open&&key==='notesaudit') renderNotesAudit();
+  if(open&&key==='inactive') renderInactiveStaff();
 }
 
 function renderAnchorDate(){
