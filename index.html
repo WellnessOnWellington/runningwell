@@ -555,29 +555,38 @@
   .sr-header {
     background: var(--white); border-bottom: 1.5px solid var(--border);
     padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem;
-    flex-wrap: wrap; position: sticky; top: 0; z-index: 10;
+    flex-wrap: nowrap; position: sticky; top: 0; z-index: 10;
     box-shadow: 0 2px 12px rgba(139,37,53,0.06);
   }
+  .sr-header .sr-layout-toggle { position: absolute; left: 50%; transform: translateX(-50%); }
   .sr-title { font-family: 'Lora',serif; font-size: 1rem; font-weight: 600; color: var(--charcoal); background: var(--blush-lt); border: 1.5px solid var(--border); border-radius: 20px; padding: 0.3rem 0.9rem; margin-left: 0.75rem; white-space: nowrap; flex-shrink: 0; }
   .sr-header-spacer { flex: 1; }
-  .sr-nav { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-  .sr-nav-btn { background: var(--white); border: 1.5px solid var(--border); border-radius: 30px; padding: 0.4rem 0.9rem; font-size: 0.8rem; font-weight: 700; color: var(--muted); cursor: pointer; font-family: 'Nunito',sans-serif; transition: all 0.2s; }
-  .sr-nav-btn:hover { border-color: var(--dusty); color: var(--burgundy); }
+  .sr-nav { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-left: auto; }
   .sr-period-label { font-size: 0.82rem; font-weight: 700; color: var(--charcoal); padding: 0 0.4rem; white-space: nowrap; }
 
   .sr-filters {
     background: var(--white); border-bottom: 1.5px solid var(--border);
     padding: 0.75rem 2rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    position: relative;
   }
-  .sr-role-tabs { display: flex; gap: 0.25rem; background: var(--warm-white); border-radius: 12px; padding: 0.3rem; border: 1.5px solid var(--border); }
-  .sr-tab { padding: 0.42rem 1rem; border-radius: 9px; font-size: 0.76rem; font-weight: 700; cursor: pointer; border: none; font-family: 'Nunito',sans-serif; background: transparent; color: var(--muted); transition: all 0.2s; }
+  .sr-filters .sr-nav { position: absolute; left: 50%; transform: translateX(-50%); margin-left: 0; }
+  .sr-today-btn { background: var(--burgundy); color: #fff; border: none; border-radius: 10px; padding: 0 1.1rem; font-size: 0.85rem; font-weight: 800; font-family: 'Nunito',sans-serif; cursor: pointer; letter-spacing: 0.01em; transition: background 0.15s; white-space: nowrap; height: 40px; box-sizing: border-box; }
+  .sr-today-btn:hover { background: var(--wine); }
+  .sr-role-tabs { display: flex; gap: 0.25rem; background: var(--warm-white); border-radius: 12px; padding: 0.3rem; border: 1.5px solid var(--border); height: 40px; box-sizing: border-box; align-items: center; }
+  .sr-tab { padding: 0 1rem; border-radius: 9px; font-size: 0.76rem; font-weight: 700; cursor: pointer; border: none; font-family: 'Nunito',sans-serif; background: transparent; color: var(--muted); transition: all 0.2s; height: 100%; display: flex; align-items: center; }
   .sr-tab.active { background: var(--burgundy); color: #fff; box-shadow: 0 2px 6px rgba(139,37,53,0.22); border-radius: 9px; }
-  #sr-staff-filter.individual-active { background: var(--burgundy); color: #fff; border-color: var(--burgundy); box-shadow: 0 2px 8px rgba(139,37,53,0.22); font-weight: 700; }
-  .sr-layout-toggle { display: flex; gap: 0.2rem; background: var(--warm-white); border-radius: 30px; padding: 0.2rem; border: 1.5px solid var(--border); margin-left: auto; }
-  .sr-filters-group { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; transition:opacity 0.2s; }
-  .sr-filters-group.disabled { opacity:0.35; pointer-events:none; }
-  .sr-layout-btn { padding: 0.35rem 0.9rem; border-radius: 30px; font-size: 0.76rem; font-weight: 700; cursor: pointer; border: none; font-family: 'Nunito',sans-serif; background: transparent; color: var(--muted); transition: all 0.2s; }
-  .sr-layout-btn.active { background: var(--burgundy); color: #fff; box-shadow: 0 2px 8px rgba(139,37,53,0.22); }
+  .sr-layout-toggle { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.25rem; background: var(--warm-white); border-radius: 12px; padding: 0.3rem; border: 1.5px solid var(--border); }
+  .sr-filters-group { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+  .sr-person-filter { display:none; align-items:center; gap:0.6rem; }
+  .sr-person-filter label { font-size:0.78rem; font-weight:700; color:var(--muted); white-space:nowrap; }
+  .sr-person-filter select { background:var(--white); border:2px solid var(--burgundy); border-radius:10px; padding:0 1rem; font-size:0.85rem; font-weight:700; color:var(--charcoal); font-family:'Nunito',sans-serif; cursor:pointer; min-width:200px; box-shadow:0 2px 8px rgba(139,37,53,0.1); height:40px; box-sizing:border-box; }
+  .sr-person-filter select:focus { outline:none; box-shadow:0 0 0 3px rgba(139,37,53,0.15); }
+  .sr-nav-btn { background: var(--white); border: 1.5px solid var(--border); border-radius: 30px; padding: 0 0.9rem; font-size: 0.8rem; font-weight: 700; color: var(--muted); cursor: pointer; font-family: 'Nunito',sans-serif; transition: all 0.2s; height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; }
+  .sr-nav-btn:hover { border-color: var(--dusty); color: var(--burgundy); }
+  #sr-date-picker { height: 40px; box-sizing: border-box; }
+  .sr-layout-btn { padding: 0.55rem 1.6rem; border-radius: 9px; font-size: 0.85rem; font-weight: 700; cursor: pointer; border: 1.5px solid var(--border); font-family: 'Nunito',sans-serif; background: var(--white); color: var(--muted); transition: all 0.08s; letter-spacing: 0.02em; text-align: center; white-space: nowrap; }
+  .sr-layout-btn:hover:not(.active) { color: var(--burgundy); }
+  .sr-layout-btn.active { background: var(--burgundy); color: #fff; box-shadow: 0 2px 8px rgba(139,37,53,0.25); border-color: var(--burgundy); }
 
   .sr-content { padding: 1.75rem 2rem; max-width: 1500px; margin: 0 auto; width: 100%; }
 
@@ -623,6 +632,7 @@
   .sr-person-day-date { font-size: 0.68rem; color: var(--muted); }
   .sr-person-day-time { font-weight: 700; color: var(--burgundy); font-size: 0.76rem; }
   .sr-person-day-off { color: var(--muted); font-size: 0.73rem; font-style: italic; }
+  .sr-person-day.today-row { background: rgba(139,37,53,0.06); border-left: 3px solid var(--burgundy); padding-left: calc(0.6rem - 3px); margin-left: -0.75rem; padding-right: 0.75rem; border-radius: 0 6px 6px 0; }
   .sr-person-day.today-row .sr-person-day-name { color: var(--burgundy); }
   .sr-person-day.today-row .sr-person-day-date { color: var(--dusty); }
 
@@ -798,32 +808,16 @@
     /* Prevent iOS auto-zoom on any input — must be >= 16px */
     input, select, textarea { font-size: 16px !important; }
 
-    /* Header: wrap logo+title on top row, nav below */
+    /* Header: logo left, toggle centred, kiosk right */
     .sr-header {
       padding: 0.75rem 1rem;
-      gap: 0.6rem;
-      flex-wrap: wrap;
+      gap: 0.5rem;
+      flex-wrap: nowrap;
     }
     .sr-header img { height: 28px; }
-    .sr-title { font-size: 0.88rem; padding: 0.22rem 0.7rem; margin-left: 0.4rem; }
-    .sr-header-spacer { display: none; }
-    .sr-nav {
-      width: 100%;
-      order: 3;
-      justify-content: center;
-      gap: 0.4rem;
-    }
-    .sr-nav-btn { padding: 0.45rem 0.85rem; font-size: 0.78rem; }
-    .sr-period-label { font-size: 0.76rem; }
-    /* Hide date-jump on mobile — too fiddly */
-    #sr-date-picker { display: none; }
-    /* Kiosk button: push to own row end */
-    .sr-header .nav-btn {
-      order: 2;
-      margin-left: auto;
-      padding: 0.4rem 0.75rem;
-      font-size: 0.76rem;
-    }
+    .sr-header-spacer { flex: 1; min-width: 0; }
+    .sr-layout-toggle { padding: 0.2rem; }
+    .sr-layout-btn { padding: 0.42rem 0.85rem !important; font-size: 0.78rem !important; }
 
     /* Filters: stack and scroll */
     .sr-filters {
@@ -834,9 +828,14 @@
     }
     .sr-role-tabs { overflow-x: auto; width: fit-content; max-width: 100%; }
     .sr-tab { padding: 0.35rem 0.75rem; font-size: 16px; white-space: nowrap; }
-    #sr-staff-filter { font-size: 16px !important; border-radius: 30px !important; padding-left: 1rem !important; padding-right: 1rem !important; }
-    .sr-layout-toggle { margin-left: 0; }
-    .sr-layout-btn { font-size: 16px !important; padding: 0.35rem 0.75rem !important; }
+    .sr-nav { margin-left: 0; width: 100%; justify-content: flex-start; }
+    .sr-nav-btn { height: 36px; font-size: 0.78rem; }
+    .sr-role-tabs { height: 36px; }
+    .sr-person-filter select { height: 36px; }
+    #sr-date-picker { height: 36px; }
+    .sr-period-label { font-size: 0.76rem; }
+    /* Hide date-jump on mobile — too fiddly */
+    #sr-date-picker { display: none; }
     .sr-fn-badge { background: var(--blush-lt) !important; color: var(--burgundy) !important; border: 1.5px solid var(--border); }
 
     /* Content padding */
@@ -975,15 +974,13 @@
           stroke="#8B2535" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
       </svg>
     </div>
-    <div class="sr-title">Who's On</div>
     <div class="sr-header-spacer"></div>
-    <div class="sr-nav">
-      <button class="sr-nav-btn" onclick="srNav(-1)">← Prev</button>
-      <span class="sr-period-label" id="sr-period-label"></span>
-      <button class="sr-nav-btn" onclick="srNav(1)">Next →</button>
-      <input class="form-input" type="date" id="sr-date-picker" onchange="srJumpToDate()" style="width:auto;padding:0.38rem 0.7rem;font-size:0.78rem;" title="Jump to date">
+    <div class="sr-layout-toggle">
+      <button class="sr-layout-btn active" id="sr-btn-day" onclick="srSetLayout('day')">By Day</button>
+      <button class="sr-layout-btn" id="sr-btn-person" onclick="srSetLayout('person')">By Person</button>
     </div>
-    <button class="nav-btn" onclick="showView('kiosk')">← Kiosk</button>
+    <div class="sr-header-spacer"></div>
+    <button class="admin-kiosk-btn" id="sr-kiosk-btn" onclick="showView('kiosk')" style="flex-shrink:0;">← Return to Kiosk</button>
   </div>
 
   <div class="sr-filters">
@@ -994,12 +991,20 @@
         <button class="sr-tab active" onclick="srToggleRole('Manager',this)">Managers</button>
       </div>
     </div>
-    <select class="form-select" id="sr-staff-filter" onchange="srSelectIndividual()" style="width:auto;padding:0.38rem 0.85rem;font-size:0.78rem;">
-      <option value="">Individual view</option>
-    </select>
-    <div class="sr-layout-toggle">
-      <button class="sr-layout-btn active" id="sr-btn-day" onclick="srSetLayout('day')">By Day</button>
-      <button class="sr-layout-btn" id="sr-btn-person" onclick="srSetLayout('person')">By Person</button>
+    <div class="sr-person-filter" id="sr-person-filter">
+      <label for="sr-staff-filter">Staff member</label>
+      <select id="sr-staff-filter" onchange="srSelectIndividual()">
+        <option value="">Select name</option>
+      </select>
+    </div>
+    <div class="sr-nav">
+      <button class="sr-nav-btn" onclick="srNav(-1)">← Prev</button>
+      <span class="sr-period-label" id="sr-period-label"></span>
+      <button class="sr-nav-btn" onclick="srNav(1)">Next →</button>
+    </div>
+    <div id="sr-right-group" style="display:flex;align-items:center;gap:0.5rem;margin-left:auto;">
+      <input class="form-input" type="date" id="sr-date-picker" onchange="srJumpToDate()" style="flex:1;min-width:0;padding:0.38rem 0.7rem;font-size:0.78rem;height:40px;box-sizing:border-box;" title="Jump to date">
+      <button class="sr-today-btn" onclick="srGoToday()">Today</button>
     </div>
   </div>
 
@@ -1180,6 +1185,16 @@
               <input class="form-input" type="date" id="anchor-date" style="width:auto;" />
               <button class="add-emp-btn" onclick="saveAnchorDate()">Save</button>
               <span style="font-size:0.75rem;color:var(--muted);font-weight:500;">Sets the Monday that Week A begins. All fortnights are calculated from this date.</span>
+            </div>
+          </div>
+          <div class="roster-section" style="margin-bottom:1.5rem;">
+            <div class="roster-section-title">Clock-in Grace Period</div>
+            <div class="roster-anchor-bar">
+              <label class="form-label" style="margin:0;white-space:nowrap;">Grace period</label>
+              <input class="form-input" type="number" id="grace-period" min="0" max="60" step="1" style="width:80px;" />
+              <span style="font-size:0.8rem;color:var(--muted);font-weight:600;">minutes</span>
+              <button class="add-emp-btn" onclick="saveGracePeriod()">Save</button>
+              <span style="font-size:0.75rem;color:var(--muted);font-weight:500;">Staff clocking in/out within this window of their rostered time will not be asked for a reason.</span>
             </div>
           </div>
           <div class="roster-section" style="margin-bottom:1rem;">
@@ -1539,6 +1554,7 @@ async function loadAll() {
     _notes   = notes.map(normaliseNote);
     _mgrs    = mgrs.map(normaliseMgr);
     _rosterConfig    = rosterCfg[0] || null;
+    if(_rosterConfig?.grace_period!=null) GRACE=_rosterConfig.grace_period;
     _rosterTemplates = rosterTmpl;
     _rosterOverrides = rosterOv;
     _rosterShifts    = rosterShifts;
@@ -1585,7 +1601,7 @@ function showLoading(on) {
   el.style.opacity = on ? '1' : '0';
 }
 
-const GRACE = 10;
+let GRACE = 10;
 const ROUND_WINDOW = 5; // minutes — clock times within this window of rostered time are rounded to roster time on timesheets
 const LEAVE_TYPES = { annual_leave:'Annual Leave', personal_leave:'Personal Leave', public_holiday:'Public Holiday', unpaid_leave:'Unpaid Leave', bereavement_leave:'Bereavement Leave' };
 function formatLeaveType(lt){ return LEAVE_TYPES[lt]||'Worked'; }
@@ -1602,9 +1618,18 @@ function roundToRoster(actualTimeStr, scheduledMin){
    VIEWS
 ═══════════════════════════════════════════ */
 function showView(v){
+  clearInterval(_kioskRefreshInterval); _kioskRefreshInterval=null;
+  clearInterval(_srRefreshInterval); _srRefreshInterval=null;
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
-  if(v==='kiosk') setTimeout(focusRFID,80);
+  if(v==='kiosk'){
+    setTimeout(focusRFID,80);
+    _kioskRefreshInterval=setInterval(()=>{
+      Promise.all([db.get('employees'),db.get('entries')]).then(([emps,entries])=>{
+        _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry);
+      }).catch(()=>{});
+    },60000);
+  }
   if(v==='login') populateManagerSelect();
   if(v==='admin'){
     document.getElementById('current-user-label').textContent = currentManager?.name || '';
@@ -1637,12 +1662,35 @@ setInterval(tick, 1000);
 ═══════════════════════════════════════════ */
 const rfidEl=document.getElementById('rfid-input');
 let buf='',rfidT=null;
+let _kioskRefreshInterval=null, _srRefreshInterval=null, _preRFIDView=null;
 function focusRFID(){
   if(document.activeElement===document.getElementById('test-rfid')) return;
   rfidEl.value='';rfidEl.focus();
 }
+function returnOrFocusRFID(){
+  if(_preRFIDView){
+    const v=_preRFIDView; _preRFIDView=null;
+    clearInterval(_kioskRefreshInterval); _kioskRefreshInterval=null;
+    document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+    document.getElementById('view-'+v).classList.add('active');
+    if(v==='staff-roster'){
+      focusRFID();
+      _srRefreshInterval=setInterval(async()=>{
+        try{
+          const [emps,shifts,fortnights]=await Promise.all([db.get('employees'),db.get('roster_shifts'),db.get('roster_fortnights')]);
+          _emps=emps.filter(e=>e.active!==false); _rosterShifts=shifts; _rosterFortnights=fortnights;
+        }catch(e){}
+        renderStaffRoster();
+      },120000);
+    }
+  } else {
+    focusRFID();
+  }
+}
 document.addEventListener('click',e=>{
-  if(!document.getElementById('view-kiosk').classList.contains('active'))return;
+  const kioskActive=document.getElementById('view-kiosk').classList.contains('active');
+  const srActive=document.getElementById('view-staff-roster')?.classList.contains('active');
+  if(!kioskActive&&!srActive)return;
   if(e.target.closest('.kiosk-footer-nav'))return;
   if(e.target.closest('.reason-card'))return;
   if(e.target.id==='test-rfid'||e.target.closest('[id="test-rfid"]'))return;
@@ -1664,6 +1712,11 @@ rfidEl.addEventListener('keydown',e=>{
 let pending=null;
 
 async function processRFID(card){
+  // If scanning from Who's On, redirect to kiosk, process, then return
+  if(!document.getElementById('view-kiosk').classList.contains('active')){
+    _preRFIDView=document.querySelector('.view.active')?.id.replace('view-','')||null;
+    showView('kiosk');
+  }
   // Use cache for instant response — only fetch if card not recognised (new employee)
   let emp=_emps.find(e=>e.rfid===card);
   if(!emp){
@@ -1671,8 +1724,10 @@ async function processRFID(card){
     emp=_emps.find(e=>e.rfid===card);
   }
   if(!emp){showFlash('error','🤷','','Card not recognised','Please see reception');return;}
+  // Fresh fetch before committing — prevents duplicate entries when multiple kiosks are in use
+  try{ _entries=(await db.get('entries')).map(normaliseEntry); }catch(e){}
   const now=new Date();
-  const todayKey=now.toISOString().slice(0,10);
+  const todayKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   const timeStr=now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false});
   const isoNow=now.toISOString();
   const open=_entries.find(en=>en.employeeId===emp.id&&en.date===todayKey&&!en.clockOut);
@@ -1758,7 +1813,7 @@ function showFlash(type,wave,greeting,name,sub){
   document.getElementById('flash-name').textContent=name;
   document.getElementById('flash-sub').textContent=sub;
   clearTimeout(flashT);
-  flashT=setTimeout(()=>{o.classList.remove('show');focusRFID();},2800);
+  flashT=setTimeout(()=>{o.classList.remove('show');returnOrFocusRFID();},2800);
 }
 
 function showReasonPrompt(firstName,action,label){
@@ -1770,7 +1825,7 @@ function showReasonPrompt(firstName,action,label){
   setTimeout(()=>document.getElementById('reason-text').focus(),120);
 }
 
-function cancelReason(){document.getElementById('reason-overlay').classList.remove('show');pending=null;focusRFID();}
+function cancelReason(){document.getElementById('reason-overlay').classList.remove('show');pending=null;returnOrFocusRFID();}
 
 async function submitReason(){
   const txt=document.getElementById('reason-text').value.trim();
@@ -2633,6 +2688,8 @@ function checkRosterPIN(){
 }
 
 async function showStaffRoster(){
+  clearInterval(_kioskRefreshInterval); _kioskRefreshInterval=null;
+  clearInterval(_srRefreshInterval); _srRefreshInterval=null;
   srOffset=0;
   try{
     const [emps,shifts,fortnights,config]=await Promise.all([
@@ -2649,15 +2706,30 @@ async function showStaffRoster(){
   document.querySelectorAll('.sr-tab').forEach(t=>t.classList.add('active'));
   document.getElementById('sr-btn-day')?.classList.add('active');
   document.getElementById('sr-btn-person')?.classList.remove('active');
-  document.getElementById('sr-filters-group')?.classList.remove('disabled');
+  document.getElementById('sr-filters-group').style.display='';
+  document.getElementById('sr-person-filter').style.display='none';
   const srSel=document.getElementById('sr-staff-filter');
-  if(srSel){ srSel.value=''; srSel.classList.remove('individual-active'); }
+  if(srSel) srSel.value='';
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-staff-roster').classList.add('active');
   renderStaffRoster();
+  requestAnimationFrame(srSyncRightWidth);
+  _srRefreshInterval=setInterval(async()=>{
+    try{
+      const [emps,shifts,fortnights]=await Promise.all([db.get('employees'),db.get('roster_shifts'),db.get('roster_fortnights')]);
+      _emps=emps.filter(e=>e.active!==false); _rosterShifts=shifts; _rosterFortnights=fortnights;
+    }catch(e){}
+    renderStaffRoster();
+  },120000);
 }
 
 function srNav(dir){srOffset+=dir;renderStaffRoster();}
+function srGoToday(){srOffset=0;renderStaffRoster();}
+function srSyncRightWidth(){
+  const btn=document.getElementById('sr-kiosk-btn');
+  const grp=document.getElementById('sr-right-group');
+  if(btn&&grp) grp.style.width=btn.offsetWidth+'px';
+}
 
 function srJumpToDate(){
   const val=document.getElementById('sr-date-picker').value;
@@ -2682,16 +2754,6 @@ function srToggleRole(role,btn){
 }
 
 function srSelectIndividual(){
-  const sel=document.getElementById('sr-staff-filter');
-  if(sel&&sel.value){
-    srRoles.clear();
-    document.querySelectorAll('.sr-tab').forEach(t=>t.classList.remove('active'));
-    sel.classList.add('individual-active');
-  } else {
-    srRoles=new Set(['Receptionist','Nurse','Manager']);
-    document.querySelectorAll('.sr-tab').forEach(t=>t.classList.add('active'));
-    sel.classList.remove('individual-active');
-  }
   renderStaffRoster();
 }
 
@@ -2699,13 +2761,17 @@ function srSetLayout(layout){
   srLayout=layout;
   document.getElementById('sr-btn-day').classList.toggle('active',layout==='day');
   document.getElementById('sr-btn-person').classList.toggle('active',layout==='person');
-  document.getElementById('sr-filters-group').classList.toggle('disabled',layout==='person');
+  document.getElementById('sr-filters-group').style.display=layout==='day'?'':'none';
+  document.getElementById('sr-person-filter').style.display=layout==='person'?'flex':'none';
+  // Reset individual selection when switching views
+  const sel=document.getElementById('sr-staff-filter');
+  if(sel) sel.value='';
   renderStaffRoster();
 }
 
 function renderStaffRoster(){
   _srDnMap=buildDisplayNames(_emps);
-  const today=new Date().toISOString().slice(0,10);
+  const _tn=new Date(); const today=`${_tn.getFullYear()}-${String(_tn.getMonth()+1).padStart(2,'0')}-${String(_tn.getDate()).padStart(2,'0')}`;
   const fn1Start=getFortnightStart(srOffset);
   const fn2Start=getFortnightStart(srOffset+1);
   const fn1Days=getFortnight14Days(fn1Start);
@@ -2718,11 +2784,12 @@ function renderStaffRoster(){
   // Period label
   document.getElementById('sr-period-label').textContent=`${srFortnightLabel(fn1Start)}  ·  ${srFortnightLabel(fn2Start)}`;
 
-  // Filter employees — individual selection bypasses role tabs
+  // Filter employees
   let emps=[..._emps];
   const staffFilter=document.getElementById('sr-staff-filter')?.value;
   if(staffFilter) emps=emps.filter(e=>e.id===staffFilter);
-  else emps=emps.filter(e=>srRoles.has(e.role));
+  else if(srLayout==='day') emps=emps.filter(e=>srRoles.has(e.role));
+  else emps=[]; // person view with no selection: show placeholder
 
   // Populate staff dropdown (preserve selection)
   const sel=document.getElementById('sr-staff-filter');
@@ -2738,6 +2805,10 @@ function renderStaffRoster(){
   const fn2Published=srIsPublished(fn2Start);
 
   const content=document.getElementById('sr-content');
+  if(srLayout==='person'&&!document.getElementById('sr-staff-filter')?.value){
+    content.innerHTML='<div style="text-align:center;padding:4rem 2rem;color:var(--muted);font-size:0.85rem;font-weight:600;">Select a staff member to view their roster.</div>';
+    return;
+  }
   content.innerHTML=
     srRenderFortnight(1,fn1Start, fn1Visible.length?fn1Visible:fn1Days, emps, fn1Published, today)+
     srRenderFortnight(2,fn2Start, fn2Visible, emps, fn2Published, today);
@@ -2751,7 +2822,7 @@ function srRenderFortnight(num, startStr, days, emps, published, today){
     <span class="sr-fn-dates">${srFortnightLabel(startStr)}</span>
     <span class="sr-fn-year">${year}</span>
   </div>`;
-  const unpub=`<div class="sr-unpublished"><div class="sr-unpublished-icon">📅</div><div>Roster not yet published for this period</div></div>`;
+  const unpub=`<div class="sr-unpublished"><div class="sr-unpublished-icon">📅</div><div>Roster not yet published for this period.</div></div>`;
   const body=published?(srLayout==='day'?srByDay(days,emps,today):srByPerson(days,emps,today)):unpub;
   return`<div class="sr-fortnight-block">${heading}${body}</div>`;
 }
@@ -3350,6 +3421,8 @@ function toggleSettingsSection(key){
 function renderAnchorDate(){
   const el=document.getElementById('anchor-date');
   if(el&&_rosterConfig) el.value=_rosterConfig.cycle_start_date||'';
+  const gEl=document.getElementById('grace-period');
+  if(gEl) gEl.value=_rosterConfig?.grace_period??GRACE;
 }
 
 function renderRosterGrid(){
@@ -3428,6 +3501,7 @@ function wosInitPinBoxes(){
 
 async function saveWhosOnPIN(){
   const newPin=wosGetPin('new');
+  if(!confirm(`Change the Who's On PIN to ${newPin}?\n\nStaff will need the new PIN next time they open the Who's On view.`)) return;
   try{
     if(_rosterConfig) await db.update('roster_config','default',{roster_view_pin:newPin});
     else await db.insert('roster_config',{id:'default',roster_view_pin:newPin});
@@ -3444,11 +3518,27 @@ async function saveWhosOnPIN(){
 async function saveAnchorDate(){
   const v=document.getElementById('anchor-date').value;
   if(!v){showToast('Please select a date');return;}
+  if(!confirm(`Set the fortnight cycle anchor to ${v}?\n\nThis will affect how all fortnights are calculated across the roster and Who's On view.`)) return;
   try{
     if(_rosterConfig) await db.update('roster_config','default',{cycle_start_date:v});
     else await db.insert('roster_config',{id:'default',cycle_start_date:v});
-    _rosterConfig={id:'default',cycle_start_date:v};
+    if(_rosterConfig) _rosterConfig.cycle_start_date=v;
+    else _rosterConfig={id:'default',cycle_start_date:v};
     showToast('Cycle anchor saved');
+  }catch(e){showToast('Could not save — check connection');console.error(e);}
+}
+
+async function saveGracePeriod(){
+  const v=parseInt(document.getElementById('grace-period').value,10);
+  if(isNaN(v)||v<0||v>60){showToast('Enter a value between 0 and 60');return;}
+  if(!confirm(`Set the grace period to ${v} minute${v===1?'':'s'}?\n\nStaff clocking in/out within ${v} minute${v===1?'':'s'} of their rostered time will not be asked for a reason.`)) return;
+  try{
+    if(_rosterConfig) await db.update('roster_config','default',{grace_period:v});
+    else await db.insert('roster_config',{id:'default',grace_period:v});
+    if(_rosterConfig) _rosterConfig.grace_period=v;
+    else _rosterConfig={id:'default',grace_period:v};
+    GRACE=v;
+    showToast('Grace period saved');
   }catch(e){showToast('Could not save — check connection');console.error(e);}
 }
 
