@@ -787,11 +787,75 @@
   .rb-legend-dot.public-holiday { background:#5b9bd5; }
   .rb-legend-dot.unpaid-leave { background:#a0a0a0; }
   .rb-legend-dot.bereavement-leave { background:#9b7db5; }
+  /* ── Timesheets redesign ── */
+  .ts-role-tabs-bar { display:flex; gap:0.25rem; background:var(--warm-white); border:1.5px solid var(--border); border-radius:12px; padding:0.3rem; margin:0 0 1.25rem; width:fit-content; }
+  .ts-role-tab { padding:0.55rem 1.4rem; border-radius:9px; font-size:0.85rem; font-weight:700; cursor:pointer; border:1.5px solid var(--border); font-family:'Nunito',sans-serif; background:var(--white); color:var(--muted); transition:all 0.08s; letter-spacing:0.02em; white-space:nowrap; }
+  .ts-role-tab:hover:not(.active) { color:var(--burgundy); }
+  .ts-role-tab.active { background:var(--burgundy); color:#fff; box-shadow:0 2px 8px rgba(139,37,53,0.25); border-color:var(--burgundy); }
+  .ts-fn-btn { background:var(--white); border:1.5px solid var(--border); border-radius:30px; padding:0 0.9rem; font-size:0.8rem; font-weight:700; color:var(--muted); cursor:pointer; font-family:'Nunito',sans-serif; transition:all 0.2s; height:36px; box-sizing:border-box; display:inline-flex; align-items:center; }
+  .ts-fn-btn:hover { border-color:var(--dusty); color:var(--burgundy); }
+  .ts-fn-btn.ts-today-btn { background:var(--burgundy); color:#fff; border-color:var(--burgundy); border-radius:10px; font-weight:800; }
+  .ts-fn-btn.ts-today-btn:hover { background:var(--wine); }
+  .ts-fn-label { font-size:0.82rem; font-weight:700; color:var(--charcoal); padding:0 0.4rem; white-space:nowrap; }
+  .ts-content { padding:1.25rem 0; }
+  .ts-emp-block { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); margin-bottom:1.25rem; box-shadow:var(--shadow); overflow:hidden; }
+  .ts-emp-header { display:flex; align-items:center; gap:0.75rem; padding:0.75rem 1.1rem; background:var(--warm-white); border-bottom:1.5px solid var(--border); cursor:pointer; user-select:none; transition:background 0.12s; }
+  .ts-emp-header:hover { background:var(--blush-lt); }
+  .ts-emp-chevron { font-size:0.65rem; color:var(--muted); flex-shrink:0; width:10px; transition:transform 0.15s; }
+  .ts-emp-block.collapsed .ts-emp-header { border-bottom:none; }
+  .ts-emp-name { font-weight:800; font-size:0.9rem; color:var(--charcoal); }
+  .ts-emp-role-badge { font-size:0.68rem; font-weight:700; padding:0.15rem 0.55rem; border-radius:999px; background:var(--blush-lt); color:var(--burgundy); border:1px solid var(--border); }
+  .ts-emp-pending { font-size:0.72rem; font-weight:700; color:var(--burgundy); background:rgba(139,37,53,0.08); border-radius:999px; padding:0.15rem 0.65rem; }
+  .ts-emp-ok { font-size:0.72rem; font-weight:700; color:var(--success); }
+  .ts-emp-hours { margin-left:auto; font-size:1rem; font-weight:800; color:var(--charcoal); font-family:'Courier New',monospace; flex-shrink:0; }
+  .ts-shift-row { border-bottom:1px solid rgba(234,217,220,0.5); }
+  .ts-shift-row:last-child { border-bottom:none; }
+  .ts-shift-row.ts-locked { background:rgba(0,0,0,0.015); }
+  .ts-shift-row.ts-flag-red .ts-row-main { border-left:3px solid var(--burgundy); }
+  .ts-shift-row.ts-flag-yellow .ts-row-main { border-left:3px solid #e6a817; }
+  .ts-shift-row.ts-flag-green .ts-row-main { border-left:3px solid var(--success); }
+  .ts-shift-row.ts-flag-grey .ts-row-main { border-left:3px solid var(--muted); }
+  .ts-row-main { display:flex; align-items:center; gap:1rem; padding:0.7rem 1.1rem; cursor:pointer; transition:background 0.15s; user-select:none; }
+  .ts-row-main:hover { background:var(--blush-lt); }
+  .ts-row-date { width:115px; flex-shrink:0; font-size:0.88rem; font-weight:700; color:var(--charcoal); }
+  .ts-row-times { flex:1; display:flex; align-items:center; gap:0.6rem; font-size:0.88rem; }
+  .ts-times-rost { color:var(--muted); font-family:'Courier New',monospace; }
+  .ts-times-arrow { color:var(--border); font-size:0.68rem; }
+  .ts-times-clock { color:var(--charcoal); font-weight:800; font-family:'Courier New',monospace; }
+  .ts-times-clock.ts-times-flagged { color:var(--burgundy); }
+  .ts-row-flag-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .ts-row-hours { font-size:1.05rem; font-weight:800; color:var(--burgundy); font-family:'Courier New',monospace; flex-shrink:0; min-width:52px; text-align:right; letter-spacing:-0.02em; }
+  .ts-payroll-select { font-size:0.72rem; padding:0.22rem 0.5rem; border:1.5px solid var(--border); border-radius:7px; background:var(--warm-white); color:var(--charcoal); cursor:pointer; font-family:'Nunito',sans-serif; font-weight:700; flex-shrink:0; max-width:140px; }
+  .ts-payroll-select:focus { outline:none; border-color:var(--burgundy); }
+  .ts-payroll-label { font-size:0.72rem; font-weight:700; color:var(--muted); flex-shrink:0; }
+  .ts-locked-label { font-size:0.68rem; color:var(--muted); font-weight:600; white-space:nowrap; }
+  .ts-row-detail { background:rgba(250,245,246,0.7); border-top:1px solid rgba(234,217,220,0.5); padding:0.5rem 1.1rem 0.75rem; }
+  .ts-sub-row { display:flex; align-items:center; gap:0.75rem; padding:0.3rem 0; font-size:0.8rem; }
+  .ts-sub-label { width:72px; flex-shrink:0; font-size:0.65rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); }
+  .ts-sub-rostered .ts-sub-time { color:var(--muted); font-weight:800; font-family:'Courier New',monospace; font-size:0.88rem; }
+  .ts-sub-clocked .ts-sub-time { color:var(--charcoal); font-weight:800; font-family:'Courier New',monospace; font-size:0.88rem; }
+  .ts-diff { font-size:0.68rem; font-family:'Courier New',monospace; padding:0.1rem 0.4rem; background:rgba(0,0,0,0.05); border-radius:4px; margin-left:0.25rem; }
+  .ts-sub-final { flex-wrap:wrap; }
+  .ts-time-input { border:1.5px solid var(--border); border-radius:7px; padding:0.25rem 0.45rem; font-size:0.78rem; font-family:'Courier New',monospace; color:var(--charcoal); background:var(--white); width:88px; box-sizing:border-box; }
+  .ts-time-input:focus { outline:none; border-color:var(--burgundy); }
+  .ts-time-pair { display:inline-flex; align-items:center; gap:2px; }
+  .ts-time-hm { border:1.5px solid var(--border); border-radius:7px; padding:0.25rem 0; font-size:0.88rem; font-weight:800; font-family:'Courier New',monospace; color:var(--charcoal); background:var(--white); width:38px; text-align:center; box-sizing:border-box; }
+  .ts-time-hm:focus { outline:none; border-color:var(--burgundy); }
+  .ts-hm-colon { font-weight:700; color:var(--muted); font-family:'Courier New',monospace; font-size:0.85rem; line-height:1; }
+  .ts-sub-dash { color:var(--muted); font-weight:700; font-size:0.8rem; }
+  .ts-sub-actions { display:flex; align-items:center; gap:0.4rem; margin-left:auto; }
+  .ts-lock-btn { border:1.5px solid var(--border); border-radius:7px; padding:0.22rem 0.65rem; font-size:0.72rem; cursor:pointer; background:var(--white); color:var(--muted); font-family:'Nunito',sans-serif; font-weight:700; transition:all 0.15s; white-space:nowrap; }
+  .ts-lock-btn:hover { border-color:var(--burgundy); color:var(--burgundy); }
+  .ts-lock-btn.locked { background:#e8f5e9; border-color:#4caf50; color:#2e7d32; }
+  .ts-delete-btn { border:1.5px solid var(--border); border-radius:7px; padding:0.22rem 0.55rem; font-size:0.72rem; cursor:pointer; background:var(--white); color:var(--muted); font-family:'Nunito',sans-serif; font-weight:700; transition:all 0.15s; }
+  .ts-delete-btn:hover { border-color:var(--burgundy); background:var(--blush-lt); color:var(--burgundy); }
+  .ts-manual-add-btn { border:1.5px solid var(--burgundy); border-radius:7px; padding:0.22rem 0.7rem; font-size:0.72rem; cursor:pointer; background:var(--blush-lt); color:var(--burgundy); font-family:'Nunito',sans-serif; font-weight:700; transition:all 0.15s; white-space:nowrap; }
+  .ts-manual-add-btn:hover { background:var(--burgundy); color:#fff; }
+  .ts-sub-adj-note { font-size:0.68rem; color:var(--muted); font-style:italic; padding:0.25rem 0 0; margin-left:78px; }
+  .ts-no-shifts { text-align:center; padding:3rem 2rem; color:var(--muted); font-size:0.85rem; font-weight:600; }
+  /* keep old classes for any remaining references */
   .ts-leave-select { font-size:0.72rem; padding:0.22rem 0.5rem; border:1.5px solid var(--border); border-radius:8px; background:var(--warm-white); color:var(--charcoal); cursor:pointer; }
   .ts-leave-select.has-leave { background:var(--blush-lt); font-weight:700; color:var(--burgundy); border-color:var(--burgundy); }
-  .ts-leave-row td { background:rgba(255,243,205,0.45) !important; }
-  .ts-pending-row td { background:rgba(255,193,7,0.06) !important; }
-  .ts-pending-row td:first-child { border-left:3px solid var(--warning); }
   .ts-legend { display:flex; gap:1.25rem; flex-wrap:wrap; padding:0.75rem 0 0.25rem; font-size:0.72rem; color:var(--muted); font-weight:600; }
   .ts-legend-item { display:flex; align-items:center; gap:0.4rem; }
   .ts-legend-dot { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
@@ -1137,22 +1201,22 @@
       <div class="page-ribbon">
         <div>
           <div class="page-ribbon-title">Timesheets</div>
-          <div class="page-ribbon-hint">Filter by person or date range, then export for MYOB</div>
+          <div class="page-ribbon-hint">Review and lock shifts before MYOB export</div>
         </div>
         <div class="page-ribbon-divider"></div>
-        <select class="form-select" id="filter-employee" onchange="renderTimesheets()"><option value="">All staff</option></select>
-        <input class="form-input" type="date" id="filter-from" onchange="renderTimesheets()" />
-        <span style="font-size:0.78rem;color:var(--muted);font-weight:600;">to</span>
-        <input class="form-input" type="date" id="filter-to" onchange="renderTimesheets()" />
+        <button class="ts-fn-btn" onclick="tsNavFn(-1)">← Prev</button>
+        <span class="ts-fn-label" id="ts-fn-label"></span>
+        <button class="ts-fn-btn" onclick="tsNavFn(1)">Next →</button>
+        <button class="ts-fn-btn ts-today-btn" onclick="tsGoToday()">Today</button>
         <div class="page-ribbon-spacer"></div>
         <button class="export-btn" onclick="exportMYOB()">⬇ Export for MYOB</button>
       </div>
-      <div class="table-wrap">
-        <table class="timesheet-table">
-          <thead><tr><th>Team member</th><th>Role</th><th>Date</th><th>Arrived</th><th>Left</th><th>Hours</th><th>Leave</th><th>Status</th></tr></thead>
-          <tbody id="timesheet-body"></tbody>
-        </table>
+      <div class="ts-role-tabs-bar">
+        <button class="ts-role-tab active" id="ts-tab-Receptionist" onclick="tsSetRole('Receptionist',this)">Receptionists</button>
+        <button class="ts-role-tab" id="ts-tab-Nurse" onclick="tsSetRole('Nurse',this)">Nurses</button>
+        <button class="ts-role-tab" id="ts-tab-Manager" onclick="tsSetRole('Manager',this)">Managers</button>
       </div>
+      <div id="ts-content" class="ts-content"></div>
     </div>
 
     <div id="tab-notes" class="tab-panel">
@@ -1195,6 +1259,27 @@
               <span style="font-size:0.8rem;color:var(--muted);font-weight:600;">minutes</span>
               <button class="add-emp-btn" onclick="saveGracePeriod()">Save</button>
               <span style="font-size:0.75rem;color:var(--muted);font-weight:500;">Staff clocking in/out within this window of their rostered time will not be asked for a reason.</span>
+            </div>
+          </div>
+          <div class="roster-section" style="margin-bottom:1.5rem;">
+            <div class="roster-section-title">Discrepancy Flagging Thresholds</div>
+            <div class="roster-anchor-bar" style="flex-direction:column;align-items:flex-start;gap:0.75rem;">
+              <span style="font-size:0.75rem;color:var(--muted);font-weight:500;">Timesheet rows are flagged based on how far the clocked time differs from the rostered time.</span>
+              <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                  <span style="width:12px;height:12px;border-radius:50%;background:#e6a817;display:inline-block;flex-shrink:0;"></span>
+                  <label class="form-label" style="margin:0;white-space:nowrap;">Yellow flag after</label>
+                  <input class="form-input" type="number" id="yellow-threshold" min="1" max="120" step="1" style="width:70px;" />
+                  <span style="font-size:0.8rem;color:var(--muted);font-weight:600;">min</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                  <span style="width:12px;height:12px;border-radius:50%;background:var(--burgundy);display:inline-block;flex-shrink:0;"></span>
+                  <label class="form-label" style="margin:0;white-space:nowrap;">Red flag after</label>
+                  <input class="form-input" type="number" id="red-threshold" min="1" max="120" step="1" style="width:70px;" />
+                  <span style="font-size:0.8rem;color:var(--muted);font-weight:600;">min</span>
+                </div>
+                <button class="add-emp-btn" onclick="saveDiscrepancyThresholds()">Save</button>
+              </div>
             </div>
           </div>
           <div class="roster-section" style="margin-bottom:1rem;">
@@ -1294,6 +1379,38 @@
             <table class="timesheet-table">
               <thead><tr><th>Date</th><th>Staff member</th><th>Role</th><th>Type</th><th>Reason</th><th>Acknowledged by</th><th>Status</th></tr></thead>
               <tbody id="notes-audit-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Timesheet Audit -->
+      <div class="settings-section" id="ss-tsaudit">
+        <div class="settings-section-header" onclick="toggleSettingsSection('tsaudit')">
+          <div class="settings-section-chevron" id="ss-chevron-tsaudit">&#9658;</div>
+          <div style="flex:1;">
+            <div class="settings-section-title">Timesheet Audit</div>
+            <div class="settings-section-hint">Log of all manual timesheet adjustments, deletions, and clock discrepancies.</div>
+          </div>
+        </div>
+        <div class="settings-section-body" id="ss-body-tsaudit" style="display:none;">
+          <div class="page-ribbon" style="margin-bottom:1rem;box-shadow:none;border-color:var(--border);">
+            <select class="form-select" id="tsa-filter-emp" onchange="renderTimesheetAudit(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);"><option value="">All staff</option></select>
+            <select class="form-select" id="tsa-filter-action" onchange="renderTimesheetAudit(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);">
+              <option value="">All actions</option>
+              <option value="manual_entry">Manual entry</option>
+              <option value="adjustment">Adjustment</option>
+              <option value="delete">Delete</option>
+              <option value="lock">Lock</option>
+            </select>
+            <input class="form-input" type="date" id="tsa-filter-from" onchange="renderTimesheetAudit(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);" />
+            <span style="font-size:0.78rem;color:var(--muted);font-weight:600;">to</span>
+            <input class="form-input" type="date" id="tsa-filter-to" onchange="renderTimesheetAudit(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);" />
+          </div>
+          <div class="table-wrap">
+            <table class="timesheet-table">
+              <thead><tr><th>Date</th><th>Staff member</th><th>Action</th><th>Rostered</th><th>Clocked</th><th>Final</th><th>Reason</th><th>Manager</th><th>Logged at</th></tr></thead>
+              <tbody id="ts-audit-body"></tbody>
             </table>
           </div>
         </div>
@@ -1555,6 +1672,8 @@ async function loadAll() {
     _mgrs    = mgrs.map(normaliseMgr);
     _rosterConfig    = rosterCfg[0] || null;
     if(_rosterConfig?.grace_period!=null) GRACE=_rosterConfig.grace_period;
+  if(_rosterConfig?.yellow_threshold!=null) YELLOW_THRESHOLD=_rosterConfig.yellow_threshold;
+  if(_rosterConfig?.red_threshold!=null) RED_THRESHOLD=_rosterConfig.red_threshold;
     _rosterTemplates = rosterTmpl;
     _rosterOverrides = rosterOv;
     _rosterShifts    = rosterShifts;
@@ -1573,7 +1692,12 @@ function normaliseEntry(r) {
     role: r.role, date: r.date, clockIn: r.clock_in, clockInISO: r.clock_in_iso,
     clockOut: r.clock_out, clockOutISO: r.clock_out_iso, hours: r.hours,
     reasonIn: r.reason_in, reasonOut: r.reason_out, status: r.status,
-    leaveType: r.leave_type || null
+    leaveType: r.leave_type || null,
+    finalStart: r.final_start || null, finalEnd: r.final_end || null,
+    locked: r.locked || false, lockedBy: r.locked_by || null, lockedAt: r.locked_at || null,
+    manuallyAdjusted: r.manually_adjusted || false,
+    adjustmentReason: r.adjustment_reason || null, adjustedBy: r.adjusted_by || null,
+    payrollType: r.payroll_type || null,
   };
 }
 
@@ -1602,6 +1726,12 @@ function showLoading(on) {
 }
 
 let GRACE = 10;
+let YELLOW_THRESHOLD = 10;
+let RED_THRESHOLD = 20;
+let tsOffset = 0;
+let tsRole = 'Receptionist';
+let _tsExpandEntryId = null;
+const _tsCollapsed = new Set();
 const ROUND_WINDOW = 5; // minutes — clock times within this window of rostered time are rounded to roster time on timesheets
 const LEAVE_TYPES = { annual_leave:'Annual Leave', personal_leave:'Personal Leave', public_holiday:'Public Holiday', unpaid_leave:'Unpaid Leave', bereavement_leave:'Bereavement Leave' };
 function formatLeaveType(lt){ return LEAVE_TYPES[lt]||'Worked'; }
@@ -2252,57 +2382,415 @@ function groupEntriesByDay(entries){
   });
 }
 
+/* ── TIMESHEETS ── */
+function tsNavFn(dir){ tsOffset+=dir; renderTimesheets(); }
+function tsGoToday(){ tsOffset=0; renderTimesheets(); }
+function tsSetRole(role, btn){
+  tsRole=role;
+  document.querySelectorAll('.ts-role-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  renderTimesheets();
+}
+
+function tsGetFlag(rostStart, rostEnd, finalStart, finalEnd, manuallyAdjusted, noEntry){
+  if(manuallyAdjusted) return 'grey';
+  if(noEntry||!finalStart||!finalEnd) return 'red';
+  if(!rostStart||!rostEnd) return 'green';
+  const ds=Math.abs(timeToMin(finalStart)-timeToMin(rostStart));
+  const de=Math.abs(timeToMin(finalEnd)-timeToMin(rostEnd));
+  const maxDiff=Math.max(ds,de);
+  if(maxDiff>=RED_THRESHOLD) return 'red';
+  if(maxDiff>=YELLOW_THRESHOLD) return 'yellow';
+  return 'green';
+}
+
+function tsBuildRow(emp, date, shift, entry){
+  const d=new Date(date+'T12:00:00');
+  const dateLabel=d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+  const rostStart=shift?.start_time||null;
+  const rostEnd=shift?.end_time||null;
+  const clockStart=entry?.clockIn||null;
+  const clockEnd=entry?.clockOut||null;
+  const finalStart=entry?.finalStart||clockStart;
+  const finalEnd=entry?.finalEnd||clockEnd;
+  const locked=entry?.locked||false;
+  const lockedBy=entry?.lockedBy||null;
+  const manuallyAdjusted=entry?.manuallyAdjusted||false;
+  const entryId=entry?.id||null;
+  const noEntry=!entry&&!!shift;
+  const flag=tsGetFlag(rostStart,rostEnd,finalStart,finalEnd,manuallyAdjusted,noEntry);
+  const autoExpand=flag==='red'||flag==='yellow'||entryId==_tsExpandEntryId;
+  const flagColors={green:'var(--success)',yellow:'#e6a817',red:'var(--burgundy)',grey:'var(--muted)'};
+  const flagColor=flagColors[flag]||flagColors.green;
+
+  let diffLabel='';
+  if(rostStart&&finalStart&&rostEnd&&finalEnd){
+    const ds=timeToMin(finalStart)-timeToMin(rostStart);
+    const de=timeToMin(finalEnd)-timeToMin(rostEnd);
+    const fmt=m=>(m>=0?'+':'')+m+'m';
+    const diffColor=Math.abs(ds)>=RED_THRESHOLD||Math.abs(de)>=RED_THRESHOLD?'var(--burgundy)':Math.abs(ds)>=YELLOW_THRESHOLD||Math.abs(de)>=YELLOW_THRESHOLD?'#e6a817':'var(--muted)';
+    diffLabel=`<span class="ts-diff" style="color:${diffColor}">${fmt(ds)} / ${fmt(de)}</span>`;
+  }
+
+  const safeEmpId=emp.id;
+  const safeEmpName=emp.name.replace(/'/g,"\\'");
+  const lockBtn=locked
+    ?`<button class="ts-lock-btn locked" onclick="tsUnlockRow('${entryId}',event)" title="Locked by ${lockedBy||'manager'}">🔒 Locked</button>`
+    :`<button class="ts-lock-btn" onclick="tsLockRow('${entryId}','${safeEmpId}','${date}',event)">🔓 Lock</button>`;
+  const deleteBtn=`<button class="ts-delete-btn" onclick="tsDeleteRow('${entryId}','${safeEmpId}','${safeEmpName}','${date}',event)" title="Delete entry">✕</button>`;
+
+
+  const rowClass=['ts-shift-row',locked?'ts-locked':'',`ts-flag-${flag}`].filter(Boolean).join(' ');
+
+  const finalMins=(finalStart&&finalEnd)?timeToMin(finalEnd)-timeToMin(finalStart):0;
+  const hoursDisp=finalMins>0?`<span class="ts-row-hours">${(finalMins/60).toFixed(1)}h</span>`:'';
+
+  const PAYROLL_TYPES=[['','— shift type —'],['base_hourly','Base Hourly'],['evening','Evening'],['saturday','Saturday'],['public_holiday','Public Holiday']];
+  const payrollType=entry?.payrollType||'';
+  const payrollEl=locked
+    ?(payrollType?`<span class="ts-payroll-label">${PAYROLL_TYPES.find(([v])=>v===payrollType)?.[1]||payrollType}</span>`:'')
+    :`<select class="ts-payroll-select" onclick="event.stopPropagation()" ${!entry?'disabled title="Clock-in required"':''} onchange="tsSavePayrollType('${entryId}',this.value)">${PAYROLL_TYPES.map(([v,l])=>`<option value="${v}"${payrollType===v?' selected':''}>${l}</option>`).join('')}</select>`;
+
+  const compactRow=`<div class="ts-row-main" onclick="tsToggleRow(this.closest('.ts-shift-row'))">
+    <div class="ts-row-date">${dateLabel}</div>
+    <div class="ts-row-times">
+      <span class="ts-times-rost">${rostStart&&rostEnd?rostStart+'–'+rostEnd:'—'}</span>
+      <span class="ts-times-arrow">→</span>
+      <span class="ts-times-clock${flag!=='green'&&flag!=='grey'?' ts-times-flagged':''}">${clockStart&&clockEnd?clockStart+'–'+clockEnd:noEntry?'No clock-in':'—'}</span>
+    </div>
+    ${payrollEl}
+    ${hoursDisp}
+    <div class="ts-row-flag-dot" style="background:${flagColor}"></div>
+    ${locked?`<span class="ts-locked-label">Locked${lockedBy?' · '+lockedBy:''}</span>`:''}
+  </div>`;
+
+  const mkPair=(val,field)=>{
+    const[hh,mm]=(val||'').split(':');
+    return`<div class="ts-time-pair" data-entry="${entryId||''}" data-emp="${safeEmpId}" data-name="${safeEmpName}" data-date="${date}" data-field="${field}">
+      <input class="ts-time-hm" type="text" maxlength="2" placeholder="HH" value="${hh||''}" onclick="event.stopPropagation()" oninput="tsHMInput(this,'h')" onblur="tsHMBlur(this.closest('.ts-time-pair'))">
+      <span class="ts-hm-colon">:</span>
+      <input class="ts-time-hm" type="text" maxlength="2" placeholder="MM" value="${mm||''}" onclick="event.stopPropagation()" oninput="tsHMInput(this,'m')" onblur="tsHMBlur(this.closest('.ts-time-pair'))" onkeydown="if(event.key==='Enter'){event.preventDefault();tsHMSave(this.closest('.ts-time-pair'))}">
+    </div>`;
+  };
+  const finalInputs=locked
+    ?`<span class="ts-sub-time" style="font-family:'Courier New',monospace;font-weight:800;font-size:0.88rem;">${finalStart||'—'} – ${finalEnd||'—'}</span>`
+    :`${mkPair(finalStart,'start')}<span class="ts-sub-dash">–</span>${mkPair(finalEnd,'end')}`;
+
+  const detailSection=`<div class="ts-row-detail" style="display:${autoExpand?'block':'none'}">
+    <div class="ts-sub-row ts-sub-rostered">
+      <span class="ts-sub-label">Rostered</span>
+      <span class="ts-sub-time">${rostStart&&rostEnd?rostStart+' – '+rostEnd:'— Not rostered'}</span>
+    </div>
+    <div class="ts-sub-row ts-sub-clocked">
+      <span class="ts-sub-label">Clocked</span>
+      <span class="ts-sub-time">${clockStart?clockStart+' – '+(clockEnd||'Still in'):'<em style="color:var(--muted)">No clock-in recorded.</em>'}</span>
+      ${diffLabel}
+    </div>
+    <div class="ts-sub-row ts-sub-final">
+      <span class="ts-sub-label">Final</span>
+      ${finalInputs}
+      <div class="ts-sub-actions">
+        ${entry?lockBtn:''}
+        ${entry?deleteBtn:''}
+      </div>
+    </div>
+    ${manuallyAdjusted&&entry?.adjustedBy?`<div class="ts-sub-adj-note">Adjusted by ${entry.adjustedBy}${entry.adjustmentReason?' · '+entry.adjustmentReason:''}</div>`:''}
+  </div>`;
+
+  return`<div class="${rowClass}" data-entry-id="${entryId||''}" data-date="${date}" data-emp-id="${safeEmpId}">
+    ${compactRow}${detailSection}
+  </div>`;
+}
+
+function tsToggleRow(row){
+  const detail=row?.querySelector('.ts-row-detail');
+  if(detail) detail.style.display=detail.style.display==='none'?'block':'none';
+}
+
 function renderTimesheets(){
-  let rows=[..._entries];
-  const ef=document.getElementById('filter-employee')?.value;
-  const df=document.getElementById('filter-from')?.value;
-  const dt=document.getElementById('filter-to')?.value;
-  if(ef)rows=rows.filter(r=>r.employeeId===ef);
-  if(df)rows=rows.filter(r=>r.date>=df);
-  if(dt)rows=rows.filter(r=>r.date<=dt);
-  const grouped=groupEntriesByDay(rows).sort((a,b)=>b.date.localeCompare(a.date)||a.employeeName.localeCompare(b.employeeName));
-  const tbody=document.getElementById('timesheet-body');
-  if(!grouped.length){tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">No records for this period</div><div class="empty-sub">Try widening the date range</div></div></td></tr>`;return;}
-  tbody.innerHTML=grouped.map(r=>{
-    const dateF=new Date(r.date+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
-    const out=r.clockOut?`<span class="mono">${r.clockOut}</span>`:`<span style="color:var(--dusty)">Still in</span>`;
-    const breakNote=r.breakCount>0?`<div style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem;">${r.breakCount} break${r.breakCount>1?'s':''}${r.breakMins!==null?' · '+r.breakMins+' min unpaid':''}</div>`:'';
-    const hrs=r.hours?`<span class="mono">${r.hours}h</span>`:'—';
-    const badge=r.status==='pending'?'<span class="badge badge-pending">Note pending</span>':r.status==='approved'?'<span class="badge badge-approved">✓ Acknowledged</span>':r.status==='flagged'?'<span class="badge badge-flagged">Flagged</span>':'<span class="badge badge-normal">✓ Normal</span>';
-    const leaveOpts=Object.entries({'':`Worked`,...LEAVE_TYPES}).map(([v,l])=>`<option value="${v}"${r.leaveType===v||(!r.leaveType&&v==='')?'selected':''}>${l}</option>`).join('');
-    const leaveSel=`<select class="ts-leave-select${r.leaveType?' has-leave':''}" onchange="setLeaveType('${r.id}',this.value)">${leaveOpts}</select>`;
-    const rowClass=[r.leaveType?'ts-leave-row':'',r.status==='pending'?'ts-pending-row':''].filter(Boolean).join(' ');
-    return`<tr class="${rowClass}"><td><strong>${r.employeeName}</strong></td><td style="color:var(--muted)">${r.role}</td><td>${dateF}</td><td><span class="mono">${r.clockIn||'—'}</span></td><td>${out}</td><td>${hrs}${breakNote}</td><td>${leaveSel}</td><td>${badge}</td></tr>`;
-  }).join('');
-  const hasPending=grouped.some(r=>r.status==='pending');
-  if(hasPending){
-    const legend=document.createElement('div');
-    legend.className='ts-legend';
-    legend.innerHTML=`<div class="ts-legend-item"><div class="ts-legend-dot" style="background:var(--warning);"></div>Pending review — not included in MYOB export until acknowledged</div>`;
-    document.querySelector('#tab-timesheets .table-wrap').after(legend);
+  const fnStart=getFortnightStart(tsOffset);
+  const fnDays=getFortnight14Days(fnStart);
+  const labelEl=document.getElementById('ts-fn-label');
+  if(labelEl) labelEl.textContent=srFortnightLabel(fnStart);
+
+  const emps=_emps.filter(e=>e.role===tsRole).sort((a,b)=>a.name.localeCompare(b.name));
+  const content=document.getElementById('ts-content');
+  if(!content) return;
+
+  if(!emps.length){
+    content.innerHTML=`<div class="ts-no-shifts">No ${tsRole}s found.</div>`;
+    return;
+  }
+
+  const blocks=emps.map(emp=>{
+    const empShifts=_rosterShifts.filter(s=>s.employee_id===emp.id&&fnDays.includes(s.date)&&!s.is_day_off);
+    const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date));
+    const activeDays=[...new Set([...empShifts.map(s=>s.date),...empEntries.map(e=>e.date)])].sort();
+    if(!activeDays.length) return '';
+
+    const rows=activeDays.map(date=>{
+      const shift=empShifts.find(s=>s.date===date)||null;
+      const dayEntries=empEntries.filter(e=>e.date===date);
+      const entry=dayEntries.length?groupEntriesByDay(dayEntries)[0]:null;
+      return tsBuildRow(emp,date,shift,entry);
+    }).join('');
+
+    const flagCounts=activeDays.reduce((acc,date)=>{
+      const shift=empShifts.find(s=>s.date===date)||null;
+      const dayEntries=empEntries.filter(e=>e.date===date);
+      const entry=dayEntries.length?groupEntriesByDay(dayEntries)[0]:null;
+      if(entry?.locked) return acc;
+      const f=tsGetFlag(shift?.start_time||null,shift?.end_time||null,entry?.finalStart||entry?.clockIn||null,entry?.finalEnd||entry?.clockOut||null,entry?.manuallyAdjusted||false,!entry&&!!shift);
+      if(f==='red'||f==='yellow') acc++;
+      return acc;
+    },0);
+
+    const statusEl=flagCounts
+      ?`<div class="ts-emp-pending">${flagCounts} need${flagCounts===1?'s':''} attention</div>`
+      :`<div class="ts-emp-ok">✓ All clear</div>`;
+
+    const totalMins=activeDays.reduce((acc,date)=>{
+      const dayEntries=empEntries.filter(e=>e.date===date);
+      const entry=dayEntries.length?groupEntriesByDay(dayEntries)[0]:null;
+      if(!entry) return acc;
+      const s=entry.finalStart||entry.clockIn;
+      const e2=entry.finalEnd||entry.clockOut;
+      if(!s||!e2) return acc;
+      return acc+Math.max(0,timeToMin(e2)-timeToMin(s));
+    },0);
+    const totalHrsEl=totalMins>0?`<div class="ts-emp-hours">${(totalMins/60).toFixed(1)}h</div>`:'';
+
+    const empIdStr=String(emp.id);
+    const collapsed=_tsCollapsed.has(empIdStr);
+    return`<div class="ts-emp-block${collapsed?' collapsed':''}" data-emp-id="${empIdStr}">
+      <div class="ts-emp-header" onclick="tsToggleEmp(this)">
+        <div class="ts-emp-chevron" style="transform:rotate(${collapsed?'0':'90'}deg)">&#9658;</div>
+        <div class="ts-emp-name">${emp.name}</div>
+        <div class="ts-emp-role-badge">${emp.role}</div>
+        ${statusEl}
+        ${totalHrsEl}
+      </div>
+      <div class="ts-emp-rows" style="display:${collapsed?'none':'block'}">
+        ${rows}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  content.innerHTML=blocks||`<div class="ts-no-shifts">No shifts found for this fortnight.</div>`;
+}
+
+function tsToggleEmp(headerEl){
+  const block=headerEl.parentElement;
+  const rows=headerEl.nextElementSibling;
+  const chevron=headerEl.querySelector('.ts-emp-chevron');
+  if(!rows||!block) return;
+  const nowCollapsed=rows.style.display==='none';
+  rows.style.display=nowCollapsed?'block':'none';
+  if(chevron) chevron.style.transform=nowCollapsed?'rotate(90deg)':'rotate(0deg)';
+  block.classList.toggle('collapsed',!nowCollapsed);
+  const empId=block.dataset.empId;
+  if(empId){ if(nowCollapsed) _tsCollapsed.delete(empId); else _tsCollapsed.add(empId); }
+}
+
+async function tsLockRow(entryId, empId, date, e){
+  e.stopPropagation();
+  if(!entryId){showToast('No entry to lock');return;}
+  const mgr=currentManager?.name||'Manager';
+  try{
+    await db.update('entries',entryId,{locked:true,locked_by:mgr,locked_at:new Date().toISOString()});
+    const entry=_entries.find(en=>en.id===entryId);
+    if(entry){entry.locked=true;entry.lockedBy=mgr;}
+    renderTimesheets();
+    showToast('Entry locked.');
+  }catch(err){showToast('Could not lock entry');console.error(err);}
+}
+
+async function tsUnlockRow(entryId, e){
+  e.stopPropagation();
+  if(!entryId) return;
+  try{
+    await db.update('entries',entryId,{locked:false,locked_by:null,locked_at:null});
+    const entry=_entries.find(en=>en.id===entryId);
+    if(entry){entry.locked=false;entry.lockedBy=null;}
+    renderTimesheets();
+    showToast('Entry unlocked.');
+  }catch(err){showToast('Could not unlock entry');console.error(err);}
+}
+
+async function tsDeleteRow(entryId, empId, empName, date, e){
+  e.stopPropagation();
+  if(!entryId){showToast('No entry to delete');return;}
+  const mgr=currentManager?.name||'Manager';
+  if(!confirm(`Delete the timesheet entry for ${empName} on ${date}?\n\nThis cannot be undone and will be logged in the audit trail.`)) return;
+  try{
+    const entry=_entries.find(en=>en.id===entryId);
+    await tsSaveAudit({entry_id:entryId,employee_id:empId,employee_name:empName,date,
+      rostered_start:null,rostered_end:null,
+      clocked_start:entry?.clockIn||null,clocked_end:entry?.clockOut||null,
+      final_start:entry?.finalStart||entry?.clockIn||null,final_end:entry?.finalEnd||entry?.clockOut||null,
+      action:'delete',reason:'Manual deletion by manager',manager_name:mgr});
+    await db.delete('entries',entryId);
+    _entries=_entries.filter(en=>en.id!==entryId);
+    renderTimesheets();
+    showToast('Entry deleted.');
+  }catch(err){showToast('Could not delete entry');console.error(err);}
+}
+
+function tsValidTime(v){ return /^([01]?\d|2[0-3]):[0-5]\d$/.test((v||'').trim()); }
+
+function tsHMInput(el, part){
+  el.value=el.value.replace(/\D/g,'').slice(0,2);
+  if(el.value.length!==2) return;
+  if(part==='h'){
+    // HH filled → advance to MM in same pair
+    const mm=el.closest('.ts-time-pair').querySelectorAll('.ts-time-hm')[1];
+    if(mm){mm.focus();mm.select();}
   } else {
-    document.querySelector('#tab-timesheets .ts-legend')?.remove();
+    // MM filled → advance to HH of next pair (start→end)
+    const pair=el.closest('.ts-time-pair');
+    const pairs=pair.closest('.ts-sub-final')?.querySelectorAll('.ts-time-pair');
+    if(pairs&&pairs.length>1&&pairs[0]===pair){
+      const nextHH=pairs[1].querySelectorAll('.ts-time-hm')[0];
+      if(nextHH){nextHH.focus();nextHH.select();}
+    }
   }
 }
 
+function tsHMSave(pairEl){
+  const val=tsPairValue(pairEl);
+  if(!val) return;
+  tsUpdateFinal(pairEl.dataset.entry||null,pairEl.dataset.emp,pairEl.dataset.name,pairEl.dataset.date,pairEl.dataset.field,val,pairEl);
+}
+
+function tsPairValue(pairEl){
+  const inputs=pairEl.querySelectorAll('.ts-time-hm');
+  const hRaw=inputs[0]?.value||''; const mRaw=inputs[1]?.value||'';
+  if(!hRaw||!mRaw) return null;
+  const hh=hRaw.padStart(2,'0'), mm=mRaw.padStart(2,'0');
+  const h=parseInt(hh), m=parseInt(mm);
+  if(h>23||m>59) return null;
+  return hh+':'+mm;
+}
+
+function tsHMBlur(pairEl){
+  setTimeout(()=>{
+    if(pairEl.contains(document.activeElement)) return; // still inside the pair
+    const val=tsPairValue(pairEl);
+    if(!val) return;
+    const entryId=pairEl.dataset.entry||null;
+    tsUpdateFinal(entryId,pairEl.dataset.emp,pairEl.dataset.name,pairEl.dataset.date,pairEl.dataset.field,val,pairEl);
+  },120);
+}
+
+async function tsUpdateFinal(entryId, empId, empName, date, field, value, inputEl){
+  const v=(value||'').trim();
+  if(!v) return;
+  if(!tsValidTime(v)){ showToast('Invalid time — enter HH and MM separately'); return; }
+  const mgr=currentManager?.name||'Manager';
+
+  if(!entryId){
+    // No entry yet — create one when both start and end pairs are complete
+    const subFinal=inputEl?.closest('.ts-sub-final');
+    const pairs=subFinal?subFinal.querySelectorAll('.ts-time-pair'):[];
+    const startVal=pairs[0]?tsPairValue(pairs[0]):null;
+    const endVal=pairs[1]?tsPairValue(pairs[1]):null;
+    if(!startVal||!endVal) return; // wait for both
+    const startMins=timeToMin(startVal), endMins=timeToMin(endVal);
+    if(endMins<=startMins){ showToast('End time must be after start time'); return; }
+    const hours=((endMins-startMins)/60).toFixed(2);
+    const emp=_emps.find(em=>em.id==empId);
+    try{
+      const newId='M'+Date.now();
+      const newEntry={id:newId,employee_id:empId,employee_name:empName,role:emp?.role||'',
+        date,clock_in:startVal,clock_out:endVal,hours,status:'normal',
+        final_start:startVal,final_end:endVal,
+        manually_adjusted:true,adjusted_by:mgr,adjustment_reason:'Manual entry by manager',
+        adjusted_at:new Date().toISOString()};
+      await db.insert('entries',newEntry);
+      _entries.push(normaliseEntry({...newEntry,id:newId}));
+      await tsSaveAudit({entry_id:newId,employee_id:empId,employee_name:empName,date,
+        rostered_start:null,rostered_end:null,clocked_start:null,clocked_end:null,
+        final_start:startVal,final_end:endVal,
+        action:'manual_entry',reason:'Manual entry by manager',manager_name:mgr});
+      _tsExpandEntryId=newId;
+      renderTimesheets();
+      _tsExpandEntryId=null;
+      showToast('Entry added.');
+    }catch(err){showToast('Could not add entry: '+(err.message||err));console.error(err);}
+    return;
+  }
+
+  const entry=_entries.find(en=>en.id==entryId);
+  const update=field==='start'?{final_start:v,manually_adjusted:true,adjusted_by:mgr,adjusted_at:new Date().toISOString()}
+                              :{final_end:v,manually_adjusted:true,adjusted_by:mgr,adjusted_at:new Date().toISOString()};
+  try{
+    await db.update('entries',entryId,update);
+    if(entry){
+      if(field==='start') entry.finalStart=v; else entry.finalEnd=v;
+      entry.manuallyAdjusted=true; entry.adjustedBy=mgr;
+    }
+    await tsSaveAudit({entry_id:entryId,employee_id:empId,employee_name:empName,date,
+      rostered_start:null,rostered_end:null,
+      clocked_start:entry?.clockIn||null,clocked_end:entry?.clockOut||null,
+      final_start:field==='start'?v:(entry?.finalStart||entry?.clockIn||null),
+      final_end:field==='end'?v:(entry?.finalEnd||entry?.clockOut||null),
+      action:'adjustment',reason:`Final ${field} time set to ${v}`,manager_name:mgr});
+    _tsExpandEntryId=String(entryId);
+    renderTimesheets();
+    _tsExpandEntryId=null;
+  }catch(err){showToast('Could not save: '+(err.message||err));console.error(err);}
+}
+
+async function tsSavePayrollType(entryId, value){
+  const entry=_entries.find(e=>e.id==entryId);
+  try{
+    await db.update('entries',entryId,{payroll_type:value||null});
+    if(entry) entry.payrollType=value||null;
+  }catch(err){showToast('Could not save shift type: '+(err.message||err));console.error(err);}
+}
+
+async function tsSaveAudit(data){
+  try{ await db.insert('timesheet_audit',data); }catch(e){ console.error('Audit log failed',e); }
+}
+
 function exportMYOB(){
-  let rows=[..._entries];
-  const ef=document.getElementById('filter-employee')?.value;
-  const df=document.getElementById('filter-from')?.value;
-  const dt=document.getElementById('filter-to')?.value;
-  if(ef)rows=rows.filter(r=>r.employeeId===ef);
-  if(df)rows=rows.filter(r=>r.date>=df);
-  if(dt)rows=rows.filter(r=>r.date<=dt);
-  const grouped=groupEntriesByDay(rows).filter(r=>r.clockOut&&r.hours);
-  const done=grouped.filter(r=>r.status!=='pending');
-  const skipped=grouped.length-done.length;
-  if(!done.length){showToast(skipped?`${skipped} entr${skipped>1?'ies':'y'} pending review — nothing to export`:'No completed entries to export');return;}
-  const csv=[['Employee Name','Date','Start Time','Finish Time','Hours','Activity','Leave Type'].join(','),...done.map(r=>[`"${r.employeeName}"`,r.date.split('-').reverse().join('/'),r.clockIn||'',r.clockOut||'',r.hours||'',`"${r.role}"`,`"${formatLeaveType(r.leaveType)}"`].join(','))].join('\n');
+  const fnStart=getFortnightStart(tsOffset);
+  const fnDays=getFortnight14Days(fnStart);
+  const allEntries=_entries.filter(e=>fnDays.includes(e.date));
+  const locked=allEntries.filter(e=>e.locked&&(e.finalStart||e.clockIn)&&(e.finalEnd||e.clockOut));
+  const unlocked=allEntries.filter(e=>!e.locked);
+
+  if(!locked.length){showToast('No locked entries to export.');return;}
+  if(unlocked.length){
+    if(!confirm(`${unlocked.length} entr${unlocked.length===1?'y':'ies'} are not yet locked and will not be included in this export.\n\nExport ${locked.length} locked entr${locked.length===1?'y':'ies'} anyway?`)) return;
+  }
+
+  const fnLabel=srFortnightLabel(fnStart).replace(/[^a-zA-Z0-9-]/g,'-');
+  const lines=['{}'];
+  const headers=['Date','Payroll Category','Units','Employee First Name','Employee Co./Last Name','Notes','Customer Card ID','Customer First Name','Customer Co./Last Name','Customer Record ID','Employee Card ID','Employee Record ID','Job','Start/Stop Time'];
+  lines.push(headers.join('\t'));
+
+  locked.forEach(entry=>{
+    const emp=_emps.find(em=>em.id===entry.employeeId);
+    const nameParts=(entry.employeeName||'').trim().split(' ');
+    const firstName=nameParts[0]||'';
+    const lastName=nameParts.slice(1).join(' ')||'';
+    const dateF=entry.date.split('-').reverse().join('/');
+    const start=entry.finalStart||entry.clockIn||'';
+    const end=entry.finalEnd||entry.clockOut||'';
+    const startMins=start?timeToMin(start):0;
+    const endMins=end?timeToMin(end):0;
+    const units=start&&end?((endMins-startMins)/60).toFixed(2):'0.00';
+    const row=[dateF,'Base Hourly',units,firstName,lastName,'','','','','','*None',emp?.myob_record_id||'','',''];
+    lines.push(row.join('\t'));
+  });
+
+  const txt=lines.join('\n');
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download=`wellness-timesheets-${df||'all'}-to-${dt||'all'}.csv`;
+  a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));
+  a.download=`timesheets-${fnLabel}.txt`;
   a.click();
-  showToast(`Exported ${done.length} entr${done.length>1?'ies':'y'}${skipped?' · '+skipped+' pending review skipped':''}  ✓`);
+  showToast(`Exported ${locked.length} entr${locked.length===1?'y':'ies'} ✓`);
 }
 
 async function setLeaveType(entryId, leaveType){
@@ -2315,7 +2803,7 @@ async function setLeaveType(entryId, leaveType){
 }
 
 async function rbMarkLeave(empId, date, shiftId, leaveType){
-  const shift=_rosterShifts.find(s=>s.id===shiftId);
+  const shift=_rosterShifts.find(s=>s.id==shiftId);
   const emp=_emps.find(e=>e.id===empId);
   if(!shift||!emp) return;
   // Block if employee has actually clocked in (real entry, not a leave entry)
@@ -2535,6 +3023,79 @@ function renderNotesAudit(resetPage=false){
     <button onclick="_naPage--;renderNotesAudit()" ${_naPage===0?'disabled':''} style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:0.35rem 0.9rem;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;${_naPage===0?'opacity:0.35;cursor:not-allowed;':''}">← Prev</button>
     <span style="font-size:0.75rem;color:var(--muted);font-weight:600;">Page ${_naPage+1} of ${totalPages} · ${sorted.length} total</span>
     <button onclick="_naPage++;renderNotesAudit()" ${_naPage>=totalPages-1?'disabled':''} style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:0.35rem 0.9rem;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;${_naPage>=totalPages-1?'opacity:0.35;cursor:not-allowed;':''}">Next →</button>`;
+}
+
+let _tsaPage=0;
+let _tsAuditRows=[];
+
+async function renderTimesheetAudit(resetPage=false){
+  const tbody=document.getElementById('ts-audit-body');
+  if(!tbody) return;
+  const today=rbDateKey(new Date());
+  const empSel=document.getElementById('tsa-filter-emp');
+  if(empSel){
+    const prev=empSel.value;
+    empSel.innerHTML='<option value="">All staff</option>';
+    _emps.forEach(e=>{const o=document.createElement('option');o.value=e.name;o.textContent=e.name;empSel.appendChild(o);});
+    if(prev) empSel.value=prev;
+  }
+  const fromEl=document.getElementById('tsa-filter-from');
+  const toEl=document.getElementById('tsa-filter-to');
+  if(fromEl&&!fromEl.value) fromEl.value=today;
+  if(toEl&&!toEl.value) toEl.value=today;
+  if(resetPage) _tsaPage=0;
+  // Fetch from DB
+  try{
+    let url=`${SUPABASE_URL}/rest/v1/timesheet_audit?select=*&order=created_at.desc`;
+    const df=fromEl?.value; const dt=toEl?.value;
+    const ef=document.getElementById('tsa-filter-emp')?.value;
+    const af=document.getElementById('tsa-filter-action')?.value;
+    if(df) url+=`&created_at=gte.${df}T00:00:00`;
+    if(dt) url+=`&created_at=lte.${dt}T23:59:59`;
+    if(ef) url+=`&employee_name=eq.${encodeURIComponent(ef)}`;
+    if(af) url+=`&action=eq.${encodeURIComponent(af)}`;
+    const r=await fetch(url,{headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY}});
+    _tsAuditRows=await r.json();
+  }catch(e){tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="empty-msg">Could not load audit log</div></div></td></tr>`;return;}
+  if(!_tsAuditRows.length){
+    tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="empty-msg">No timesheet audit entries yet.</div></div></td></tr>`;
+    document.getElementById('tsa-pagination')?.remove();
+    return;
+  }
+  const totalPages=Math.ceil(_tsAuditRows.length/CA_PAGE_SIZE);
+  _tsaPage=Math.min(_tsaPage,totalPages-1);
+  const page=_tsAuditRows.slice(_tsaPage*CA_PAGE_SIZE,(_tsaPage+1)*CA_PAGE_SIZE);
+  tbody.innerHTML=page.map(a=>{
+    const dateF=a.date?new Date(a.date+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):
+      new Date(a.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
+    const loggedAt=new Date(a.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    const actionLabel={manual_entry:'Manual entry',adjustment:'Adjustment',delete:'Delete',lock:'Lock',unlock:'Unlock'}[a.action]||a.action||'—';
+    const rost=a.rostered_start&&a.rostered_end?`${a.rostered_start}–${a.rostered_end}`:'—';
+    const clocked=a.clocked_start&&a.clocked_end?`${a.clocked_start}–${a.clocked_end}`:'—';
+    const final=a.final_start&&a.final_end?`${a.final_start}–${a.final_end}`:'—';
+    return`<tr>
+      <td>${dateF}</td>
+      <td><strong>${a.employee_name||'—'}</strong></td>
+      <td style="font-size:0.78rem;font-weight:700;color:var(--muted);">${actionLabel}</td>
+      <td style="font-size:0.78rem;color:var(--muted);">${rost}</td>
+      <td style="font-size:0.78rem;color:var(--muted);">${clocked}</td>
+      <td style="font-size:0.78rem;">${final}</td>
+      <td style="max-width:220px;font-size:0.78rem;">${a.reason||'—'}</td>
+      <td style="font-size:0.78rem;color:var(--muted);">${a.manager_name||'—'}</td>
+      <td style="font-size:0.75rem;color:var(--muted);">${loggedAt}</td>
+    </tr>`;
+  }).join('');
+  let pag=document.getElementById('tsa-pagination');
+  if(!pag){
+    pag=document.createElement('div');
+    pag.id='tsa-pagination';
+    pag.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:0.75rem 0 0.25rem;';
+    tbody.closest('.table-wrap').after(pag);
+  }
+  pag.innerHTML=`
+    <button onclick="_tsaPage--;renderTimesheetAudit()" ${_tsaPage===0?'disabled':''} style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:0.35rem 0.9rem;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;${_tsaPage===0?'opacity:0.35;cursor:not-allowed;':''}">← Prev</button>
+    <span style="font-size:0.75rem;color:var(--muted);font-weight:600;">Page ${_tsaPage+1} of ${totalPages} · ${_tsAuditRows.length} total</span>
+    <button onclick="_tsaPage++;renderTimesheetAudit()" ${_tsaPage>=totalPages-1?'disabled':''} style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:0.35rem 0.9rem;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;${_tsaPage>=totalPages-1?'opacity:0.35;cursor:not-allowed;':''}">Next →</button>`;
 }
 
 async function resolveNote(id,status){
@@ -3056,7 +3617,7 @@ function rbNavFn(dir){
   if(rbSelectedDay){
     const d=new Date(rbSelectedDay+'T12:00:00');
     d.setDate(d.getDate()+dir*14);
-    rbSelectedDay=d.toISOString().slice(0,10);
+    rbSelectedDay=rbDateKey(d);
   }
   renderRoster();
 }
@@ -3163,7 +3724,7 @@ function rbNavDay(dir){
   if(!rbSelectedDay) return;
   const d=new Date(rbSelectedDay+'T12:00:00');
   d.setDate(d.getDate()+dir);
-  rbSelectedDay=d.toISOString().slice(0,10);
+  rbSelectedDay=rbDateKey(d);
   rbSyncFnOffset();
   renderRoster();
 }
@@ -3214,7 +3775,7 @@ function renderDayTimelineForRole(role){
     const leaveEntry=_entries.find(e=>e.employeeId===emp.id&&e.date===selectedDay&&e.leaveType);
     const currentLeave=leaveEntry?.leaveType||'';
     const drag=isLocked?'':` onmousedown="rbStartDrag(event,'${s.id}','move')"`;
-    const delBtn=!isLocked?`<button class="rb-shift-del" onclick="event.stopPropagation();rbDeleteShift('${s.id}','${role}')" title="Remove">&#215;</button>`:'';
+    const delBtn=!isLocked?`<button class="rb-shift-del" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbDeleteShift('${s.id}','${role}')" title="Remove">&#215;</button>`:'';
     const lHandle=!isLocked?`<div class="rb-shift-handle left" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','left')"></div>`:'';
     const rHandle=!isLocked?`<div class="rb-shift-handle right" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','right')"></div>`:'';
     const leaveOpts=`<option value="">Worked Shift</option>`+Object.entries(LEAVE_TYPES).map(([v,l])=>`<option value="${v}"${currentLeave===v?' selected':''}>${l}</option>`).join('');
@@ -3298,7 +3859,7 @@ async function rbAddShift(empId,date,role){
 async function rbDeleteShift(shiftId,role){
   try{
     await db.delete('roster_shifts',shiftId);
-    const shift=_rosterShifts.find(s=>s.id===shiftId);
+    const shift=_rosterShifts.find(s=>s.id==shiftId);
     const r=role||rbRoleForEmp(shift?.employee_id);
     _rosterShifts=_rosterShifts.filter(s=>s.id!==shiftId);
     renderDayTimelineForRole(r);
@@ -3307,7 +3868,7 @@ async function rbDeleteShift(shiftId,role){
 }
 
 async function rbToggleLane(shiftId, role){
-  const shift=_rosterShifts.find(s=>s.id===shiftId);
+  const shift=_rosterShifts.find(s=>s.id==shiftId);
   if(!shift) return;
   const newLane=shift.lane==='75plus'?'floor':'75plus';
   const prevLane=shift.lane;
@@ -3323,7 +3884,7 @@ async function rbToggleLane(shiftId, role){
 }
 
 async function rbSaveShiftTimes(shiftId,startTime,endTime){
-  const shift=_rosterShifts.find(s=>s.id===shiftId);
+  const shift=_rosterShifts.find(s=>s.id==shiftId);
   if(!shift) return;
   shift.start_time=startTime; shift.end_time=endTime;
   const role=rbRoleForEmp(shift.employee_id);
@@ -3334,18 +3895,22 @@ async function rbSaveShiftTimes(shiftId,startTime,endTime){
 }
 
 function rbStartDrag(e,shiftId,type){
-  if(rbIsLocked(rbGetFnStart())) return;
   e.preventDefault();
-  const shift=_rosterShifts.find(s=>s.id===shiftId);
+  // Use loose equality (==) so string '123' matches numeric id 123 from DB
+  const shift=_rosterShifts.find(s=>s.id==shiftId);
   if(!shift) return;
-  let el=e.target; while(el&&!el.classList.contains('rb-tl-track')) el=el.parentElement;
-  if(!el) return;
-  _rbDrag={shiftId,type,trackEl:el,startX:e.clientX,
+  const shiftRole=rbRoleForEmp(shift.employee_id);
+  if(shiftRole && rbIsLockedForRole(rbGetFnStart(),shiftRole)) return;
+  // Walk up from e.target to find the bar element directly, then its track parent
+  let barEl=e.target; while(barEl&&!barEl.classList.contains('rb-shift-bar')) barEl=barEl.parentElement;
+  if(!barEl) return;
+  const trackEl=barEl.parentElement;
+  if(!trackEl||!trackEl.classList.contains('rb-tl-track')) return;
+  _rbDrag={shiftId,type,trackEl,barEl,startX:e.clientX,
     origStart:timeStrToMin(shift.start_time)||TL_START,
     origEnd:timeStrToMin(shift.end_time)||TL_END,
     curStart:null,curEnd:null};
-  const bar=el.querySelector(`.rb-shift-bar[data-shift-id="${shiftId}"]`);
-  if(bar) bar.classList.add('dragging');
+  barEl.classList.add('dragging');
 }
 
 function rbOnMouseMove(e){
@@ -3363,20 +3928,18 @@ function rbOnMouseMove(e){
     en=Math.min(TL_END,Math.max(s+TL_SNAP,snapMin(en+dMin)));
   }
   _rbDrag.curStart=s; _rbDrag.curEnd=en;
-  const bar=_rbDrag.trackEl.querySelector(`.rb-shift-bar[data-shift-id="${_rbDrag.shiftId}"]`);
-  if(bar){
-    bar.style.left=((s-TL_START)/TL_RANGE*100)+'%';
-    bar.style.width=((en-s)/TL_RANGE*100)+'%';
-    const lbl=bar.querySelector('.rb-shift-label');
-    if(lbl) lbl.textContent=minToTimeStr(s)+'–'+minToTimeStr(en);
-  }
+  const bar=_rbDrag.barEl;
+  bar.style.left=((s-TL_START)/TL_RANGE*100)+'%';
+  bar.style.width=((en-s)/TL_RANGE*100)+'%';
+  const lbl=bar.querySelector('.rb-shift-label');
+  if(lbl) lbl.textContent=minToTimeStr(s)+'–'+minToTimeStr(en);
   rbShowDragIndicators(s,en,_rbDrag.type);
 }
 
 function rbOnMouseUp(){
   if(!_rbDrag) return;
   const{shiftId,curStart,curEnd}=_rbDrag;
-  document.querySelectorAll('.rb-shift-bar.dragging').forEach(b=>b.classList.remove('dragging'));
+  _rbDrag.barEl.classList.remove('dragging');
   _rbDrag=null;
   rbRemoveDragIndicators();
   if(curStart!=null&&curEnd!=null) rbSaveShiftTimes(shiftId,minToTimeStr(curStart),minToTimeStr(curEnd));
@@ -3415,6 +3978,7 @@ function toggleSettingsSection(key){
   chevron.innerHTML=open?'&#9660;':'&#9658;';
   if(open&&key==='clockaudit') renderClockAudit();
   if(open&&key==='notesaudit') renderNotesAudit();
+  if(open&&key==='tsaudit') renderTimesheetAudit();
   if(open&&key==='inactive') renderInactiveStaff();
 }
 
@@ -3423,6 +3987,10 @@ function renderAnchorDate(){
   if(el&&_rosterConfig) el.value=_rosterConfig.cycle_start_date||'';
   const gEl=document.getElementById('grace-period');
   if(gEl) gEl.value=_rosterConfig?.grace_period??GRACE;
+  const yEl=document.getElementById('yellow-threshold');
+  if(yEl) yEl.value=_rosterConfig?.yellow_threshold??YELLOW_THRESHOLD;
+  const rEl=document.getElementById('red-threshold');
+  if(rEl) rEl.value=_rosterConfig?.red_threshold??RED_THRESHOLD;
 }
 
 function renderRosterGrid(){
@@ -3542,6 +4110,24 @@ async function saveGracePeriod(){
   }catch(e){showToast('Could not save — check connection');console.error(e);}
 }
 
+async function saveDiscrepancyThresholds(){
+  const y=parseInt(document.getElementById('yellow-threshold').value,10);
+  const r=parseInt(document.getElementById('red-threshold').value,10);
+  if(isNaN(y)||y<1||y>120){showToast('Yellow threshold must be 1–120 minutes');return;}
+  if(isNaN(r)||r<1||r>120){showToast('Red threshold must be 1–120 minutes');return;}
+  if(y>=r){showToast('Yellow threshold must be less than red threshold');return;}
+  if(!confirm(`Set discrepancy thresholds to yellow after ${y} min, red after ${r} min?`)) return;
+  try{
+    if(_rosterConfig) await db.update('roster_config','default',{yellow_threshold:y,red_threshold:r});
+    else await db.insert('roster_config',{id:'default',yellow_threshold:y,red_threshold:r});
+    if(_rosterConfig){_rosterConfig.yellow_threshold=y;_rosterConfig.red_threshold=r;}
+    else _rosterConfig={id:'default',yellow_threshold:y,red_threshold:r};
+    YELLOW_THRESHOLD=y;
+    RED_THRESHOLD=r;
+    showToast('Thresholds saved');
+  }catch(e){showToast('Could not save — check connection');console.error(e);}
+}
+
 async function saveRosterTemplate(){
   const empId=document.getElementById('roster-emp-select').value;
   if(!empId) return;
@@ -3632,7 +4218,14 @@ async function deleteOverride(id){
 /* ═══════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════ */
-focusRFID(); setDefaultDates();
+// Register drag listeners FIRST before any code that could throw
+document.addEventListener('mousemove', rbOnMouseMove);
+document.addEventListener('mouseup', rbOnMouseUp);
+document.addEventListener('touchmove', e=>{if(_rbDrag){e.preventDefault();rbOnMouseMove(e.touches[0]);}},{passive:false});
+document.addEventListener('touchend', ()=>{if(_rbDrag) rbOnMouseUp();});
+
+try{ focusRFID(); }catch(e){ console.error('focusRFID error',e); }
+try{ setDefaultDates(); }catch(e){ console.error('setDefaultDates error',e); }
 
 // Load roster data on startup so clock-in grace period checks work from the kiosk
 (async()=>{
@@ -3641,12 +4234,6 @@ focusRFID(); setDefaultDates();
     _rosterConfig=cfg[0]||null; _rosterTemplates=tmpl; _rosterOverrides=ov; _rosterShifts=shifts;
   }catch(e){console.error('Roster load error:',e);}
 })();
-
-// Roster drag event listeners
-document.addEventListener('mousemove', rbOnMouseMove);
-document.addEventListener('mouseup', rbOnMouseUp);
-document.addEventListener('touchmove', e=>{if(_rbDrag){e.preventDefault();rbOnMouseMove(e.touches[0]);}},{passive:false});
-document.addEventListener('touchend', ()=>{if(_rbDrag) rbOnMouseUp();});
 
 </script>
 </body>
