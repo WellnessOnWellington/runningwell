@@ -620,11 +620,12 @@
   .sr-day-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.85rem; }
   .sr-day-col-header { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; padding: 0.3rem 0; }
   .sr-day-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
-  .sr-day-card.today { border-color: var(--dusty); box-shadow: 0 0 0 3px rgba(212,137,154,0.18), var(--shadow); }
+  .sr-day-card.today { border-color: var(--dusty); box-shadow: 0 0 0 3px rgba(212,137,154,0.18), var(--shadow); border-top: 3px solid var(--burgundy); }
   .sr-day-card.past { opacity: 0.42; filter: grayscale(0.4); }
   .sr-day-card-header { padding: 0.65rem 0.9rem; background: var(--warm-white); border-bottom: 1px solid var(--border); }
   .sr-day-name { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
   .sr-day-date { font-family: 'Lora',serif; font-size: 1rem; font-weight: 600; color: var(--charcoal); margin-top: 0.05rem; }
+  .sr-day-card.today .sr-day-card-header { background: var(--blush); border-bottom-color: var(--dusty); }
   .sr-day-card.today .sr-day-name { color: var(--burgundy); }
   .sr-day-card.today .sr-day-date { color: var(--burgundy); }
   .sr-day-shifts { padding: 0.6rem 0.9rem; display: flex; flex-direction: column; gap: 0.4rem; min-height: 2.5rem; }
@@ -652,6 +653,36 @@
   .sr-person-day.today-row { background: rgba(139,37,53,0.06); border-left: 3px solid var(--burgundy); padding-left: calc(0.6rem - 3px); margin-left: -0.75rem; padding-right: 0.75rem; border-radius: 0 6px 6px 0; }
   .sr-person-day.today-row .sr-person-day-name { color: var(--burgundy); }
   .sr-person-day.today-row .sr-person-day-date { color: var(--dusty); }
+
+  /* Now / Gantt view */
+  #view-staff-roster.sr-now-mode { height: 100vh; overflow: hidden; }
+  #view-staff-roster.sr-now-mode .sr-filters { display: none; }
+  #view-staff-roster.sr-now-mode .sr-content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 1rem; }
+
+  .sr-gnow { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  .sr-gnow-axis-row { display: flex; align-items: flex-end; flex-shrink: 0; padding-bottom: 0.5rem; padding-right: 1.5rem; border-bottom: 1.5px solid var(--border); margin-bottom: 0.25rem; }
+  .sr-gnow-name-col { width: 140px; flex-shrink: 0; }
+  .sr-gnow-axis { flex: 1; position: relative; height: 28px; }
+  .sr-gnow-tick { position: absolute; transform: translateX(-50%); top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .sr-gnow-tick-mark { width: 1px; height: 6px; background: var(--border-dk); }
+  .sr-gnow-tick-label { font-size: 0.6rem; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; }
+
+  .sr-gnow-body { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; overflow: hidden; }
+  .sr-gnow-now-line { position: absolute; top: 0; bottom: 0; left: calc(140px + var(--now-pct, -1) * (100% - 140px)); width: 3px; background: var(--burgundy); box-shadow: 0 0 6px rgba(139,37,53,0.5); z-index: 4; pointer-events: none; display: none; }
+  .sr-gnow-now-badge { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: var(--burgundy); color: #fff; font-size: 0.58rem; font-weight: 800; padding: 0.12rem 0.4rem; border-radius: 20px; white-space: nowrap; font-family: 'Courier New',monospace; }
+
+  .sr-gnow-group { display: flex; flex-direction: column; min-height: 0; }
+  .sr-gnow-group-hdr { display: flex; align-items: center; gap: 0.45rem; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); padding: 0.4rem 0 0.25rem; flex-shrink: 0; }
+  .sr-gnow-group-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .sr-gnow-rows { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .sr-gnow-row { flex: 1; display: flex; align-items: center; min-height: 28px; padding-right: 1.5rem; border-bottom: 1px solid rgba(234,217,220,0.5); }
+  .sr-gnow-row:last-child { border-bottom: none; }
+  .sr-gnow-row-name { width: 140px; flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: var(--charcoal); padding-right: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sr-gnow-track { flex: 1; position: relative; height: 55%; min-height: 18px; max-height: 30px; background: var(--warm-white); border-radius: 6px; border: 1px solid var(--border); }
+  .sr-gnow-bar { position: absolute; top: 0; bottom: 0; border-radius: 6px; display: flex; align-items: center; padding: 0 0.5rem; overflow: hidden; min-width: 3px; }
+  .sr-gnow-bar-time { font-size: 0.6rem; font-weight: 700; color: rgba(255,255,255,0.92); white-space: nowrap; font-family: 'Courier New',monospace; }
+  .sr-gnow-empty { text-align: center; padding: 4rem 2rem; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
 
   /* ══════════════════════════════
      ROSTER TAB
@@ -729,10 +760,38 @@
   .rb-fn-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:0.45rem; margin-bottom:1.25rem; }
   .rb-day-cell { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); padding:0.55rem 0.45rem; cursor:pointer; min-height:85px; transition:all 0.15s; display:flex; flex-direction:column; gap:0.28rem; }
   .rb-day-cell:hover { border-color:var(--burgundy); box-shadow:0 2px 8px rgba(140,30,50,0.12); }
-  .rb-day-cell.today { border-color:var(--burgundy); background:var(--blush-lt); }
-  .rb-day-cell.past { opacity:0.5; }
+  .rb-day-cell.today { border-top:3px solid var(--burgundy); background:rgba(212,137,154,0.08); }
+  .rb-day-cell.today:hover { border-color:var(--burgundy); }
+  .rb-day-cell.past { opacity:0.45; cursor:default; pointer-events:none; }
+
+  /* ── Print roster ── */
+  #roster-print-area { display:none; }
+  @media print {
+    body > * { display:none !important; }
+    #roster-print-area { display:block !important; }
+    .rp-page { width:100%; page-break-after:always; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+    .rp-page:last-child { page-break-after:auto; }
+    .rp-header { display:flex; align-items:center; justify-content:space-between; border-bottom:2.5px solid #8B2535; padding-bottom:6px; margin-bottom:8px; }
+    .rp-header-left { display:flex; align-items:center; gap:10px; }
+    .rp-header-logo { height:36px; width:auto; }
+    .rp-header-clinic { font-size:11pt; font-weight:800; color:#2D2426; }
+    .rp-header-sub { font-size:8pt; color:#8A7A7D; font-weight:600; }
+    .rp-header-right { text-align:right; font-size:8pt; color:#8A7A7D; font-weight:600; }
+    .rp-role-label { font-size:13pt; font-weight:900; color:#8B2535; margin-bottom:6px; }
+    .rp-table { width:100%; border-collapse:collapse; font-size:7pt; }
+    .rp-table th { background:#8B2535; color:#fff; padding:3px 4px; text-align:center; font-weight:700; white-space:nowrap; font-size:6.5pt; border:1px solid #8B2535; }
+    .rp-table th.rp-name-col { text-align:left; min-width:70px; }
+    .rp-table td { border:1px solid #EAD9DC; padding:3px 4px; text-align:center; font-size:6.5pt; vertical-align:middle; }
+    .rp-table td.rp-name-cell { text-align:left; font-weight:700; white-space:nowrap; font-size:7pt; }
+    .rp-table tr:nth-child(even) td { background:#FAF0F2; }
+    .rp-shift { color:#2D2426; font-weight:600; }
+    .rp-leave { color:#A07228; font-weight:700; font-style:italic; }
+    .rp-off { color:#C8B8BB; }
+  }
   .rb-day-hdr { font-size:0.58rem; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); }
   .rb-day-date { font-size:1.1rem; font-weight:900; color:var(--charcoal); line-height:1.1; }
+  .rb-day-cell.today .rb-day-hdr { color:var(--burgundy); }
+  .rb-day-cell.today .rb-day-date { color:var(--burgundy); }
   .rb-shift-pill { font-size:0.58rem; font-weight:700; padding:0.12rem 0.35rem; border-radius:4px; background:var(--blush-lt); color:var(--burgundy); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .rb-cov-row { display:flex; align-items:center; gap:0.3rem; margin-top:auto; }
   .rb-cov-dot { width:7px; height:7px; border-radius:50%; display:inline-block; flex-shrink:0; }
@@ -780,9 +839,9 @@
   .rb-shift-bar.unpaid-leave { background:linear-gradient(135deg,#a0a0a0,#b8b8b8); }
   .rb-shift-bar.unpaid-leave:hover { box-shadow:0 2px 8px rgba(100,100,100,0.28); }
   .rb-shift-bar.unpaid-leave .rb-shift-label { color:#222; }
-  .rb-shift-bar.bereavement-leave { background:linear-gradient(135deg,#9b7db5,#8568a0); }
-  .rb-shift-bar.bereavement-leave:hover { box-shadow:0 2px 8px rgba(130,80,170,0.28); }
-  .rb-shift-bar.bereavement-leave .rb-shift-label { color:#fff; }
+  .rb-shift-bar.compassionate-leave { background:linear-gradient(135deg,#9b7db5,#8568a0); }
+  .rb-shift-bar.compassionate-leave:hover { box-shadow:0 2px 8px rgba(130,80,170,0.28); }
+  .rb-shift-bar.compassionate-leave .rb-shift-label { color:#fff; }
   .rb-panels { display:flex; flex-direction:column; gap:1rem; }
   .rb-panel { border:1.5px solid var(--border); border-radius:var(--radius); overflow:hidden; background:var(--white); box-shadow:var(--shadow); }
   .rb-panel-header { display:flex; align-items:center; padding:0.65rem 1rem; background:var(--warm-white); border-bottom:1.5px solid var(--border); gap:1rem; cursor:pointer; user-select:none; }
@@ -799,16 +858,20 @@
   .rb-leave-legend { display:flex; align-items:center; gap:0.55rem; font-size:0.6rem; color:var(--muted); font-weight:600; flex-wrap:wrap; }
   .rb-legend-item { display:flex; align-items:center; gap:0.22rem; white-space:nowrap; }
   .rb-legend-dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
+  .rb-legend-dot.worked { background:var(--burgundy); }
   .rb-legend-dot.annual-leave { background:#f5c030; }
   .rb-legend-dot.personal-leave { background:#4caf80; }
   .rb-legend-dot.public-holiday { background:#5b9bd5; }
   .rb-legend-dot.unpaid-leave { background:#a0a0a0; }
-  .rb-legend-dot.bereavement-leave { background:#9b7db5; }
+  .rb-legend-dot.compassionate-leave { background:#9b7db5; }
   /* ── Timesheets redesign ── */
   .ts-role-tabs-bar { display:flex; gap:0.25rem; background:var(--warm-white); border:1.5px solid var(--border); border-radius:12px; padding:0.3rem; margin:0 0 1.25rem; width:fit-content; }
   .ts-role-tab { padding:0.55rem 1.4rem; border-radius:9px; font-size:0.85rem; font-weight:700; cursor:pointer; border:1.5px solid var(--border); font-family:'Nunito',sans-serif; background:var(--white); color:var(--muted); transition:all 0.08s; letter-spacing:0.02em; white-space:nowrap; }
   .ts-role-tab:hover:not(.active) { color:var(--burgundy); }
   .ts-role-tab.active { background:var(--burgundy); color:#fff; box-shadow:0 2px 8px rgba(139,37,53,0.25); border-color:var(--burgundy); }
+  .ts-role-tab.ready { background:var(--success-lt); color:var(--success); border-color:#b2d4be; }
+  .ts-role-tab.ready:hover:not(.active) { background:#d4eadb; }
+  .ts-role-tab.ready.active { background:var(--success); color:#fff; border-color:var(--success); box-shadow:0 2px 8px rgba(58,107,79,0.25); }
   .ts-fn-btn { background:var(--white); border:1.5px solid var(--border); border-radius:30px; padding:0 0.9rem; font-size:0.8rem; font-weight:700; color:var(--muted); cursor:pointer; font-family:'Nunito',sans-serif; transition:all 0.2s; height:36px; box-sizing:border-box; display:inline-flex; align-items:center; }
   .ts-fn-btn:hover { border-color:var(--dusty); color:var(--burgundy); }
   .ts-fn-btn.ts-today-btn { background:var(--burgundy); color:#fff; border-color:var(--burgundy); border-radius:10px; font-weight:800; }
@@ -848,7 +911,8 @@
   .ts-times-clock.ts-times-flagged { color:var(--burgundy); }
   .ts-row-flag-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
   .ts-adjusted-pencil { font-size:0.7rem; color:var(--success); flex-shrink:0; line-height:1; margin-left:-0.2rem; }
-  .ts-row-right { display:flex; align-items:center; gap:1.2rem; flex-shrink:0; }
+  .ts-row-right { display:flex; align-items:center; gap:1.2rem; flex:1; min-width:0; }
+  .ts-myob-preview { flex:1; min-width:0; font-size:0.68rem; color:var(--muted); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:0.01em; margin-left:2rem; padding-left:2rem; border-left:1.5px solid var(--border); }
   .ts-row-hours { font-size:1.05rem; font-weight:800; color:var(--burgundy); font-family:'Courier New',monospace; width:52px; text-align:right; letter-spacing:-0.02em; }
   .ts-row-hours:empty::before { content:'\00a0'; }
   .ts-payroll-wrap { width:130px; flex-shrink:0; }
@@ -1071,6 +1135,7 @@
     <div class="sr-layout-toggle">
       <button class="sr-layout-btn active" id="sr-btn-day" onclick="srSetLayout('day')">By Day</button>
       <button class="sr-layout-btn" id="sr-btn-person" onclick="srSetLayout('person')">By Person</button>
+      <button class="sr-layout-btn" id="sr-btn-now" onclick="srSetLayout('now')">Now</button>
     </div>
     <div class="sr-header-spacer"></div>
     <button class="admin-kiosk-btn" id="sr-kiosk-btn" onclick="showView('kiosk')" style="flex-shrink:0;">← Return to Kiosk</button>
@@ -1196,8 +1261,8 @@
     <div class="admin-tabs">
       <button class="tab active" onclick="switchTab('team',this)">Team</button>
       <button class="tab"        onclick="switchTab('roster',this)">Roster</button>
-      <button class="tab"        onclick="switchTab('timesheets',this)">Timesheets</button>
       <button class="tab"        onclick="switchTab('notes',this)">Notes<span class="notif-badge" id="notif-badge" style="display:none"></span></button>
+      <button class="tab"        onclick="switchTab('timesheets',this)">Timesheets</button>
       <button class="tab"        onclick="switchTab('settings',this)">Settings</button>
     </div>
     <div class="admin-kiosk-btn-wrap">
@@ -1355,6 +1420,53 @@
         </div>
       </div>
 
+      <!-- Roster Export & Print -->
+      <div class="settings-section" id="ss-rosterexport">
+        <div class="settings-section-header" onclick="toggleSettingsSection('rosterexport')">
+          <div class="settings-section-chevron" id="ss-chevron-rosterexport">&#9658;</div>
+          <div style="flex:1;">
+            <div class="settings-section-title">Roster Export &amp; Print</div>
+            <div class="settings-section-hint">Download roster data as CSV or print a formatted roster for any upcoming fortnight.</div>
+          </div>
+        </div>
+        <div class="settings-section-body" id="ss-body-rosterexport" style="display:none;">
+          <div class="roster-section" style="margin-bottom:2rem;">
+            <div class="roster-section-title">Export to CSV (Excel)</div>
+            <div style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">One row per rostered shift. Opens in Excel.</div>
+            <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:0.5rem;">
+                <label class="form-label" style="margin:0;white-space:nowrap;">From</label>
+                <input class="form-input" type="date" id="roster-export-from" style="width:auto;" />
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;">
+                <label class="form-label" style="margin:0;white-space:nowrap;">To</label>
+                <input class="form-input" type="date" id="roster-export-to" style="width:auto;" />
+              </div>
+              <button class="add-emp-btn" onclick="exportRosterCSV()">&#8595; Download CSV</button>
+            </div>
+          </div>
+          <div class="roster-section">
+            <div class="roster-section-title">Print Roster</div>
+            <div style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">One A4 landscape page per role per fortnight. Select fortnights and roles to print.</div>
+            <div style="display:flex;gap:3rem;flex-wrap:wrap;margin-bottom:1.25rem;">
+              <div>
+                <div class="form-label" style="margin-bottom:0.6rem;">Fortnights</div>
+                <div style="display:flex;flex-direction:column;gap:0.45rem;" id="print-fn-checks"></div>
+              </div>
+              <div>
+                <div class="form-label" style="margin-bottom:0.6rem;">Roles</div>
+                <div style="display:flex;flex-direction:column;gap:0.45rem;">
+                  <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;font-weight:600;cursor:pointer;"><input type="checkbox" id="print-role-Receptionist" checked /> Receptionists</label>
+                  <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;font-weight:600;cursor:pointer;"><input type="checkbox" id="print-role-Nurse" checked /> Nurses</label>
+                  <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;font-weight:600;cursor:pointer;"><input type="checkbox" id="print-role-Manager" /> Managers</label>
+                </div>
+              </div>
+            </div>
+            <button class="add-emp-btn" onclick="printRoster()">&#128438; Print Roster</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Clock Audit -->
       <div class="settings-section" id="ss-clockaudit">
         <div class="settings-section-header" onclick="toggleSettingsSection('clockaudit')">
@@ -1504,11 +1616,12 @@
           <div class="rb-group-label">Legend</div>
           <div class="rb-group-inner">
             <div class="rb-leave-legend">
+              <span class="rb-legend-item"><span class="rb-legend-dot worked"></span>Worked</span>
               <span class="rb-legend-item"><span class="rb-legend-dot annual-leave"></span>Annual</span>
               <span class="rb-legend-item"><span class="rb-legend-dot personal-leave"></span>Personal</span>
               <span class="rb-legend-item"><span class="rb-legend-dot public-holiday"></span>Public Hol</span>
               <span class="rb-legend-item"><span class="rb-legend-dot unpaid-leave"></span>Unpaid</span>
-              <span class="rb-legend-item"><span class="rb-legend-dot bereavement-leave"></span>Bereavement</span>
+              <span class="rb-legend-item"><span class="rb-legend-dot compassionate-leave"></span>Compassionate</span>
             </div>
           </div>
         </div>
@@ -1552,6 +1665,11 @@
       <select class="form-select" id="emp-type">
         <option>Full Time</option><option>Part Time</option><option>Casual</option>
       </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">MYOB Employee ID</label>
+      <input class="form-input" type="text" id="emp-myob-id" placeholder="e.g. 308" />
+      <div class="form-hint">The numeric employee record ID from MYOB. Used in payroll export.</div>
     </div>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeModal()">Cancel</button>
@@ -1761,8 +1879,10 @@ let tsOffset = 0;
 let tsRole = 'Receptionist';
 let _tsExpandEntryId = null;
 const _tsCollapsed = new Set();
+const _tsAutoOverride = new Set(); // entry IDs where manager clicked to override auto-approval
+let _tsAutoLockRunning = false;
 const ROUND_WINDOW = 5; // minutes — clock times within this window of rostered time are rounded to roster time on timesheets
-const LEAVE_TYPES = { annual_leave:'Annual Leave', personal_leave:'Personal Leave', public_holiday:'Public Holiday', unpaid_leave:'Unpaid Leave', bereavement_leave:'Bereavement Leave' };
+const LEAVE_TYPES = { annual_leave:'Annual Leave', personal_leave:'Personal Leave', public_holiday:'Public Holiday', unpaid_leave:'Unpaid Leave', compassionate_leave:'Compassionate Leave' };
 function formatLeaveType(lt){ return LEAVE_TYPES[lt]||'Worked'; }
 
 function roundToRoster(actualTimeStr, scheduledMin){
@@ -1792,7 +1912,7 @@ function showView(v){
   if(v==='login') populateManagerSelect();
   if(v==='admin'){
     document.getElementById('current-user-label').textContent = currentManager?.name || '';
-    loadAll().then(()=>{ renderTeam();renderTimesheets();renderApprovals();renderManagersTab();renderRoster();setDefaultDates(); });
+    loadAll().then(()=>{ renderTeam();renderTimesheets();renderApprovals();renderManagersTab();renderRoster();setDefaultDates();tsAutoLockSweep(); });
   }
 }
 
@@ -1821,7 +1941,7 @@ setInterval(tick, 1000);
 ═══════════════════════════════════════════ */
 const rfidEl=document.getElementById('rfid-input');
 let buf='',rfidT=null;
-let _kioskRefreshInterval=null, _srRefreshInterval=null, _preRFIDView=null;
+let _kioskRefreshInterval=null, _srRefreshInterval=null, _srNowLineInterval=null, _preRFIDView=null;
 function focusRFID(){
   if(document.activeElement===document.getElementById('test-rfid')) return;
   rfidEl.value='';rfidEl.focus();
@@ -2211,11 +2331,11 @@ function switchTab(name,btn){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
-  if(name==='timesheets') renderTimesheets();
+  if(name==='timesheets'){ renderTimesheets(); tsAutoLockSweep(); }
   if(name==='notes')      renderApprovals();
   if(name==='team')       renderTeam();
   if(name==='roster')     renderRoster();
-  if(name==='settings'){  renderManagersTab(); wosInitPinBoxes(); renderAnchorDate(); }
+  if(name==='settings'){  renderManagersTab(); wosInitPinBoxes(); renderAnchorDate(); populatePrintFnChecks(); }
 }
 
 /* ═══════════════════════════════════════════
@@ -2248,9 +2368,7 @@ function renderTeam(){
     <div class="stat-tile"><div class="stat-val">${doneEmps.length}</div><div class="stat-label">Finished today</div>${namesByRole(doneEmps)}</div>
     <div class="stat-tile"><div class="stat-val">${notYetEmps.length}</div><div class="stat-label">Not yet in</div>${namesByRole(notYetEmps)}</div>`;
   const sel=document.getElementById('filter-employee');
-  const prev=sel.value; sel.innerHTML='<option value="">All staff</option>';
-  _emps.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.name;sel.appendChild(o);});
-  sel.value=prev;
+  if(sel){const prev=sel.value;sel.innerHTML='<option value="">All staff</option>';_emps.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.name;sel.appendChild(o);});sel.value=prev;}
   const TEAM_GROUPS=[
     {role:'Receptionist',label:'Receptionists'},
     {role:'Nurse',       label:'Nurses'},
@@ -2259,7 +2377,7 @@ function renderTeam(){
   const cardHtml=emp=>{
     const initials=emp.name.replace(/^(Dr\.|Nurse|Reception|Practice Mgr)\s*/i,'').split(' ').slice(0,2).map(n=>n[0]).join('');
     const cc=ROLE_C[emp.role]||'c-doctor'; const isIn=inNow.has(emp.id);
-    return`<div class="employee-card"><div class="emp-avatar ${cc}">${initials}</div><div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-meta">${emp.role} · ${emp.type}</div><div class="emp-rfid">${emp.rfid}</div></div><button class="emp-edit-btn" onclick="openEditEmployee('${emp.id}')">Edit</button><div class="status-dot ${isIn?'in':'out'}" title="${isIn?'Checked in':'Not in today'}"></div></div>`;
+    return`<div class="employee-card"><div class="emp-avatar ${cc}">${initials}</div><div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-meta">${emp.role} · ${emp.type}</div><div class="emp-rfid">${emp.rfid}${emp.myob_record_id?` · MYOB #${emp.myob_record_id}`:' · <span style="color:var(--burgundy);font-size:0.7rem;">No MYOB ID</span>'}</div></div><button class="emp-edit-btn" onclick="openEditEmployee('${emp.id}')">Edit</button><div class="status-dot ${isIn?'in':'out'}" title="${isIn?'Checked in':'Not in today'}"></div></div>`;
   };
   const visibleGroups=TEAM_GROUPS.filter(g=>teamRoles.has(g.role));
   document.getElementById('employees-grid').innerHTML=visibleGroups.map((g,i)=>{
@@ -2275,7 +2393,7 @@ function openAddEmployee(){
   _editingEmpId=null;
   document.getElementById('emp-modal-title').textContent='Add team member';
   document.getElementById('emp-save-btn').textContent='Save';
-  ['emp-firstname','emp-surname','emp-rfid'].forEach(id=>document.getElementById(id).value='');
+  ['emp-firstname','emp-surname','emp-rfid','emp-myob-id'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('emp-role').value='Doctor';
   document.getElementById('emp-type').value='Full Time';
   document.getElementById('emp-remove-btn').style.display='none';
@@ -2295,6 +2413,7 @@ function openEditEmployee(empId){
   document.getElementById('emp-role').value=emp.role;
   document.getElementById('emp-rfid').value=emp.rfid;
   document.getElementById('emp-type').value=emp.type;
+  document.getElementById('emp-myob-id').value=emp.myob_record_id||'';
   document.getElementById('emp-remove-btn').style.display='';
   document.getElementById('emp-modal').classList.add('show');
   document.getElementById('emp-firstname').focus();
@@ -2309,18 +2428,20 @@ async function saveEmployee(){
   const role=document.getElementById('emp-role').value;
   const rfid=document.getElementById('emp-rfid').value.trim().replace(/\D/g,'');
   const type=document.getElementById('emp-type').value;
-  if(!firstName||!rfid){showToast('Please fill in first name and RFID card number');return;}
+  const myobRecordId=document.getElementById('emp-myob-id').value.trim()||null;
+  if(!firstName){showToast('Please fill in a first name');return;}
+  if(!rfid&&!confirm('No RFID card number entered — this staff member won\'t be able to clock in until one is assigned. Save anyway?')) return;
   // Check RFID clash (exclude self when editing)
   if(_emps.find(e=>e.rfid===rfid&&e.id!==_editingEmpId)){showToast('That card is already registered to someone');return;}
   try{
     if(_editingEmpId){
-      await db.update('employees',_editingEmpId,{name,role,rfid,type});
+      await db.update('employees',_editingEmpId,{name,role,rfid,type,myob_record_id:myobRecordId});
       const emp=_emps.find(e=>e.id===_editingEmpId);
-      if(emp){emp.name=name;emp.role=role;emp.rfid=rfid;emp.type=type;}
+      if(emp){emp.name=name;emp.role=role;emp.rfid=rfid;emp.type=type;emp.myob_record_id=myobRecordId;}
       closeModal(); renderTeam();
       showToast(name+' updated ✓');
     } else {
-      const row={id:'E'+Date.now(),name,role,rfid,type};
+      const row={id:'E'+Date.now(),name,role,rfid,type,myob_record_id:myobRecordId};
       await db.insert('employees',row);
       _emps.push(row); closeModal(); renderTeam();
       showToast(name+' added to the team ✓');
@@ -2418,8 +2539,8 @@ function groupEntriesByDay(entries){
 }
 
 /* ── TIMESHEETS ── */
-function tsNavFn(dir){ tsOffset+=dir; renderTimesheets(); }
-function tsGoToday(){ tsOffset=0; renderTimesheets(); }
+function tsNavFn(dir){ tsOffset+=dir; _tsAutoLockRunning=false; renderTimesheets(); tsAutoLockSweep(); }
+function tsGoToday(){ tsOffset=0; _tsAutoLockRunning=false; renderTimesheets(); tsAutoLockSweep(); }
 function tsSetRole(role, btn){
   tsRole=role;
   document.querySelectorAll('.ts-role-tab').forEach(t=>t.classList.remove('active'));
@@ -2469,7 +2590,13 @@ function tsBuildRow(emp, date, shift, entry){
   const missedClockOut=tsMissedClockOut(entry);
   const autoApproved=tsIsAutoApproved(entry,shift);
   const entryStatus=entry?.status||null;
-  const flag=tsGetFlag(locked,noEntry,finalStart,finalEnd,autoApproved,entryStatus,missedClockOut);
+  const payrollType=entry?.payrollType||entry?.leaveType||'';
+  const isLeaveShift=!!payrollType; // any non-empty = leave type set
+  const noClockExpected=!entry?.clockIn&&!!rostStart&&!!rostEnd&&(emp.role==='Manager'||isLeaveShift);
+  const effectiveFinalStart=finalStart||(noClockExpected?rostStart:null);
+  const effectiveFinalEnd=finalEnd||(noClockExpected?rostEnd:null);
+  const effectiveAutoApproved=autoApproved||noClockExpected;
+  const flag=tsGetFlag(locked,noEntry&&!noClockExpected,effectiveFinalStart,effectiveFinalEnd,effectiveAutoApproved,entryStatus,missedClockOut);
   const autoExpand=flag==='red'||flag==='flagged'||entryId==_tsExpandEntryId;
   const flagColors={green:'var(--success)',yellow:'#e6a817',red:'var(--burgundy)',flagged:'#e67e22'};
   const flagColor=flagColors[flag]||flagColors.yellow;
@@ -2485,21 +2612,26 @@ function tsBuildRow(emp, date, shift, entry){
 
   const safeEmpId=emp.id;
   const safeEmpName=emp.name.replace(/'/g,"\\'");
+  const needsMgrAutoLock=noClockExpected&&!(entry?.finalStart&&entry?.finalEnd);
   const lockBtn=locked
     ?`<button class="ts-lock-btn locked" onclick="tsUnlockRow('${entryId}',event)" title="Locked by ${lockedBy||'manager'}">🔒 Locked</button>`
-    :`<button class="ts-lock-btn" onclick="tsLockRow('${entryId}','${safeEmpId}','${date}',event)">🔓 Lock</button>`;
+    :needsMgrAutoLock
+      ?`<button class="ts-lock-btn" onclick="tsMgrAutoLock('${safeEmpId}','${safeEmpName}','${emp.role}','${date}','${rostStart}','${rostEnd}','${entryId||''}',event)">🔓 Lock</button>`
+      :`<button class="ts-lock-btn" onclick="tsLockRow('${entryId}','${safeEmpId}','${date}',event)">🔓 Lock</button>`;
   const deleteBtn=`<button class="ts-delete-btn" onclick="tsDeleteRow('${entryId}','${safeEmpId}','${safeEmpName}','${date}',event)" title="Delete entry">✕</button>`;
 
 
   const rowClass=['ts-shift-row',locked?'ts-locked':'',`ts-flag-${flag}`].filter(Boolean).join(' ');
 
-  const finalMins=(finalStart&&finalEnd)?timeToMin(finalEnd)-timeToMin(finalStart):0;
+  const finalMins=(effectiveFinalStart&&effectiveFinalEnd)?timeToMin(effectiveFinalEnd)-timeToMin(effectiveFinalStart):0;
   const hoursText=finalMins>0?`${(finalMins/60).toFixed(1)}h`:'';
 
-  const PAYROLL_TYPES=[['','— shift type —'],['base_hourly','Base Hourly'],['evening','Evening'],['saturday','Saturday'],['public_holiday','Public Holiday']];
-  const payrollType=entry?.payrollType||'';
-  const payrollInner=locked
-    ?`<span class="ts-payroll-label">${PAYROLL_TYPES.find(([v])=>v===payrollType)?.[1]||''}</span>`
+  const PAYROLL_TYPES=[['','Worked'],['annual_leave','Annual Leave'],['personal_leave','Personal Leave'],['public_holiday','Public Holiday'],['compassionate_leave','Compassionate Leave'],['unpaid_leave','Unpaid Leave']];
+  const fmtH=h=>h===Math.round(h)?h+'h':h.toFixed(1)+'h';
+  const myobPreviewText=(locked||effectiveAutoApproved)&&entry?calcMYOBRows(entry,emp.role).map(r=>`${fmtH(r.hours)} ${r.cat}`).join(' · '):'';
+  const payrollDone=locked||effectiveAutoApproved;
+  const payrollInner=payrollDone
+    ?`<span class="ts-payroll-label">${PAYROLL_TYPES.find(([v])=>v===payrollType)?.[1]||'Worked'}</span>`
     :`<select class="ts-payroll-select" onclick="event.stopPropagation()" onchange="tsSavePayrollType('${entryId}','${safeEmpId}','${safeEmpName}','${emp.role}','${date}',this.value)">${PAYROLL_TYPES.map(([v,l])=>`<option value="${v}"${payrollType===v?' selected':''}>${l}</option>`).join('')}</select>`;
 
   const compactRow=`<div class="ts-row-main" onclick="tsToggleRow(this.closest('.ts-shift-row'))">
@@ -2507,13 +2639,14 @@ function tsBuildRow(emp, date, shift, entry){
     <div class="ts-row-times">
       <span class="ts-times-rost">${rostStart&&rostEnd?rostStart+'–'+rostEnd:'—'}</span>
       <span class="ts-times-arrow">→</span>
-      <span class="ts-times-clock${flag==='red'?' ts-times-flagged':flag==='flagged'?' ts-times-flagged-follow':''}">${finalStart&&finalEnd?finalStart+'–'+finalEnd:clockStart&&clockEnd?clockStart+'–'+clockEnd:missedClockOut?clockStart+' – No clock-out':noEntry?'No clock-in':'—'}</span>
+      <span class="ts-times-clock${flag==='red'?' ts-times-flagged':flag==='flagged'?' ts-times-flagged-follow':''}">${effectiveFinalStart&&effectiveFinalEnd?effectiveFinalStart+'–'+effectiveFinalEnd:clockStart&&clockEnd?clockStart+'–'+clockEnd:missedClockOut?clockStart+' – No clock-out':noClockExpected?'No clock required':noEntry?'No clock-in':'—'}</span>
     </div>
     <div class="ts-row-right">
       <div class="ts-payroll-wrap">${payrollInner}</div>
       <span class="ts-row-hours">${hoursText}</span>
       <div class="ts-row-flag-dot" style="background:${flagColor}"></div><span class="ts-adjusted-pencil" title="Acknowledged by manager" style="${locked&&manuallyAdjusted?'':'visibility:hidden'}">✎</span><span class="ts-flag-icon" title="Flagged for follow-up" style="${flag==='flagged'?'':'visibility:hidden'}">⚑</span>
-      <span class="ts-locked-label" style="${locked?'':'visibility:hidden'}">Locked${locked&&lockedBy?' · '+lockedBy:''}</span>
+      <span class="ts-locked-label" style="${locked||effectiveAutoApproved?'':'visibility:hidden'}">${locked&&manuallyAdjusted?'Locked'+(lockedBy?' · '+lockedBy:''):'Auto-approved'}</span>
+      <div class="ts-myob-preview">${myobPreviewText}</div>
     </div>
   </div>`;
 
@@ -2525,9 +2658,11 @@ function tsBuildRow(emp, date, shift, entry){
       <input class="ts-time-hm" type="text" maxlength="2" placeholder="MM" value="${mm||''}" onclick="event.stopPropagation()" oninput="tsHMInput(this,'m')" onblur="tsHMBlur(this.closest('.ts-time-pair'))" onkeydown="if(event.key==='Enter'){event.preventDefault();tsHMSave(this.closest('.ts-time-pair'))}">
     </div>`;
   };
-  const finalInputs=locked
-    ?`<span class="ts-sub-time" style="font-family:'Courier New',monospace;font-weight:800;font-size:0.88rem;">${finalStart||'—'} – ${finalEnd||'—'}</span>`
-    :`${mkPair(finalStart,'start')}<span class="ts-sub-dash">–</span>${mkPair(finalEnd,'end')}`;
+  const overrideKey=entryId?String(entryId):`${safeEmpId}_${date}`;
+  const autoOverridden=effectiveAutoApproved&&_tsAutoOverride.has(overrideKey);
+  const finalInputs=locked||(effectiveAutoApproved&&!autoOverridden)
+    ?`<span class="ts-sub-time" style="font-family:'Courier New',monospace;font-weight:800;font-size:0.88rem;">${effectiveFinalStart||'—'} – ${effectiveFinalEnd||'—'}</span>`
+    :`${mkPair(effectiveFinalStart,'start')}<span class="ts-sub-dash">–</span>${mkPair(effectiveFinalEnd,'end')}`;
 
   const detailSection=`<div class="ts-row-detail" style="display:${autoExpand?'block':'none'}">
     <div class="ts-sub-row ts-sub-rostered">
@@ -2536,7 +2671,7 @@ function tsBuildRow(emp, date, shift, entry){
     </div>
     <div class="ts-sub-row ts-sub-clocked">
       <span class="ts-sub-label">Clocked</span>
-      <span class="ts-sub-time">${clockStart?clockStart+' – '+(clockEnd||(missedClockOut?'<span style="color:var(--burgundy);font-weight:700">No clock-out</span>':'Still in')):'<em style="color:var(--muted)">No clock-in recorded.</em>'}</span>
+      <span class="ts-sub-time">${clockStart?clockStart+' – '+(clockEnd||(missedClockOut?'<span style="color:var(--burgundy);font-weight:700">No clock-out</span>':'Still in')):noClockExpected?'<em style="color:var(--muted)">No clock required.</em>':'<em style="color:var(--muted)">No clock-in recorded.</em>'}</span>
       ${diffLabel}
     </div>
     <div class="ts-sub-row ts-sub-final">
@@ -2545,7 +2680,9 @@ function tsBuildRow(emp, date, shift, entry){
         ${finalInputs}
       </div>
       <div class="ts-sub-final-right">
-        ${entry?lockBtn:''}
+        ${effectiveAutoApproved&&!autoOverridden
+          ?`<button class="ts-lock-btn locked" onclick="tsOverrideAutoApproved('${overrideKey}',event)" title="Click to override auto-approval">🔒 Locked</button>`
+          :entry||noClockExpected?lockBtn:''}
         <div style="flex:1"></div>
         ${entry?deleteBtn:''}
       </div>
@@ -2561,6 +2698,64 @@ function tsBuildRow(emp, date, shift, entry){
 function tsToggleRow(row){
   const detail=row?.querySelector('.ts-row-detail');
   if(detail) detail.style.display=detail.style.display==='none'?'block':'none';
+}
+
+async function tsAutoLockSweep(){
+  if(_tsAutoLockRunning) return;
+  _tsAutoLockRunning=true;
+  const today=rbDateKey(new Date());
+  const fnStart=getFortnightStart(tsOffset);
+  const fnDays=getFortnight14Days(fnStart).filter(d=>d<today);
+  const mgr=currentManager?.name||'Manager';
+  let changed=false;
+  try{
+    for(const emp of _emps){
+      const empShifts=_rosterShifts.filter(s=>s.employee_id===emp.id&&fnDays.includes(s.date)&&!s.is_day_off);
+      const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date));
+      for(const date of fnDays){
+        const shift=empShifts.find(s=>s.date===date)||null;
+        const dayEntries=empEntries.filter(e=>e.date===date);
+        const entry=dayEntries.length?groupEntriesByDay(dayEntries)[0]:null;
+        if(entry?.locked) continue;
+        const rostStart=shift?.start_time||null;
+        const rostEnd=shift?.end_time||null;
+        const autoApp=tsIsAutoApproved(entry,shift);
+        const pt=entry?.payrollType||entry?.leaveType||'';
+        const nce=!entry?.clockIn&&!!rostStart&&!!rostEnd&&(emp.role==='Manager'||!!pt);
+        if(autoApp&&entry){
+          // Clocked within threshold — just lock
+          await db.update('entries',entry.id,{locked:true,locked_by:'Auto',locked_at:new Date().toISOString()});
+          entry.locked=true; entry.lockedBy='Auto';
+          changed=true;
+        } else if(nce){
+          const startMins=timeToMin(rostStart), endMins=timeToMin(rostEnd);
+          if(endMins<=startMins) continue;
+          const hours=((endMins-startMins)/60).toFixed(2);
+          if(entry&&!entry.finalStart){
+            // Stub exists, no finals yet — set finals and lock
+            await db.update('entries',entry.id,{final_start:rostStart,final_end:rostEnd,hours,
+              locked:true,locked_by:'Auto',locked_at:new Date().toISOString()});
+            entry.finalStart=rostStart; entry.finalEnd=rostEnd;
+            entry.locked=true; entry.lockedBy='Auto';
+            changed=true;
+          } else if(!entry){
+            // No entry at all — create and lock
+            const newId='M'+Date.now()+'_'+emp.id;
+            const newEntry={id:newId,employee_id:emp.id,employee_name:emp.name,role:emp.role,
+              date,clock_in:null,clock_out:null,hours,status:'normal',
+              final_start:rostStart,final_end:rostEnd,manually_adjusted:false,
+              locked:true,locked_by:'Auto',locked_at:new Date().toISOString()};
+            await db.insert('entries',newEntry);
+            _entries.push(normaliseEntry({...newEntry,id:newId}));
+            changed=true;
+          }
+        }
+      }
+    }
+  }finally{
+    _tsAutoLockRunning=false;
+  }
+  if(changed) renderTimesheets();
 }
 
 function renderTimesheets(){
@@ -2595,7 +2790,10 @@ function renderTimesheets(){
       const shift=empShifts.find(s=>s.date===date)||null;
       const dayEntries=empEntries.filter(e=>e.date===date);
       const entry=dayEntries.length?groupEntriesByDay(dayEntries)[0]:null;
-      const f=tsGetFlag(entry?.locked||false,!entry&&!!shift,entry?.finalStart||entry?.clockIn||null,entry?.finalEnd||entry?.clockOut||null,tsIsAutoApproved(entry,shift),entry?.status||null,tsMissedClockOut(entry));
+      const _pt=entry?.payrollType||entry?.leaveType||'';
+      const _nce=!entry?.clockIn&&!!shift?.start_time&&!!shift?.end_time&&(emp.role==='Manager'||!!_pt);
+      const _effAuto=tsIsAutoApproved(entry,shift)||_nce;
+      const f=tsGetFlag(entry?.locked||false,!entry&&!!shift&&!_nce,entry?.finalStart||entry?.clockIn||null,entry?.finalEnd||entry?.clockOut||null,_effAuto,entry?.status||null,tsMissedClockOut(entry));
       if(f==='red'||f==='flagged') acc++;
       return acc;
     },0);
@@ -2659,6 +2857,26 @@ function renderTimesheets(){
     exportBtn.classList.toggle('ready',allEmpsReady);
     exportBtn.title=allEmpsReady?'All shifts locked — ready to export':'Lock all shifts across all tabs before exporting';
   }
+
+  // Update role tab ready state
+  ['Receptionist','Nurse','Manager'].forEach(role=>{
+    const tab=document.getElementById('ts-tab-'+role);
+    if(!tab) return;
+    const roleEmps=_emps.filter(e=>e.role===role&&e.active!==false);
+    const roleReady=roleEmps.length>0&&roleEmps.every(emp=>{
+      const empShifts=_rosterShifts.filter(s=>s.employee_id===emp.id&&fnDays.includes(s.date)&&!s.is_day_off);
+      const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date));
+      const activeDays=[...new Set([...empShifts.map(s=>s.date),...empEntries.map(e=>e.date)])];
+      if(!activeDays.length) return true;
+      return activeDays.every(date=>{
+        const shift=empShifts.find(s=>s.date===date)||null;
+        const dayEntries=empEntries.filter(e=>e.date===date);
+        const entry=dayEntries.length?groupEntriesByDay(dayEntries)[0]:null;
+        return entry?.locked===true||tsIsAutoApproved(entry,shift);
+      });
+    });
+    tab.classList.toggle('ready',roleReady);
+  });
 }
 
 function tsToggleEmp(headerEl){
@@ -2682,9 +2900,52 @@ async function tsLockRow(entryId, empId, date, e){
     await db.update('entries',entryId,{locked:true,locked_by:mgr,locked_at:new Date().toISOString()});
     const entry=_entries.find(en=>en.id===entryId);
     if(entry){entry.locked=true;entry.lockedBy=mgr;}
+    await tsSaveAudit({entry_id:entryId,employee_id:empId,employee_name:entry?.employeeName||'',date,
+      rostered_start:null,rostered_end:null,
+      clocked_start:entry?.clockIn||null,clocked_end:entry?.clockOut||null,
+      final_start:entry?.finalStart||entry?.clockIn||null,final_end:entry?.finalEnd||entry?.clockOut||null,
+      action:'lock',reason:'Locked by manager',manager_name:mgr});
     renderTimesheets();
     showToast('Entry locked.');
   }catch(err){showToast('Could not lock entry');console.error(err);}
+}
+
+async function tsMgrAutoLock(empId, empName, role, date, rostStart, rostEnd, entryId, e){
+  e.stopPropagation();
+  if(!rostStart||!rostEnd){showToast('No roster times to use');return;}
+  const mgr=currentManager?.name||'Manager';
+  const startMins=timeToMin(rostStart), endMins=timeToMin(rostEnd);
+  if(endMins<=startMins){showToast('Invalid roster times');return;}
+  const hours=((endMins-startMins)/60).toFixed(2);
+  try{
+    if(entryId){
+      // Stub entry exists (e.g. leave type was set) — write roster times as finals and lock
+      await db.update('entries',entryId,{final_start:rostStart,final_end:rostEnd,hours,
+        locked:true,locked_by:mgr,locked_at:new Date().toISOString()});
+      const entry=_entries.find(en=>String(en.id)===String(entryId));
+      if(entry){entry.finalStart=rostStart;entry.finalEnd=rostEnd;entry.locked=true;entry.lockedBy=mgr;}
+      await tsSaveAudit({entry_id:entryId,employee_id:empId,employee_name:empName,date,
+        rostered_start:rostStart,rostered_end:rostEnd,clocked_start:null,clocked_end:null,
+        final_start:rostStart,final_end:rostEnd,
+        action:'lock',reason:'No-clock auto-lock: roster hours used as finals',manager_name:mgr});
+    } else {
+      // No entry at all — create and lock
+      const newId='M'+Date.now();
+      const newEntry={id:newId,employee_id:empId,employee_name:empName,role,
+        date,clock_in:null,clock_out:null,hours,status:'normal',
+        final_start:rostStart,final_end:rostEnd,
+        manually_adjusted:false,
+        locked:true,locked_by:mgr,locked_at:new Date().toISOString()};
+      await db.insert('entries',newEntry);
+      _entries.push(normaliseEntry({...newEntry,id:newId}));
+      await tsSaveAudit({entry_id:newId,employee_id:empId,employee_name:empName,date,
+        rostered_start:rostStart,rostered_end:rostEnd,clocked_start:null,clocked_end:null,
+        final_start:rostStart,final_end:rostEnd,
+        action:'lock',reason:'No-clock auto-lock: roster hours used as finals',manager_name:mgr});
+    }
+    renderTimesheets();
+    showToast('Entry locked.');
+  }catch(err){showToast('Could not lock entry: '+(err.message||err));console.error(err);}
 }
 
 async function tsUnlockRow(entryId, e){
@@ -2694,11 +2955,21 @@ async function tsUnlockRow(entryId, e){
     await db.update('entries',entryId,{locked:false,locked_by:null,locked_at:null});
     const entry=_entries.find(en=>en.id===entryId);
     if(entry){entry.locked=false;entry.lockedBy=null;}
+    _tsAutoOverride.delete(String(entryId));
     _tsExpandEntryId=String(entryId);
     renderTimesheets();
     _tsExpandEntryId=null;
     showToast('Entry unlocked.');
   }catch(err){showToast('Could not unlock entry');console.error(err);}
+}
+
+function tsOverrideAutoApproved(overrideKey, e){
+  e.stopPropagation();
+  _tsAutoOverride.add(overrideKey);
+  // If key is a real entry ID (not empId_date), expand that row
+  if(overrideKey&&!overrideKey.includes('_')) _tsExpandEntryId=overrideKey;
+  renderTimesheets();
+  _tsExpandEntryId=null;
 }
 
 async function tsDeleteRow(entryId, empId, empName, date, e){
@@ -2856,6 +3127,29 @@ async function tsSaveAudit(data){
   try{ await db.insert('timesheet_audit',data); }catch(e){ console.error('Audit log failed',e); }
 }
 
+function calcMYOBRows(entry, role){
+  const start=entry.finalStart||entry.clockIn;
+  const end=entry.finalEnd||entry.clockOut;
+  if(!start||!end) return [];
+  const startMins=timeToMin(start);
+  const endMins=timeToMin(end);
+  if(endMins<=startMins) return [];
+  const totalHours=(endMins-startMins)/60;
+  const payrollType=entry.payrollType||entry.leaveType||'';
+  const isSaturday=new Date(entry.date+'T12:00:00').getDay()===6;
+  const SPLIT=18*60;
+  if(payrollType==='public_holiday')    return [{cat:'Public Holiday',   hours:totalHours}];
+  if(payrollType==='annual_leave')      return [{cat:'Annual Leave',     hours:totalHours}];
+  if(payrollType==='personal_leave')    return [{cat:'Personal Leave',   hours:totalHours}];
+  if(payrollType==='compassionate_leave') return [{cat:'Compassionate Leave',hours:totalHours}];
+  if(payrollType==='unpaid_leave')      return [{cat:'Unpaid Leave',     hours:totalHours}];
+  if(isSaturday) return [{cat:'Saturday',hours:totalHours}];
+  if(role==='Nurse'||role==='Manager')  return [{cat:endMins>=SPLIT?'Evening':'Base Hourly',hours:totalHours}];
+  if(endMins<=SPLIT)   return [{cat:'Base Hourly',hours:totalHours}];
+  if(startMins>=SPLIT) return [{cat:'Evening',    hours:totalHours}];
+  return [{cat:'Base Hourly',hours:(SPLIT-startMins)/60},{cat:'Evening',hours:(endMins-SPLIT)/60}];
+}
+
 function exportMYOB(){
   const fnStart=getFortnightStart(tsOffset);
   const fnDays=getFortnight14Days(fnStart);
@@ -2879,13 +3173,16 @@ function exportMYOB(){
     const firstName=nameParts[0]||'';
     const lastName=nameParts.slice(1).join(' ')||'';
     const dateF=entry.date.split('-').reverse().join('/');
-    const start=entry.finalStart||entry.clockIn||'';
-    const end=entry.finalEnd||entry.clockOut||'';
-    const startMins=start?timeToMin(start):0;
-    const endMins=end?timeToMin(end):0;
-    const units=start&&end?((endMins-startMins)/60).toFixed(2):'0.00';
-    const row=[dateF,'Base Hourly',units,firstName,lastName,'','','','','','*None',emp?.myob_record_id||'','',''];
-    lines.push(row.join('\t'));
+    const myobRows=calcMYOBRows(entry,emp?.role||entry.role||'');
+    myobRows.forEach(({cat,hours})=>{
+      const units=hours.toFixed(2);
+      const row=[dateF,cat,units,firstName,lastName,'','','','','','*None',emp?.myob_record_id||'','',''];
+      lines.push(row.join('\t'));
+    });
+    if(!myobRows.length){
+      const row=[dateF,'Base Hourly','0.00',firstName,lastName,'','','','','','*None',emp?.myob_record_id||'','',''];
+      lines.push(row.join('\t'));
+    }
   });
 
   const txt=lines.join('\n');
@@ -3424,9 +3721,12 @@ async function showStaffRoster(){
   // Reset filters to defaults every time the page is opened
   srRoles=new Set(['Receptionist','Nurse','Manager']);
   srLayout='day';
+  clearInterval(_srNowLineInterval); _srNowLineInterval=null;
   document.querySelectorAll('.sr-tab').forEach(t=>t.classList.add('active'));
   document.getElementById('sr-btn-day')?.classList.add('active');
   document.getElementById('sr-btn-person')?.classList.remove('active');
+  document.getElementById('sr-btn-now')?.classList.remove('active');
+  document.getElementById('view-staff-roster').classList.remove('sr-now-mode');
   document.getElementById('sr-filters-group').style.display='';
   document.getElementById('sr-person-filter').style.display='none';
   const srSel=document.getElementById('sr-staff-filter');
@@ -3480,11 +3780,13 @@ function srSelectIndividual(){
 
 function srSetLayout(layout){
   srLayout=layout;
+  clearInterval(_srNowLineInterval); _srNowLineInterval=null;
   document.getElementById('sr-btn-day').classList.toggle('active',layout==='day');
   document.getElementById('sr-btn-person').classList.toggle('active',layout==='person');
+  document.getElementById('sr-btn-now').classList.toggle('active',layout==='now');
   document.getElementById('sr-filters-group').style.display=layout==='day'?'':'none';
   document.getElementById('sr-person-filter').style.display=layout==='person'?'flex':'none';
-  // Reset individual selection when switching views
+  document.getElementById('view-staff-roster').classList.toggle('sr-now-mode',layout==='now');
   const sel=document.getElementById('sr-staff-filter');
   if(sel) sel.value='';
   renderStaffRoster();
@@ -3493,6 +3795,13 @@ function srSetLayout(layout){
 function renderStaffRoster(){
   _srDnMap=buildDisplayNames(_emps);
   const _tn=new Date(); const today=`${_tn.getFullYear()}-${String(_tn.getMonth()+1).padStart(2,'0')}-${String(_tn.getDate()).padStart(2,'0')}`;
+  if(srLayout==='now'){
+    document.getElementById('sr-content').innerHTML=srByNow(today);
+    requestAnimationFrame(srUpdateNowLine);
+    clearInterval(_srNowLineInterval);
+    _srNowLineInterval=setInterval(srUpdateNowLine,60000);
+    return;
+  }
   const fn1Start=getFortnightStart(srOffset);
   const fn2Start=getFortnightStart(srOffset+1);
   const fn1Days=getFortnight14Days(fn1Start);
@@ -3552,6 +3861,82 @@ function srShiftForEmp(empId,date){
   const shift=_rosterShifts.find(s=>s.employee_id===empId&&s.date===date);
   if(shift){if(shift.is_day_off)return'off';if(shift.start_time&&shift.end_time)return{start:shift.start_time,end:shift.end_time};}
   return null;
+}
+
+const GNOW_START=7*60; // 7:00am
+const GNOW_END=22*60;  // 10:00pm
+const GNOW_RANGE=GNOW_END-GNOW_START;
+
+function gnowPct(min){ return Math.max(0,Math.min(100,(min-GNOW_START)/GNOW_RANGE*100)); }
+function gnowToMin(t){ const p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]||0); }
+
+function srUpdateNowLine(){
+  const line=document.getElementById('sr-gnow-now-line');
+  const badge=document.getElementById('sr-gnow-now-badge');
+  const body=document.getElementById('sr-gnow-body');
+  if(!line||!body) return;
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
+  const pct=(nowMin-GNOW_START)/GNOW_RANGE;
+  if(pct<0||pct>1){line.style.display='none';return;}
+  body.style.setProperty('--now-pct',pct.toFixed(4));
+  line.style.display='block';
+  if(badge) badge.textContent=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+}
+
+function srByNow(today){
+  const ROLE_ORDER=['Receptionist','Nurse','Manager'];
+  const ROLE_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
+
+  // Hour tick marks
+  const ticks=[];
+  for(let m=Math.ceil(GNOW_START/60)*60;m<=GNOW_END;m+=60){
+    const h=Math.floor(m/60);
+    const label=h>12?`${h-12}pm`:h===12?'12pm':`${h}am`;
+    ticks.push(`<div class="sr-gnow-tick" style="left:${gnowPct(m).toFixed(2)}%"><div class="sr-gnow-tick-mark"></div><div class="sr-gnow-tick-label">${label}</div></div>`);
+  }
+
+  let hasAny=false;
+  const groups=ROLE_ORDER.map(role=>{
+    const color=SR_ROLE_COLORS[role]||'var(--dusty)';
+    const roleEmps=_emps.filter(e=>e.role===role);
+    const rows=roleEmps.map(emp=>{
+      const shift=srShiftForEmp(emp.id,today);
+      if(!shift||shift==='off') return null;
+      const startMin=gnowToMin(shift.start);
+      const endMin=gnowToMin(shift.end);
+      const left=gnowPct(startMin);
+      const width=gnowPct(endMin)-left;
+      const name=_srDnMap[emp.id]||empFirstName(emp);
+      return`<div class="sr-gnow-row">
+        <div class="sr-gnow-row-name">${name}</div>
+        <div class="sr-gnow-track">
+          <div class="sr-gnow-bar" style="left:${left.toFixed(2)}%;width:${Math.max(0,width).toFixed(2)}%;background:${color};" title="${shift.start}–${shift.end}">
+            <span class="sr-gnow-bar-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}</span>
+          </div>
+        </div>
+      </div>`;
+    }).filter(Boolean);
+    if(!rows.length) return null;
+    hasAny=true;
+    return`<div class="sr-gnow-group" style="flex:${rows.length}">
+      <div class="sr-gnow-group-hdr"><div class="sr-gnow-group-dot" style="background:${color}"></div>${ROLE_LABELS[role]}</div>
+      <div class="sr-gnow-rows">${rows.join('')}</div>
+    </div>`;
+  }).filter(Boolean);
+
+  if(!hasAny) return`<div class="sr-gnow-empty">No staff rostered for today.</div>`;
+
+  return`<div class="sr-gnow">
+    <div class="sr-gnow-axis-row">
+      <div class="sr-gnow-name-col"></div>
+      <div class="sr-gnow-axis">${ticks.join('')}</div>
+    </div>
+    <div class="sr-gnow-body" id="sr-gnow-body">
+      <div class="sr-gnow-now-line" id="sr-gnow-now-line"><div class="sr-gnow-now-badge" id="sr-gnow-now-badge"></div></div>
+      ${groups.join('')}
+    </div>
+  </div>`;
 }
 
 function srByDay(days,emps,today){
@@ -3836,16 +4221,16 @@ function renderFnGridForRole(role){
   const grid=document.getElementById('rb-fn-grid-'+role);
   if(!grid) return;
   const fnStart=rbGetFnStart();
-  const today=new Date(new Date().toDateString());
+  const todayKey=rbDateKey(new Date());
   const emps=rbGetEmpsForRole(role);
   const dnMap=buildDisplayNames(_emps);
   const days=[];
   for(let i=0;i<14;i++){ const d=new Date(fnStart.getFullYear(),fnStart.getMonth(),fnStart.getDate()+i,12,0,0); days.push(d); }
   grid.innerHTML=days.map(d=>{
-    const key=d.toISOString().slice(0,10);
+    const key=rbDateKey(d);
     const dayShifts=_rosterShifts.filter(s=>s.date===key&&!s.is_day_off&&emps.some(e=>e.id===s.employee_id));
-    const isToday=d.getTime()===today.getTime();
-    const isPast=d<today;
+    const isToday=key===todayKey;
+    const isPast=key<todayKey;
     const covCount=dayShifts.length;
     const covCls=covCount>=3?'green':covCount>=2?'yellow':'red';
     const dayName=d.toLocaleDateString('en-AU',{weekday:'short'});
@@ -3865,6 +4250,7 @@ function renderFnGridForRole(role){
 }
 
 function rbOpenDay(dateKey){
+  if(dateKey<rbDateKey(new Date())) return; // past — locked
   rbSelectedDay=dateKey;
   renderRoster();
 }
@@ -3911,6 +4297,8 @@ function renderDayTimelineForRole(role){
   const cov=document.getElementById('rb-tl-cov-'+role);
   if(!header||!rows||!cov||!selectedDay) return;
   const isLocked=rbIsLockedForRole(rbGetFnStart(),role);
+  const isPastDay=selectedDay<rbDateKey(new Date());
+  const readOnly=isLocked||isPastDay;
   const isNurse=role==='Nurse';
   // Time axis — tick mark every 15 min, label every whole hour, edges at 7:45am/9:30pm
   let ticks='';
@@ -3934,12 +4322,12 @@ function renderDayTimelineForRole(role){
     const lbl=`${(s.start_time||'').slice(0,5)}–${(s.end_time||'').slice(0,5)}`;
     const leaveEntry=_entries.find(e=>e.employeeId===emp.id&&e.date===selectedDay&&e.leaveType);
     const currentLeave=leaveEntry?.leaveType||'';
-    const drag=isLocked?'':` onmousedown="rbStartDrag(event,'${s.id}','move')"`;
-    const delBtn=!isLocked?`<button class="rb-shift-del" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbDeleteShift('${s.id}','${role}')" title="Remove">&#215;</button>`:'';
-    const lHandle=!isLocked?`<div class="rb-shift-handle left" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','left')"></div>`:'';
-    const rHandle=!isLocked?`<div class="rb-shift-handle right" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','right')"></div>`:'';
+    const drag=readOnly?'':` onmousedown="rbStartDrag(event,'${s.id}','move')"`;
+    const delBtn=!readOnly?`<button class="rb-shift-del" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbDeleteShift('${s.id}','${role}')" title="Remove">&#215;</button>`:'';
+    const lHandle=!readOnly?`<div class="rb-shift-handle left" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','left')"></div>`:'';
+    const rHandle=!readOnly?`<div class="rb-shift-handle right" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','right')"></div>`:'';
     const leaveOpts=`<option value="">Worked Shift</option>`+Object.entries(LEAVE_TYPES).map(([v,l])=>`<option value="${v}"${currentLeave===v?' selected':''}>${l}</option>`).join('');
-    const leaveBtn=!isLocked?`<select class="rb-leave-select" onmousedown="event.stopPropagation()" onchange="event.stopPropagation();rbMarkLeave('${emp.id}','${selectedDay}','${s.id}',this.value)">${leaveOpts}</select>`:'';
+    const leaveBtn=!readOnly?`<select class="rb-leave-select" onmousedown="event.stopPropagation()" onchange="event.stopPropagation();rbMarkLeave('${emp.id}','${selectedDay}','${s.id}',this.value)">${leaveOpts}</select>`:`<span style="font-size:0.68rem;color:var(--muted);font-style:italic;margin-left:4px;">${currentLeave?formatLeaveType(currentLeave):''}</span>`;
     const leaveClass=currentLeave?' on-leave '+currentLeave.replace(/_/g,'-'):'';
     return`<div class="rb-shift-bar${leaveClass}" data-shift-id="${s.id}" style="left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%"${drag} title="${emp.name}: ${lbl}${currentLeave?' ('+formatLeaveType(currentLeave)+')':''}">
       ${lHandle}<span class="rb-shift-label">${lbl}</span>${rHandle}${leaveBtn}${delBtn}
@@ -3952,8 +4340,8 @@ function renderDayTimelineForRole(role){
     const floorRows=emps.map(emp=>{
       const floorShifts=getFloor(emp.id);
       const bars=floorShifts.map(s=>makeBar(s,emp)).join('');
-      const addBtn=!isLocked&&!floorShifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
-      const badge=!isLocked&&floorShifts.length?`<button class="rb-lane-badge" onclick="rbToggleLane('${floorShifts[0].id}','${role}')" title="Move to 75+ Clinic">→ 75+</button>`:'';
+      const addBtn=!readOnly&&!floorShifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
+      const badge=!readOnly&&floorShifts.length?`<button class="rb-lane-badge" onclick="rbToggleLane('${floorShifts[0].id}','${role}')" title="Move to 75+ Clinic">→ 75+</button>`:'';
       return`<div class="rb-tl-row"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}${badge}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${bars}</div></div>`;
     }).join('');
     const has75=emps.some(emp=>getClinic(emp.id).length>0);
@@ -3961,7 +4349,7 @@ function renderDayTimelineForRole(role){
     const clinicRows=clinicEmps.map((emp,i)=>{
       const clinicShifts=getClinic(emp.id);
       const bars=clinicShifts.map(s=>makeBar(s,emp)).join('');
-      const badge=!isLocked?`<button class="rb-lane-badge" onclick="rbToggleLane('${clinicShifts[0].id}','${role}')" title="Move back to Floor">← Floor</button>`:'';
+      const badge=!readOnly?`<button class="rb-lane-badge" onclick="rbToggleLane('${clinicShifts[0].id}','${role}')" title="Move back to Floor">← Floor</button>`:'';
       const pill=i===0?`<span style="position:absolute;top:0;left:0.6rem;transform:translateY(-50%);background:var(--white);border:1.5px solid rgba(91,122,94,0.5);border-radius:999px;padding:1px 9px;font-size:0.58rem;font-weight:700;color:#5B7A5E;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;z-index:2;">75+ Clinic</span>`:'';
       const borderTop=i===0?'position:relative;border-top:2px solid rgba(91,122,94,0.35);':'';
       return`<div class="rb-tl-row clinic" style="${borderTop}">${pill}<div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${badge}</div><div class="rb-tl-track" data-emp-id="${emp.id}-75plus">${bars}</div></div>`;
@@ -3973,7 +4361,7 @@ function renderDayTimelineForRole(role){
     rows.innerHTML=emps.map(emp=>{
       const shifts=_rosterShifts.filter(s=>s.date===selectedDay&&s.employee_id===emp.id&&!s.is_day_off);
       const bars=shifts.map(s=>makeBar(s,emp)).join('');
-      const addBtn=!isLocked&&!shifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
+      const addBtn=!readOnly&&!shifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
       return`<div class="rb-tl-row"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${bars}</div></div>`;
     }).join('');
   }
@@ -3993,6 +4381,7 @@ function renderDayTimelineForRole(role){
 function rbRoleForEmp(empId){ const e=_emps.find(e=>e.id===empId); return e?.role||null; }
 
 async function rbAddShift(empId,date,role){
+  if(date<rbDateKey(new Date())) return; // past — locked
   const r=role||rbRoleForEmp(empId);
   const isNurseRole=r==='Nurse';
   // For nurses, only block if a floor shift already exists (75+ shifts don't block adding a floor shift)
@@ -4059,6 +4448,7 @@ function rbStartDrag(e,shiftId,type){
   // Use loose equality (==) so string '123' matches numeric id 123 from DB
   const shift=_rosterShifts.find(s=>s.id==shiftId);
   if(!shift) return;
+  if(shift.date&&shift.date<rbDateKey(new Date())) return; // past — locked
   const shiftRole=rbRoleForEmp(shift.employee_id);
   if(shiftRole && rbIsLockedForRole(rbGetFnStart(),shiftRole)) return;
   // Walk up from e.target to find the bar element directly, then its track parent
@@ -4395,6 +4785,118 @@ try{ setDefaultDates(); }catch(e){ console.error('setDefaultDates error',e); }
   }catch(e){console.error('Roster load error:',e);}
 })();
 
+// ── Roster Export & Print ──────────────────────────────────────────────
+
+function populatePrintFnChecks(){
+  const el=document.getElementById('print-fn-checks');
+  if(!el) return;
+  const labels=['Current fortnight','+1 fortnight','+2 fortnights','+3 fortnights','+4 fortnights'];
+  el.innerHTML=labels.map((lbl,i)=>`
+    <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;font-weight:600;cursor:pointer;">
+      <input type="checkbox" class="print-fn-check" data-offset="${i}" ${i===0?'checked':''}/> ${lbl}
+    </label>`).join('');
+}
+
+function exportRosterCSV(){
+  const from=document.getElementById('roster-export-from').value;
+  const to=document.getElementById('roster-export-to').value;
+  if(!from||!to){showToast('Please select a date range');return;}
+  if(to<from){showToast('End date must be after start date');return;}
+  const dates=[];
+  const d=new Date(from+'T12:00:00'), end=new Date(to+'T12:00:00');
+  while(d<=end){dates.push(rbDateKey(d));d.setDate(d.getDate()+1);}
+  const shifts=_rosterShifts.filter(s=>!s.is_day_off&&dates.includes(s.date));
+  shifts.sort((a,b)=>a.date.localeCompare(b.date)||((a.start_time||'').localeCompare(b.start_time||'')));
+  const rows=[['Date','Employee','Role','Start','End','Hours']];
+  shifts.forEach(s=>{
+    const emp=_emps.find(e=>e.id==s.employee_id);
+    if(!emp) return;
+    const dateF=new Date(s.date+'T12:00:00').toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const sMin=timeStrToMin(s.start_time), eMin=timeStrToMin(s.end_time);
+    const hours=sMin&&eMin?((eMin-sMin)/60).toFixed(2):'';
+    rows.push([dateF,emp.name,emp.role,s.start_time||'',s.end_time||'',hours]);
+  });
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=`Roster_${from}_to_${to}.csv`;
+  a.click();
+  showToast(`Exported ${shifts.length} shifts`);
+}
+
+function printRoster(){
+  const selectedOffsets=[...document.querySelectorAll('.print-fn-check:checked')].map(c=>parseInt(c.dataset.offset));
+  const selectedRoles=['Receptionist','Nurse','Manager'].filter(r=>document.getElementById('print-role-'+r)?.checked);
+  if(!selectedOffsets.length){showToast('Select at least one fortnight');return;}
+  if(!selectedRoles.length){showToast('Select at least one role');return;}
+
+  const logoUrl=new URL('Logo.png',window.location.href).href;
+  const pages=[];
+
+  selectedOffsets.forEach(offset=>{
+    const fnStart=getFortnightStart(offset);
+    const days=getFortnight14Days(fnStart);
+    const fnLabel=`${new Date(days[0]+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})} – ${new Date(days[13]+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`;
+
+    selectedRoles.forEach(role=>{
+      const roleEmps=_emps.filter(e=>e.role===role&&e.active!==false).sort((a,b)=>a.name.localeCompare(b.name));
+      if(!roleEmps.length) return;
+
+      // Build column headers (day labels)
+      const dayHeaders=days.map(d=>{
+        const dt=new Date(d+'T12:00:00');
+        return`<th>${dt.toLocaleDateString('en-AU',{weekday:'short'})}<br/>${dt.getDate()}/${dt.getMonth()+1}</th>`;
+      }).join('');
+
+      // Build rows
+      const empRows=roleEmps.map(emp=>{
+        const cells=days.map(d=>{
+          const shifts=_rosterShifts.filter(s=>s.employee_id===emp.id&&s.date===d&&!s.is_day_off);
+          const leaveEntry=_entries.find(e=>e.employeeId===emp.id&&e.date===d&&e.leaveType);
+          if(leaveEntry?.leaveType){
+            const abbr={annual_leave:'AL',personal_leave:'PL',public_holiday:'PH',compassionate_leave:'CL',unpaid_leave:'UL'}[leaveEntry.leaveType]||'Leave';
+            return`<td><span class="rp-leave">${abbr}</span></td>`;
+          }
+          if(!shifts.length) return`<td><span class="rp-off">—</span></td>`;
+          return`<td>${shifts.map(s=>`<span class="rp-shift">${(s.start_time||'').slice(0,5)}<br/>${(s.end_time||'').slice(0,5)}</span>`).join('<br/>')}</td>`;
+        }).join('');
+        return`<tr><td class="rp-name-cell">${emp.name}</td>${cells}</tr>`;
+      }).join('');
+
+      const roleLabelMap={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
+      pages.push(`
+        <div class="rp-page">
+          <div class="rp-header">
+            <div class="rp-header-left">
+              <img src="${logoUrl}" class="rp-header-logo" alt="Wellness on Wellington" />
+              <div>
+                <div class="rp-header-clinic">Wellness on Wellington</div>
+                <div class="rp-header-sub">Running Well — Staff Roster</div>
+              </div>
+            </div>
+            <div class="rp-header-right">
+              <strong>${roleLabelMap[role]||role}</strong><br/>
+              ${fnLabel}<br/>
+              Printed ${new Date().toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}
+            </div>
+          </div>
+          <div class="rp-role-label">${roleLabelMap[role]||role}</div>
+          <table class="rp-table">
+            <thead><tr><th class="rp-name-col">Name</th>${dayHeaders}</tr></thead>
+            <tbody>${empRows}</tbody>
+          </table>
+        </div>`);
+    });
+  });
+
+  if(!pages.length){showToast('No data to print');return;}
+  document.getElementById('roster-print-area').innerHTML=pages.join('');
+  window.print();
+  // Clean up after print dialog closes
+  setTimeout(()=>{document.getElementById('roster-print-area').innerHTML='';},1000);
+}
+
 </script>
+<div id="roster-print-area"></div>
 </body>
 </html>
