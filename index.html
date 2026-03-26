@@ -668,9 +668,9 @@
   .sr-gnow-tick-mark { width: 1px; height: 6px; background: var(--border-dk); }
   .sr-gnow-tick-label { font-size: 0.6rem; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; }
 
-  .sr-gnow-body { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; overflow: hidden; }
+  .sr-gnow-body { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; overflow: hidden; padding-top: 1.6rem; }
   .sr-gnow-now-line { position: absolute; top: 0; bottom: 0; left: calc(140px + var(--now-pct, -1) * (100% - 140px)); width: 3px; background: var(--burgundy); box-shadow: 0 0 6px rgba(139,37,53,0.5); z-index: 4; pointer-events: none; display: none; }
-  .sr-gnow-now-badge { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: var(--burgundy); color: #fff; font-size: 0.58rem; font-weight: 800; padding: 0.12rem 0.4rem; border-radius: 20px; white-space: nowrap; font-family: 'Courier New',monospace; }
+  .sr-gnow-now-badge { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); background: var(--burgundy); color: #fff; font-size: 0.82rem; font-weight: 800; padding: 0.28rem 0.75rem; border-radius: 20px; white-space: nowrap; font-family: 'Courier New',monospace; box-shadow: 0 2px 8px rgba(139,37,53,0.4); letter-spacing: 0.04em; }
 
   .sr-gnow-group { display: flex; flex-direction: column; min-height: 0; }
   .sr-gnow-group-hdr { display: flex; align-items: center; gap: 0.45rem; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); padding: 0.4rem 0 0.25rem; flex-shrink: 0; }
@@ -678,10 +678,26 @@
   .sr-gnow-rows { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .sr-gnow-row { flex: 1; display: flex; align-items: center; min-height: 28px; padding-right: 1.5rem; border-bottom: 1px solid rgba(234,217,220,0.5); }
   .sr-gnow-row:last-child { border-bottom: none; }
+  .sr-gnow-row:nth-child(even) { background: rgba(234,217,220,0.35); }
+  .sr-gnow-row:nth-child(even) .sr-gnow-track { background: transparent; }
   .sr-gnow-row-name { width: 140px; flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: var(--charcoal); padding-right: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sr-gnow-track { flex: 1; position: relative; height: 55%; min-height: 18px; max-height: 30px; background: var(--warm-white); border-radius: 6px; border: 1px solid var(--border); }
-  .sr-gnow-bar { position: absolute; top: 0; bottom: 0; border-radius: 6px; display: flex; align-items: center; padding: 0 0.5rem; overflow: hidden; min-width: 3px; }
-  .sr-gnow-bar-time { font-size: 0.6rem; font-weight: 700; color: rgba(255,255,255,0.92); white-space: nowrap; font-family: 'Courier New',monospace; }
+  .sr-gnow-bar { position: absolute; top: 0; bottom: 0; border-radius: 6px; display: flex; align-items: center; justify-content: center; padding: 0 0.5rem; overflow: hidden; min-width: 3px; }
+  .sr-gnow-bar-time { font-size: 0.6rem; font-weight: 700; color: rgba(255,255,255,0.92); white-space: nowrap; font-family: 'Courier New',monospace; position: absolute; left: 0.4rem; }
+  .sr-gnow-bar-name { font-size: 0.62rem; font-weight: 800; color: rgba(255,255,255,0.45); white-space: nowrap; overflow: hidden; text-overflow: clip; letter-spacing: 0.03em; pointer-events: none; }
+
+  /* Now — mobile card list (hidden on desktop) */
+  .sr-gnow-mobile { display: none; }
+  .sr-gnow-mobile-group { margin-bottom: 1.25rem; }
+  .sr-gnow-mobile-role-hdr { display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.5rem; padding: 0 0.1rem; }
+  .sr-gnow-mobile-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .sr-gnow-mobile-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 0.85rem; border-radius: var(--radius-sm); margin-bottom: 0.35rem; background: var(--white); border: 1.5px solid var(--border); }
+  .sr-gnow-mobile-row.on-now { border-color: transparent; }
+  .sr-gnow-mobile-row.coming-up { opacity: 0.7; }
+  .sr-gnow-mobile-row.finished { opacity: 0.4; }
+  .sr-gnow-mobile-name { font-size: 0.9rem; font-weight: 700; color: var(--charcoal); flex: 1; }
+  .sr-gnow-mobile-time { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .sr-gnow-mobile-badge { font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.18rem 0.55rem; border-radius: 20px; color: #fff; white-space: nowrap; flex-shrink: 0; }
   .sr-gnow-empty { text-align: center; padding: 4rem 2rem; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
 
   /* ══════════════════════════════
@@ -1110,6 +1126,12 @@
 
     /* Past day cards: slightly less faded so they're still readable */
     .sr-day-card.past { opacity: 0.55; }
+
+    /* ── Now view: swap Gantt for card list ── */
+    .sr-gnow { display: none; }
+    .sr-gnow-mobile { display: block; padding: 1rem 0.75rem; overflow-y: auto; }
+    #view-staff-roster.sr-now-mode { height: auto; overflow: visible; }
+    #view-staff-roster.sr-now-mode .sr-content { overflow: visible; min-height: 0; }
 
     /* ── Kiosk view ── */
     #view-kiosk { padding: 1.25rem 1rem; gap: 1rem; justify-content: flex-start; padding-top: 1.75rem; }
@@ -1879,6 +1901,22 @@
       </select>
     </div>
     <div class="form-group">
+      <label class="form-label">MYOB Classification</label>
+      <select class="form-select" id="emp-classification">
+        <option value="">— Not set —</option>
+        <option>HSSE Level 3</option>
+        <option>HSSE Level 4</option>
+        <option>HSSE Level 5</option>
+        <option>Registered Nurse</option>
+        <option>Enrolled Nurse</option>
+        <option>Nurse Manager</option>
+        <option>Office Manager</option>
+        <option>Practice Manager</option>
+        <option>Casual</option>
+      </select>
+      <div class="form-hint">Determines which MYOB payroll category strings are used on export.</div>
+    </div>
+    <div class="form-group">
       <label class="form-label">MYOB Employee ID</label>
       <input class="form-input" type="text" id="emp-myob-id" placeholder="e.g. 308" />
       <div class="form-hint">The numeric employee record ID from MYOB. Used in payroll export.</div>
@@ -2636,7 +2674,7 @@ function renderTeam(){
   const cardHtml=emp=>{
     const initials=emp.name.replace(/^(Dr\.|Nurse|Reception|Practice Mgr)\s*/i,'').split(' ').slice(0,2).map(n=>n[0]).join('');
     const cc=ROLE_C[emp.role]||'c-doctor'; const isIn=inNow.has(emp.id);
-    return`<div class="employee-card"><div class="emp-avatar ${cc}">${initials}</div><div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-meta">${emp.role} · ${emp.type}</div><div class="emp-rfid">${emp.rfid}${emp.myob_record_id?` · MYOB #${emp.myob_record_id}`:' · <span style="color:var(--burgundy);font-size:0.7rem;">No MYOB ID</span>'}</div></div><button class="emp-edit-btn" onclick="openEditEmployee('${emp.id}')">Edit</button><div class="status-dot ${isIn?'in':'out'}" title="${isIn?'Checked in':'Not in today'}"></div></div>`;
+    return`<div class="employee-card"><div class="emp-avatar ${cc}">${initials}</div><div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-meta">${emp.role} · ${emp.type}</div><div class="emp-rfid">${emp.rfid}${emp.myob_record_id?` · MYOB #${emp.myob_record_id}`:' · <span style="color:var(--burgundy);font-size:0.7rem;">No MYOB ID</span>'}</div>${emp.classification?`<div class="emp-rfid" style="color:var(--muted)">${emp.classification}</div>`:`<div class="emp-rfid"><span style="color:var(--burgundy);font-size:0.7rem;">No classification set</span></div>`}</div><button class="emp-edit-btn" onclick="openEditEmployee('${emp.id}')">Edit</button><div class="status-dot ${isIn?'in':'out'}" title="${isIn?'Checked in':'Not in today'}"></div></div>`;
   };
   const visibleGroups=TEAM_GROUPS.filter(g=>teamRoles.has(g.role));
   document.getElementById('employees-grid').innerHTML=visibleGroups.map((g,i)=>{
@@ -2672,6 +2710,7 @@ function openEditEmployee(empId){
   document.getElementById('emp-role').value=emp.role;
   document.getElementById('emp-rfid').value=emp.rfid;
   document.getElementById('emp-type').value=emp.type;
+  document.getElementById('emp-classification').value=emp.classification||'';
   document.getElementById('emp-myob-id').value=emp.myob_record_id||'';
   document.getElementById('emp-remove-btn').style.display='';
   document.getElementById('emp-modal').classList.add('show');
@@ -2687,6 +2726,7 @@ async function saveEmployee(){
   const role=document.getElementById('emp-role').value;
   const rfid=document.getElementById('emp-rfid').value.trim().replace(/\D/g,'');
   const type=document.getElementById('emp-type').value;
+  const classification=document.getElementById('emp-classification').value||null;
   const myobRecordId=document.getElementById('emp-myob-id').value.trim()||null;
   if(!firstName){showToast('Please fill in a first name');return;}
   if(!rfid&&!confirm('No RFID card number entered — this staff member won\'t be able to clock in until one is assigned. Save anyway?')) return;
@@ -2694,13 +2734,13 @@ async function saveEmployee(){
   if(_emps.find(e=>e.rfid===rfid&&e.id!==_editingEmpId)){showToast('That card is already registered to someone');return;}
   try{
     if(_editingEmpId){
-      await db.update('employees',_editingEmpId,{name,role,rfid,type,myob_record_id:myobRecordId});
+      await db.update('employees',_editingEmpId,{name,role,rfid,type,classification,myob_record_id:myobRecordId});
       const emp=_emps.find(e=>e.id===_editingEmpId);
-      if(emp){emp.name=name;emp.role=role;emp.rfid=rfid;emp.type=type;emp.myob_record_id=myobRecordId;}
+      if(emp){emp.name=name;emp.role=role;emp.rfid=rfid;emp.type=type;emp.classification=classification;emp.myob_record_id=myobRecordId;}
       closeModal(); renderTeam();
       showToast(name+' updated ✓');
     } else {
-      const row={id:'E'+Date.now(),name,role,rfid,type,myob_record_id:myobRecordId};
+      const row={id:'E'+Date.now(),name,role,rfid,type,classification,myob_record_id:myobRecordId};
       await db.insert('employees',row);
       _emps.push(row); closeModal(); renderTeam();
       showToast(name+' added to the team ✓');
@@ -2775,7 +2815,7 @@ function groupEntriesByDay(entries){
   });
   return Object.values(map).map(group=>{
     if(group.length===1) return{...group[0],breakCount:0,breakMins:0};
-    const sorted=group.slice().sort((a,b)=>a.clockIn.localeCompare(b.clockIn));
+    const sorted=group.slice().sort((a,b)=>(a.clockIn||'').localeCompare(b.clockIn||''));
     const completed=sorted.filter(r=>r.clockOut&&r.hours);
     const totalPaidMins=completed.reduce((s,r)=>s+parseFloat(r.hours)*60,0);
     const earliest=sorted[0];
@@ -2832,7 +2872,7 @@ function tsGetFlag(locked, noEntry, finalStart, finalEnd, autoApproved, entrySta
   return 'yellow';
 }
 
-function tsBuildRow(emp, date, shift, entry){
+function tsBuildRow(emp, date, shift, entry, splitSegment=false){
   const d=new Date(date+'T12:00:00');
   const dateLabel=d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
   const rostStart=shift?.start_time||null;
@@ -2847,13 +2887,19 @@ function tsBuildRow(emp, date, shift, entry){
   const entryId=entry?.id||null;
   const noEntry=!entry&&!!shift;
   const missedClockOut=tsMissedClockOut(entry);
-  const autoApproved=tsIsAutoApproved(entry,shift);
   const entryStatus=entry?.status||null;
   const payrollType=entry?.payrollType||entry?.leaveType||'';
   const isLeaveShift=!!payrollType; // any non-empty = leave type set
-  const noClockExpected=!entry?.clockIn&&!!rostStart&&!!rostEnd&&(emp.role==='Manager'||isLeaveShift);
+  const isSplitWorked=splitSegment&&!isLeaveShift;
+  // isSplitWorked: no clock-in means manager locks with roster times (same as leave/Manager path)
+  const noClockExpected=!entry?.clockIn&&!!rostStart&&!!rostEnd&&(emp.role==='Manager'||isLeaveShift||isSplitWorked);
+  // For split worked segments: cap effectiveFinalEnd to segment boundary (clockOut is full-shift end)
   const effectiveFinalStart=finalStart||(noClockExpected?rostStart:null);
-  const effectiveFinalEnd=finalEnd||(noClockExpected?rostEnd:null);
+  const effectiveFinalEnd=isSplitWorked&&finalEnd&&rostEnd&&finalEnd>rostEnd?rostEnd:(finalEnd||(noClockExpected?rostEnd:null));
+  // For split worked segments: auto-approve on clockIn proximity only (clockOut belongs to the full shift)
+  const autoApproved=isSplitWorked
+    ?(entry?.clockIn&&rostStart?Math.abs(timeToMin(entry.clockIn)-timeToMin(rostStart))<YELLOW_THRESHOLD:false)
+    :tsIsAutoApproved(entry,shift);
   const effectiveAutoApproved=autoApproved||noClockExpected;
   const flag=tsGetFlag(locked,noEntry&&!noClockExpected,effectiveFinalStart,effectiveFinalEnd,effectiveAutoApproved,entryStatus,missedClockOut);
   const autoExpand=flag==='red'||flag==='flagged'||entryId==_tsExpandEntryId;
@@ -2887,7 +2933,10 @@ function tsBuildRow(emp, date, shift, entry){
 
   const PAYROLL_TYPES=[['','Worked'],['annual_leave','Annual Leave'],['personal_leave','Personal Leave'],['public_holiday','Public Holiday'],['compassionate_leave','Compassionate Leave'],['unpaid_leave','Unpaid Leave']];
   const fmtH=h=>h===Math.round(h)?h+'h':h.toFixed(1)+'h';
-  const myobPreviewText=(locked||effectiveAutoApproved)&&entry?calcMYOBRows(entry,emp.role).map(r=>`${fmtH(r.hours)} ${r.cat}`).join(' · '):'';
+  const myobEntry=splitSegment&&!isLeaveShift&&shift?.start_time
+    ?{...(entry||{}),date,clockIn:shift.start_time,clockOut:shift.end_time,finalStart:null,finalEnd:null}
+    :entry;
+  const myobPreviewText=(locked||effectiveAutoApproved)&&myobEntry?calcMYOBRows(myobEntry,emp).map(r=>`${fmtH(r.hours)} ${r.cat}`).join(' · '):'';
   const payrollDone=locked||effectiveAutoApproved;
   const payrollInner=payrollDone
     ?`<span class="ts-payroll-label">${PAYROLL_TYPES.find(([v])=>v===payrollType)?.[1]||'Worked'}</span>`
@@ -3038,11 +3087,21 @@ function renderTimesheets(){
     const activeDays=[...new Set([...empShifts.map(s=>s.date),...empEntries.map(e=>e.date)])].sort();
     if(!activeDays.length) return '';
 
-    const rows=activeDays.map(date=>{
-      const shift=empShifts.find(s=>s.date===date)||null;
+    const rows=activeDays.flatMap(date=>{
+      const dayShifts=empShifts.filter(s=>s.date===date);
       const dayEntries=empEntries.filter(e=>e.date===date);
-      const entry=dayEntries.length?groupEntriesByDay(dayEntries)[0]:null;
-      return tsBuildRow(emp,date,shift,entry);
+      if(dayShifts.length<=1){
+        const shift=dayShifts[0]||null;
+        const entry=dayEntries.length?groupEntriesByDay(dayEntries)[0]:null;
+        return [tsBuildRow(emp,date,shift,entry)];
+      }
+      // Split shift — one row per segment
+      return dayShifts.map(seg=>{
+        const leaveEntry=dayEntries.find(e=>e.shiftId===seg.id&&e.leaveType);
+        if(leaveEntry) return tsBuildRow(emp,date,seg,leaveEntry,false);
+        const workedEntry=dayEntries.find(e=>!e.leaveType&&(e.clockIn||e.finalStart||e.locked))||null;
+        return tsBuildRow(emp,date,seg,workedEntry,true); // splitSegment=true → use segment times for MYOB
+      });
     }).join('');
 
     const flagCounts=activeDays.reduce((acc,date)=>{
@@ -3214,7 +3273,9 @@ async function tsUnlockRow(entryId, e){
     await db.update('entries',entryId,{locked:false,locked_by:null,locked_at:null});
     const entry=_entries.find(en=>en.id===entryId);
     if(entry){entry.locked=false;entry.lockedBy=null;}
-    _tsAutoOverride.delete(String(entryId));
+    // No-clock entries (created via roster lock) re-approve instantly — force override so row stays editable
+    if(entry&&!entry.clockIn) _tsAutoOverride.add(String(entryId));
+    else _tsAutoOverride.delete(String(entryId));
     _tsExpandEntryId=String(entryId);
     renderTimesheets();
     _tsExpandEntryId=null;
@@ -3386,7 +3447,19 @@ async function tsSaveAudit(data){
   try{ await db.insert('timesheet_audit',data); }catch(e){ console.error('Audit log failed',e); }
 }
 
-function calcMYOBRows(entry, role){
+const MYOB_CATS={
+  'HSSE Level 3':    null, // placeholder — confirm strings when a Level 3 employee joins
+  'HSSE Level 4':    {day:'HSSE level 4 - base',evening:'HSSE level 4 - evening',saturday:'Saturday Rate  (1.5x)',sunday:'Sunday Rate (2x)',publicHoliday:'Public Holiday',annualLeave:'Annual Leave',personalLeave:'Personal Leave',compassionateLeave:'Compassionate Leave',unpaidLeave:'personal leave without pay',isNurse:false},
+  'HSSE Level 5':    {day:'HSSE level 5 - base',evening:'HSSE level 5 - evening',saturday:'Saturday Rate  (1.5x)',sunday:'Sunday Rate (2x)',publicHoliday:'Public Holiday',annualLeave:'Annual Leave',personalLeave:'Personal Leave',compassionateLeave:'Compassionate Leave',unpaidLeave:'personal leave without pay',isNurse:false},
+  'Registered Nurse':{day:'Base Hourly',evening:'Nurse Evening Hours',saturday:'Saturday Rate  (1.5x)',sunday:null,publicHoliday:'Public Holiday',annualLeave:'Annual Leave',personalLeave:'Personal Leave',compassionateLeave:'Compassionate Leave',unpaidLeave:'personal leave without pay',isNurse:true},
+  'Enrolled Nurse':  {day:'Base Hourly',evening:'Nurse Evening Hours',saturday:'Saturday Rate  (1.5x)',sunday:null,publicHoliday:'Public Holiday',annualLeave:'Annual Leave',personalLeave:'Personal Leave',compassionateLeave:'Compassionate Leave',unpaidLeave:'personal leave without pay',isNurse:true},
+  'Nurse Manager':   {day:'Base Hourly',evening:'Nurse Evening Hours',saturday:'Saturday Rate  (1.5x)',sunday:'Sunday Rate (2x)',publicHoliday:'Public Holiday',annualLeave:'Annual Leave',personalLeave:'Personal Leave',compassionateLeave:'Compassionate Leave',unpaidLeave:'personal leave without pay',isNurse:true},
+  'Office Manager':  {day:'Base Hourly',evening:'Evening Rate',saturday:'Saturday Rate  (1.5x)',sunday:'Sunday Rate (2x)',publicHoliday:'Public Holiday',annualLeave:'Annual Leave',personalLeave:'Personal Leave',compassionateLeave:'Compassionate Leave',unpaidLeave:null,isNurse:false},
+  'Practice Manager':{day:'Base Hourly',evening:null,saturday:null,sunday:'Sunday Rate (2x)',publicHoliday:null,annualLeave:'Annual Leave',personalLeave:'Personal Leave',compassionateLeave:'Compassionate Leave',unpaidLeave:null,isNurse:false},
+  'Casual':          {day:'casual Day CE',evening:'Casual evening CE',saturday:'Casual WoW weekend',sunday:'Casual WoW weekend',publicHoliday:null,annualLeave:null,personalLeave:null,compassionateLeave:null,unpaidLeave:null,isNurse:false},
+};
+
+function calcMYOBRows(entry, emp){
   const start=entry.finalStart||entry.clockIn;
   const end=entry.finalEnd||entry.clockOut;
   if(!start||!end) return [];
@@ -3395,18 +3468,39 @@ function calcMYOBRows(entry, role){
   if(endMins<=startMins) return [];
   const totalHours=(endMins-startMins)/60;
   const payrollType=entry.payrollType||entry.leaveType||'';
-  const isSaturday=new Date(entry.date+'T12:00:00').getDay()===6;
+  const dow=new Date(entry.date+'T12:00:00').getDay();
+  const isSaturday=dow===6;
+  const isSunday=dow===0;
   const SPLIT=18*60;
-  if(payrollType==='public_holiday')    return [{cat:'Public Holiday',   hours:totalHours}];
-  if(payrollType==='annual_leave')      return [{cat:'Annual Leave',     hours:totalHours}];
-  if(payrollType==='personal_leave')    return [{cat:'Personal Leave',   hours:totalHours}];
-  if(payrollType==='compassionate_leave') return [{cat:'Compassionate Leave',hours:totalHours}];
-  if(payrollType==='unpaid_leave')      return [{cat:'Unpaid Leave',     hours:totalHours}];
-  if(isSaturday) return [{cat:'Saturday',hours:totalHours}];
-  if(role==='Nurse'||role==='Manager')  return [{cat:endMins>=SPLIT?'Evening':'Base Hourly',hours:totalHours}];
-  if(endMins<=SPLIT)   return [{cat:'Base Hourly',hours:totalHours}];
-  if(startMins>=SPLIT) return [{cat:'Evening',    hours:totalHours}];
-  return [{cat:'Base Hourly',hours:(SPLIT-startMins)/60},{cat:'Evening',hours:(endMins-SPLIT)/60}];
+  const cats=emp?.classification?MYOB_CATS[emp.classification]:null;
+
+  // Leave overrides — use classification-specific strings where available
+  if(payrollType==='public_holiday')      return [{cat:cats?.publicHoliday||'Public Holiday',hours:totalHours}];
+  if(payrollType==='annual_leave')        return [{cat:cats?.annualLeave||'Annual Leave',hours:totalHours}];
+  if(payrollType==='personal_leave')      return [{cat:cats?.personalLeave||'Personal Leave',hours:totalHours}];
+  if(payrollType==='compassionate_leave') return [{cat:cats?.compassionateLeave||'Compassionate Leave',hours:totalHours}];
+  if(payrollType==='unpaid_leave')        return [{cat:cats?.unpaidLeave||'personal leave without pay',hours:totalHours}];
+
+  // Weekend rates
+  if(isSaturday) return [{cat:cats?.saturday||'Saturday Rate  (1.5x)',hours:totalHours}];
+  if(isSunday)   return [{cat:cats?.sunday||'Sunday Rate (2x)',hours:totalHours}];
+
+  if(!cats){
+    // No classification set — fall back to role-based logic
+    const role=emp?.role||'';
+    if(role==='Nurse'||role==='Manager') return [{cat:endMins>=SPLIT?'Nurse Evening Hours':'Base Hourly',hours:totalHours}];
+    if(endMins<=SPLIT)   return [{cat:'Base Hourly',hours:totalHours}];
+    if(startMins>=SPLIT) return [{cat:'Evening Rate',hours:totalHours}];
+    return [{cat:'Base Hourly',hours:(SPLIT-startMins)/60},{cat:'Evening Rate',hours:(endMins-SPLIT)/60}];
+  }
+
+  // Nurse rule: entire shift at evening if ends at or after 18:00 (no split)
+  if(cats.isNurse) return [{cat:endMins>=SPLIT?cats.evening:cats.day,hours:totalHours}];
+
+  // Receptionist / Manager rule: split at 18:00
+  if(endMins<=SPLIT)   return [{cat:cats.day,hours:totalHours}];
+  if(startMins>=SPLIT) return [{cat:cats.evening||cats.day,hours:totalHours}];
+  return [{cat:cats.day,hours:(SPLIT-startMins)/60},{cat:cats.evening||cats.day,hours:(endMins-SPLIT)/60}];
 }
 
 function exportMYOB(){
@@ -3432,7 +3526,7 @@ function exportMYOB(){
     const firstName=nameParts[0]||'';
     const lastName=nameParts.slice(1).join(' ')||'';
     const dateF=entry.date.split('-').reverse().join('/');
-    const myobRows=calcMYOBRows(entry,emp?.role||entry.role||'');
+    const myobRows=calcMYOBRows(entry,emp);
     myobRows.forEach(({cat,hours})=>{
       const units=hours.toFixed(2);
       const row=[dateF,cat,units,firstName,lastName,'','','','','','*None',emp?.myob_record_id||'','',''];
@@ -4179,8 +4273,9 @@ function srByNow(today){
       return`<div class="sr-gnow-row">
         <div class="sr-gnow-row-name">${name}</div>
         <div class="sr-gnow-track">
-          <div class="sr-gnow-bar" style="left:${left.toFixed(2)}%;width:${Math.max(0,width).toFixed(2)}%;background:${color};" title="${shift.start}–${shift.end}">
+          <div class="sr-gnow-bar" style="left:${left.toFixed(2)}%;width:${Math.max(0,width).toFixed(2)}%;background:${color};" title="${name}: ${shift.start}–${shift.end}">
             <span class="sr-gnow-bar-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}</span>
+            <span class="sr-gnow-bar-name">${name}</span>
           </div>
         </div>
       </div>`;
@@ -4195,7 +4290,37 @@ function srByNow(today){
 
   if(!hasAny) return`<div class="sr-gnow-empty">No staff rostered for today.</div>`;
 
-  return`<div class="sr-gnow">
+  // Mobile card list
+  const nowMin=new Date().getHours()*60+new Date().getMinutes();
+  const mobileGroups=ROLE_ORDER.map(role=>{
+    const color=SR_ROLE_COLORS[role]||'var(--dusty)';
+    const roleEmps=_emps.filter(e=>e.role===role);
+    const rows=roleEmps.map(emp=>{
+      const shift=srShiftForEmp(emp.id,today);
+      if(!shift||shift==='off') return null;
+      const startMin=gnowToMin(shift.start);
+      const endMin=gnowToMin(shift.end);
+      const name=_srDnMap[emp.id]||empFirstName(emp);
+      const onNow=nowMin>=startMin&&nowMin<endMin;
+      const finished=nowMin>=endMin;
+      const statusClass=onNow?'on-now':finished?'finished':'coming-up';
+      const badge=onNow?`<span class="sr-gnow-mobile-badge" style="background:${color}">On now</span>`:'';
+      const rowStyle=onNow?`style="background:${color}18;border-color:${color}55;"`:'';
+      return`<div class="sr-gnow-mobile-row ${statusClass}" ${rowStyle}>
+        <span class="sr-gnow-mobile-name">${name}</span>
+        <span class="sr-gnow-mobile-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}</span>
+        ${badge}
+      </div>`;
+    }).filter(Boolean);
+    if(!rows.length) return null;
+    return`<div class="sr-gnow-mobile-group">
+      <div class="sr-gnow-mobile-role-hdr"><span class="sr-gnow-mobile-dot" style="background:${color}"></span>${ROLE_LABELS[role]}</div>
+      ${rows.join('')}
+    </div>`;
+  }).filter(Boolean);
+
+  return`
+  <div class="sr-gnow">
     <div class="sr-gnow-axis-row">
       <div class="sr-gnow-name-col"></div>
       <div class="sr-gnow-axis">${ticks.join('')}</div>
@@ -4204,7 +4329,8 @@ function srByNow(today){
       <div class="sr-gnow-now-line" id="sr-gnow-now-line"><div class="sr-gnow-now-badge" id="sr-gnow-now-badge"></div></div>
       ${groups.join('')}
     </div>
-  </div>`;
+  </div>
+  <div class="sr-gnow-mobile">${mobileGroups.join('')}</div>`;
 }
 
 function srByDay(days,emps,today){
@@ -4444,6 +4570,7 @@ function rbGetEmpsForRole(role){ return _emps.filter(e=>e.role===role); }
 
 function rbToggleLockForRole(role){
   const fnStart=rbGetFnStart();
+  if(rbDateKey(fnStart)<rbDateKey(new Date())){showToast('Historical rosters cannot be modified');return;}
   const key=rbDateKey(fnStart);
   rbSaveFnLockForRole(key,role,!rbIsLockedForRole(fnStart,role));
 }
