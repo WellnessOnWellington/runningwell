@@ -619,6 +619,7 @@
   .sr-layout-btn:hover:not(.active) { color: var(--burgundy); }
   .sr-layout-btn.active { background: var(--burgundy); color: #fff; box-shadow: 0 2px 8px rgba(139,37,53,0.25); border-color: var(--burgundy); }
   #sr-mobile-filter-btn { display: none; }
+  #sr-staff-filter-mob { display: none; }
   #sr-filter-wrap { position: relative; }
   #sr-filter-popover {
     display: none; position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
@@ -1142,6 +1143,12 @@
     #sr-kiosk-btn { display: none; }
 
     #sr-filter-wrap { margin-left: auto; }
+    #sr-filter-wrap.person-mode #sr-staff-filter-mob {
+      display: block; position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; opacity: 0; z-index: 5;
+      cursor: pointer; font-size: 16px;
+    }
+    #sr-filter-wrap.person-mode #sr-filter-popover { display: none !important; }
     #sr-mobile-filter-btn {
       display: flex; align-items: center; justify-content: center;
       position: relative;
@@ -1172,6 +1179,7 @@
       flex-direction: column; padding: 0; gap: 0; align-items: stretch;
     }
     .sr-filters-group { display: none !important; }
+    #sr-person-filter { display: none !important; }
     .sr-role-tabs { width: 100%; height: 40px; border-radius: 8px; }
     .sr-tab { flex: 1; justify-content: center; padding: 0; font-size: 0.75rem; white-space: nowrap; }
 
@@ -1429,6 +1437,7 @@
     <div class="sr-header-spacer"></div>
     <button class="admin-kiosk-btn" id="sr-kiosk-btn" onclick="showView('kiosk')" style="flex-shrink:0;">← Return to Kiosk</button>
     <div id="sr-filter-wrap">
+      <select id="sr-staff-filter-mob" onchange="srMobPersonSelect(this)"></select>
       <button id="sr-mobile-filter-btn" onclick="srToggleFilters(event)" aria-label="Toggle role filters">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.5 3.5h13M4 8h8M6.5 12.5h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <span id="sr-filter-dot"></span>
@@ -4873,6 +4882,14 @@ function srSelectIndividual(){
   renderStaffRoster();
 }
 
+function srMobPersonSelect(mobSel){
+  const mainSel=document.getElementById('sr-staff-filter');
+  if(mainSel) mainSel.value=mobSel.value;
+  const isFiltered=!!mobSel.value;
+  document.getElementById('sr-mobile-filter-btn')?.classList.toggle('filtered', isFiltered);
+  renderStaffRoster();
+}
+
 function srSetLayout(layout){
   const _tnNow=new Date();
   const todayStr=`${_tnNow.getFullYear()}-${String(_tnNow.getMonth()+1).padStart(2,'0')}-${String(_tnNow.getDate()).padStart(2,'0')}`;
@@ -4891,11 +4908,12 @@ function srSetLayout(layout){
   document.getElementById('sr-btn-day').classList.toggle('active',layout==='day');
   document.getElementById('sr-btn-person').classList.toggle('active',layout==='person');
   document.getElementById('sr-filters-group').style.display=layout==='person'?'none':'';
-  // Mobile filter btn: hide on person layout, close popover on layout switch
+  // Mobile filter btn: switch mode based on layout
   const mfWrap=document.getElementById('sr-filter-wrap');
-  if(mfWrap) mfWrap.style.display=layout==='person'?'none':'';
+  if(mfWrap){ mfWrap.style.display=''; mfWrap.classList.toggle('person-mode', layout==='person'); }
   document.getElementById('sr-filter-popover')?.classList.remove('open');
-  document.getElementById('sr-mobile-filter-btn')?.classList.remove('active');
+  const mfBtn=document.getElementById('sr-mobile-filter-btn');
+  if(mfBtn){ mfBtn.classList.remove('active'); mfBtn.classList.remove('filtered'); }
   document.getElementById('sr-person-filter').style.display=layout==='person'?'flex':'none';
   document.getElementById('view-staff-roster').classList.toggle('sr-now-mode',layout==='day');
   const sel=document.getElementById('sr-staff-filter');
@@ -4952,15 +4970,13 @@ function renderStaffRoster(){
   else if(srLayout==='fortnight') emps=emps.filter(e=>srRoles.has(e.role));
   else emps=[]; // person view with no selection: show placeholder
 
-  // Populate staff dropdown (preserve selection)
+  // Populate staff dropdowns (preserve selection)
   const sel=document.getElementById('sr-staff-filter');
-  if(sel){
-    const cur=sel.value;
-    sel.innerHTML='<option value="">Individual view</option>'+
-      [..._emps].sort((a,b)=>a.name.localeCompare(b.name))
-      .map(e=>`<option value="${e.id}">${buildDisplayNames(_emps)[e.id]}</option>`).join('');
-    if(cur)sel.value=cur;
-  }
+  const selMob=document.getElementById('sr-staff-filter-mob');
+  const nameOptions=[..._emps].sort((a,b)=>a.name.localeCompare(b.name))
+    .map(e=>`<option value="${e.id}">${buildDisplayNames(_emps)[e.id]}</option>`).join('');
+  if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Individual view</option>'+nameOptions; if(cur)sel.value=cur; }
+  if(selMob){ const cur=selMob.value; selMob.innerHTML='<option value="" disabled hidden selected></option>'+nameOptions; if(cur)selMob.value=cur; }
 
   const fn1Published=srIsPublished(fn1Start);
 
