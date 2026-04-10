@@ -7215,7 +7215,7 @@ function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').re
 
   function content(){ return document.getElementById('sr-content'); }
   function isMobile(){ return window.matchMedia('(pointer:coarse)').matches; }
-  function canSwipe(){ return isMobile() && typeof srLayout!=='undefined' && srLayout!=='person'; }
+  function canSwipe(){ return isMobile() && typeof srLayout!=='undefined'; }
 
   function setTransform(el, x, transition){
     el.style.transition = transition || 'none';
