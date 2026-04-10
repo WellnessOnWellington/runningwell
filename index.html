@@ -668,6 +668,7 @@
   .sr-fp-check.active { background: var(--burgundy); border-color: var(--burgundy); color: #fff; }
 
   .sr-content { padding: 1.75rem 2rem; max-width: 1500px; margin: 0 auto; width: 100%; }
+  #sr-swipe-wrap { position: relative; }
 
   .sr-fortnight-block { margin-bottom: 2.5rem; }
   .sr-fortnight-heading { display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem; padding-bottom:0.5rem; border-bottom:2px solid var(--border); }
@@ -1534,7 +1535,7 @@
     </div>
   </div>
 
-  <div class="sr-content" id="sr-content"></div>
+  <div id="sr-swipe-wrap"><div class="sr-content" id="sr-content"></div></div>
   <div class="sr-brand-footer" id="sr-brand-footer">
     Running <span>Well</span>
     <svg width="72" height="9" viewBox="0 0 72 9" fill="none" style="display:block;margin:3px auto 0;">
@@ -7209,41 +7210,89 @@ function reqFmtDate(dateStr){
 function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 /* ═══════════════════════════════════════════
-   SWIPE NAVIGATION (mobile)
+   SWIPE NAVIGATION (mobile) — drag-across
 ═══════════════════════════════════════════ */
 (function(){
   const SWIPE_THRESHOLD=50;      // px — minimum distance to trigger nav
   const VELOCITY_THRESHOLD=0.35; // px/ms — fast flick triggers even if short
-  const RESIST=0.82;             // finger follow factor (< 1 = slight drag feel)
-  const SLIDE_OUT_MS=180;
-  const SLIDE_IN_MS=240;
+  const COMMIT_MS=180;
+  const CANCEL_MS=200;
 
   let startX=0, startY=0, startT=0, curX=0;
   let tracking=false, axisLocked=false, isHoriz=false;
+  let animating=false;
 
   function content(){ return document.getElementById('sr-content'); }
+  function swipeWrap(){ return document.getElementById('sr-swipe-wrap'); }
   function isMobile(){ return window.matchMedia('(pointer:coarse)').matches; }
-  function canSwipe(){ return isMobile() && typeof srLayout!=='undefined'; }
+  function canSwipe(){ return isMobile() && !animating && typeof srLayout!=='undefined'; }
 
-  function setTransform(el, x, transition){
-    el.style.transition = transition || 'none';
+  function setT(el, x, transition){
+    if(!el) return;
+    el.style.transition = transition||'none';
     el.style.transform  = x===0 ? '' : `translateX(${x}px)`;
   }
 
-  function slideNavigate(dir){
-    // dir: 1=next (swipe left), -1=prev (swipe right)
-    const c=content(); if(!c) return;
+  // Build HTML for the adjacent page without touching any globals
+  function srAdjacentHtml(dir){
+    const tn=new Date();
+    const today=`${tn.getFullYear()}-${String(tn.getMonth()+1).padStart(2,'0')}-${String(tn.getDate()).padStart(2,'0')}`;
+    if(srLayout==='day'){
+      const d=new Date(srDayDate+'T12:00:00'); d.setDate(d.getDate()+dir);
+      const adjDate=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      return srByDayGantt(adjDate, today);
+    }
+    const adjOffset=srOffset+dir;
+    const adjStart=getFortnightStart(adjOffset);
+    const adjDays=getFortnight14Days(adjStart);
+    const adjPublished=srIsPublished(adjStart);
+    const staffFilter=document.getElementById('sr-staff-filter')?.value;
+    let emps=[..._emps];
+    if(staffFilter) emps=emps.filter(e=>e.id===staffFilter);
+    else if(srLayout==='fortnight') emps=emps.filter(e=>srRoles.has(e.role));
+    else return '<div style="text-align:center;padding:4rem 2rem;color:var(--muted);font-size:0.85rem;font-weight:600;">Select a staff member to view their roster.</div>';
+    return srRenderFortnight(adjStart, adjDays, emps, adjPublished, today);
+  }
+
+  // Create a pre-rendered adjacent pane positioned just off screen
+  function createAdjPane(dir){
+    const w=swipeWrap(); if(!w) return null;
+    document.getElementById('sr-adj-pane')?.remove();
+    const pane=document.createElement('div');
+    pane.id='sr-adj-pane';
+    pane.className='sr-content';
+    pane.style.cssText=`position:absolute;top:0;left:${dir>0?'100':'-100'}%;width:100%;pointer-events:none;margin:0;`;
+    pane.innerHTML=srAdjacentHtml(dir);
+    w.appendChild(pane);
+    return pane;
+  }
+
+  function commitNav(dir){
+    animating=true;
+    const c=content();
+    const adj=document.getElementById('sr-adj-pane');
     const W=window.innerWidth;
-    // Animate current content off screen
-    setTransform(c, -dir*W, `transform ${SLIDE_OUT_MS}ms ease-in`);
+    const ease=`transform ${COMMIT_MS}ms ease-out`;
+    // Both panes animate together: content flies off, adj arrives at centre
+    setT(c, -dir*W, ease);
+    if(adj) setT(adj, -dir*W, ease);
     setTimeout(()=>{
-      srNav(dir); // updates DOM synchronously
-      // Place new content off screen on the opposite side, then slide in
-      setTransform(c, dir*W);
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        setTransform(c, 0, `transform ${SLIDE_IN_MS}ms cubic-bezier(0.25,0.46,0.45,0.94)`);
-      }));
-    }, SLIDE_OUT_MS);
+      setT(c, 0);          // reset transform before re-render
+      srNav(dir);          // re-renders sr-content with new state
+      document.getElementById('sr-adj-pane')?.remove();
+      animating=false;
+    }, COMMIT_MS);
+  }
+
+  function cancelDrag(){
+    const c=content();
+    const adj=document.getElementById('sr-adj-pane');
+    const spring=`transform ${CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`;
+    setT(c, 0, spring);
+    if(adj){
+      setT(adj, 0, spring);
+      setTimeout(()=>adj.remove(), CANCEL_MS);
+    }
   }
 
   function onStart(e){
@@ -7263,26 +7312,31 @@ function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').re
       if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
       isHoriz=Math.abs(dx)>Math.abs(dy);
       axisLocked=true;
+      if(isHoriz){
+        // Pre-render adjacent page as soon as direction is known
+        createAdjPane(dx<0?1:-1);
+      }
     }
     if(!isHoriz) return;
     e.preventDefault();
-    const c=content(); if(c) setTransform(c, dx*RESIST);
+    const c=content();
+    const adj=document.getElementById('sr-adj-pane');
+    // Both panes move as one surface with the finger
+    setT(c, dx);
+    if(adj){ adj.style.transition='none'; setT(adj, dx); }
   }
 
   function onEnd(e){
     if(!tracking){ tracking=false; return; }
     tracking=false;
-    if(!isHoriz){
-      const c=content(); if(c) setTransform(c,0,`transform 0.18s ease`);
-      return;
-    }
+    if(!isHoriz){ cancelDrag(); return; }
     const dx=curX-startX;
     const velocity=Math.abs(dx)/(Date.now()-startT);
     const shouldNav=Math.abs(dx)>SWIPE_THRESHOLD||velocity>VELOCITY_THRESHOLD;
     if(shouldNav){
-      slideNavigate(dx<0?1:-1);
+      commitNav(dx<0?1:-1);
     } else {
-      const c=content(); if(c) setTransform(c,0,`transform 0.2s cubic-bezier(0.34,1.56,0.64,1)`);
+      cancelDrag();
     }
   }
 
