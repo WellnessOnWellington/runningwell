@@ -622,6 +622,7 @@
   #sr-staff-filter-mob { display: none; }
   #sr-filter-wrap { position: relative; }
   #sr-layout-pill-wrap { display: none; position: relative; }
+  #sr-header-title { display: none; }
   .sr-header-brand { display: flex; align-items: center; }
   #sr-layout-pill {
     display: flex; align-items: center; gap: 0.35rem;
@@ -632,6 +633,9 @@
     transition: background 0.15s, border-color 0.15s;
   }
   #sr-layout-pill:active { background: var(--blush); border-color: var(--dusty); }
+  #sr-layout-pill-period { font-size: 0.75rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .sr-brand-footer { display: none; text-align: center; padding: 2rem 1rem 1.5rem; font-family: 'Lora',serif; font-size: 0.85rem; font-weight: 600; color: var(--border); letter-spacing: -0.01em; }
+  .sr-brand-footer span { font-style: italic; color: var(--dusty); font-weight: 400; }
   #sr-layout-popover {
     display: none; position: absolute; top: calc(100% + 8px); left: 0; z-index: 200;
     background: var(--white); border: 1.5px solid var(--border); border-radius: 14px;
@@ -1157,14 +1161,13 @@
       box-shadow: none;
       position: relative;
     }
-    .sr-header-brand {
-      position: absolute; left: 50%; transform: translateX(-50%);
-      display: flex; align-items: center; gap: 0;
-    }
-    .sr-header-brand img { display: none; }
+    .sr-header-brand { display: none; }
+    #sr-header-title { display: flex; flex: 1; justify-content: center; align-items: center; font-family: 'Nunito',sans-serif; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
     .sr-header-spacer { display: none; }
     .sr-header .sr-layout-toggle { display: none !important; }
     #sr-layout-pill-wrap { display: block; }
+    #sr-layout-pill { width: 168px; justify-content: space-between; }
+    #sr-layout-pill-period { flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #sr-kiosk-btn { display: none; }
 
     #sr-filter-wrap { margin-left: auto; }
@@ -1208,14 +1211,7 @@
     .sr-role-tabs { width: 100%; height: 40px; border-radius: 8px; }
     .sr-tab { flex: 1; justify-content: center; padding: 0; font-size: 0.75rem; white-space: nowrap; }
 
-    /* ── Ribbon 4: fortnight nav only ── */
-    .sr-filters .sr-nav {
-      position: static; transform: none;
-      width: 100%; justify-content: center; margin-left: 0;
-      padding: 0.5rem 0.75rem; border-bottom: 1.5px solid var(--border);
-    }
-    .sr-nav-btn { height: 38px; font-size: 0.8rem; }
-    .sr-period-label { font-size: 0.82rem; }
+    .sr-filters .sr-nav { display: none; }
     /* Hide Today, date picker and person filter on mobile */
     #sr-right-group { display: none !important; }
     .sr-fn-badge { background: var(--blush-lt) !important; color: var(--burgundy) !important; border: 1.5px solid var(--border); }
@@ -1223,6 +1219,7 @@
     /* Content padding + swipe clipping */
     .sr-content { padding: 1rem 0.75rem; }
     #view-staff-roster { overflow-x: hidden; }
+    .sr-brand-footer { display: block; }
 
     /* Fortnight heading */
     .sr-fortnight-heading { flex-wrap: wrap; gap: 0.5rem; }
@@ -1443,6 +1440,7 @@
     <div id="sr-layout-pill-wrap">
       <button id="sr-layout-pill" onclick="srToggleLayoutPicker(event)">
         <span id="sr-layout-pill-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M9 5.5V9l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span id="sr-layout-pill-period"></span>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div id="sr-layout-popover">
@@ -1460,6 +1458,7 @@
         </div>
       </div>
     </div>
+    <div id="sr-header-title">Who's On</div>
     <div class="sr-header-brand">
       <img src="Logo.png" alt="Wellness on Wellington" style="height:36px;width:auto;cursor:pointer;" onclick="showView('kiosk')" title="Return to kiosk">
       <div style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-left:0.6rem;cursor:pointer;" onclick="showView('kiosk')" title="Return to kiosk">
@@ -1536,6 +1535,13 @@
   </div>
 
   <div class="sr-content" id="sr-content"></div>
+  <div class="sr-brand-footer" id="sr-brand-footer">
+    Running <span>Well</span>
+    <svg width="72" height="9" viewBox="0 0 72 9" fill="none" style="display:block;margin:3px auto 0;">
+      <path d="M 0 6 C 12 6, 24 1, 38 1 C 50 1, 61 3, 70 1" stroke="#8B2535" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+      <path d="M 0 8 C 12 8, 24 3, 38 3 C 50 3, 61 6, 70 3" stroke="#D4899A" stroke-width="0.7" stroke-linecap="round" fill="none" opacity="0.5"/>
+    </svg>
+  </div>
 </div>
 
 <!-- FLASH -->
@@ -5006,6 +5012,7 @@ function renderStaffRoster(){
     const d=new Date(srDayDate+'T12:00:00');
     const dayLabel=d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
     document.getElementById('sr-period-label').textContent=dayLabel;
+    document.getElementById('sr-layout-pill-period').textContent=dayLabel;
     document.getElementById('sr-content').innerHTML=srByDayGantt(srDayDate,today);
     clearInterval(_srNowLineInterval); _srNowLineInterval=null;
     if(srDayDate===today){
@@ -5035,6 +5042,7 @@ function renderStaffRoster(){
 
   // Period label
   document.getElementById('sr-period-label').textContent=srFortnightLabel(fn1Start);
+  document.getElementById('sr-layout-pill-period').textContent=srFortnightLabel(fn1Start);
 
   // Filter employees
   let emps=[..._emps];
