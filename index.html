@@ -2284,10 +2284,6 @@
       <select class="form-select" id="emp-classification">
         <option value="">— Not set —</option>
         <optgroup label="Reception">
-          <option>Receptionist</option>
-          <option>HSSE Level 3</option>
-          <option>HSSE Level 4</option>
-          <option>HSSE Level 5</option>
           <option>Office Manager</option>
           <option>Practice Manager</option>
         </optgroup>
@@ -3296,7 +3292,7 @@ function renderTeam(){
   const cardHtml=emp=>{
     const initials=emp.name.replace(/^(Dr\.|Nurse|Reception|Practice Mgr)\s*/i,'').split(' ').slice(0,2).map(n=>n[0]).join('');
     const cc=ROLE_C[emp.role]||'c-doctor'; const isIn=inNow.has(emp.id);
-    return`<div class="employee-card"><div class="emp-avatar ${cc}">${initials}</div><div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-meta">${emp.role} · ${emp.type}</div><div class="emp-rfid">${emp.rfid||'<span style="color:var(--muted);font-size:0.7rem;">No RFID</span>'}${emp.myob_record_id?` · MYOB #${emp.myob_record_id}`:' · <span style="color:var(--burgundy);font-size:0.7rem;">No MYOB ID</span>'}</div>${emp.classification?`<div class="emp-rfid" style="color:var(--muted)">${emp.classification}</div>`:`<div class="emp-rfid"><span style="color:var(--burgundy);font-size:0.7rem;">No classification set</span></div>`}</div><button class="emp-edit-btn" onclick="openEditEmployee('${emp.id}')">Edit</button><div class="status-dot ${isIn?'in':'out'}" title="${isIn?'Checked in':'Not in today'}"></div></div>`;
+    return`<div class="employee-card"><div class="emp-avatar ${cc}">${initials}</div><div class="emp-info"><div class="emp-name">${emp.name}</div><div class="emp-meta">${emp.role} · ${emp.type}</div><div class="emp-rfid">${emp.rfid||'<span style="color:var(--muted);font-size:0.7rem;">No RFID</span>'}${emp.myob_record_id?` · ${emp.myob_record_id}`:' · <span style="color:var(--burgundy);font-size:0.7rem;">No MYOB ID</span>'}</div>${emp.classification?`<div class="emp-rfid" style="color:var(--muted)">${emp.classification}</div>`:`<div class="emp-rfid"><span style="color:var(--burgundy);font-size:0.7rem;">No classification set</span></div>`}</div><button class="emp-edit-btn" onclick="openEditEmployee('${emp.id}')">Edit</button><div class="status-dot ${isIn?'in':'out'}" title="${isIn?'Checked in':'Not in today'}"></div></div>`;
   };
   const visibleGroups=TEAM_GROUPS.filter(g=>teamRoles.has(g.role));
   document.getElementById('employees-grid').innerHTML=visibleGroups.map((g,i)=>{
