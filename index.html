@@ -7262,6 +7262,13 @@ function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').re
     return srRenderFortnight(adjStart, adjDays, emps, adjPublished, today);
   }
 
+  function footer(){ return document.getElementById('sr-brand-footer'); }
+  function fadeFooter(visible){
+    const f=footer(); if(!f) return;
+    f.style.transition=visible?'opacity 0.3s ease':'none';
+    f.style.opacity=visible?'':'0';
+  }
+
   // Create a pre-rendered adjacent pane positioned just off screen
   function createAdjPane(dir){
     const w=swipeWrap(); if(!w) return null;
@@ -7272,6 +7279,7 @@ function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').re
     pane.style.cssText=`position:absolute;top:0;left:${dir>0?'100':'-100'}%;width:100%;pointer-events:none;margin:0;`;
     pane.innerHTML=srAdjacentHtml(dir);
     w.appendChild(pane);
+    fadeFooter(false);
     return pane;
   }
 
@@ -7288,6 +7296,7 @@ function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').re
       setT(c, 0);          // reset transform before re-render
       srNav(dir);          // re-renders sr-content with new state
       document.getElementById('sr-adj-pane')?.remove();
+      fadeFooter(true);
       animating=false;
     }, COMMIT_MS);
   }
@@ -7299,7 +7308,9 @@ function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').re
     setT(c, 0, spring);
     if(adj){
       setT(adj, 0, spring);
-      setTimeout(()=>adj.remove(), CANCEL_MS);
+      setTimeout(()=>{ adj.remove(); fadeFooter(true); }, CANCEL_MS);
+    } else {
+      fadeFooter(true);
     }
   }
 
