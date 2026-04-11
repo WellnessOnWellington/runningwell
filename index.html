@@ -396,12 +396,12 @@
   .team-role-bar { display:flex; align-items:center; gap:1rem; margin-bottom:1.25rem; flex-wrap:wrap; }
   .today-strip { display: block; margin-bottom: 1.75rem; }
 
-  .tp-presence-panel { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.4rem; box-shadow: var(--shadow); }
-  .tp-presence-panel .sr-gnow { flex: none; display: flex; flex-direction: column; }
-  .tp-presence-panel .sr-gnow-body { flex: none; overflow-y: visible; padding-right: 0; }
-  .tp-presence-panel .sr-gnow-axis-row { padding-right: 0.75rem; }
-  .tp-presence-panel .sr-gnow-row { padding-right: 0.75rem; }
-  .tp-clocked-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #27ae60; margin-right: 5px; flex-shrink: 0; vertical-align: middle; position: relative; top: -1px; }
+  .today-strip-panels { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .tp-presence-panel { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 0.75rem 0.9rem; box-shadow: var(--shadow); flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 0.22rem; }
+  .tp-role-label { font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-bottom: 0.2rem; }
+  .tp-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; flex-shrink: 0; position: relative; top: -1px; }
+  .tp-dot-in  { background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.25); }
+  .tp-dot-out { background: var(--border-dk); }
 
   .stat-tile {
     background: var(--white); border: 1.5px solid var(--border);
@@ -3271,14 +3271,12 @@ function renderTeam(){
   const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut).map(e=>e.employeeId));
   const doneNow=new Set(_entries.filter(e=>e.date===today&&e.clockOut).map(e=>e.employeeId));
   if(_tpNowInterval){clearInterval(_tpNowInterval);_tpNowInterval=null;}
-  document.getElementById('today-strip').innerHTML=`<div class="tp-presence-panel">${teamPresenceHtml(today,inNow,doneNow)}</div>`;
-  tpUpdateNowLine();
+  document.getElementById('today-strip').innerHTML=`<div class="today-strip-panels">${teamPresenceHtml(today,inNow,doneNow)}</div>`;
   _tpNowInterval=setInterval(()=>{
     const t=new Date().toISOString().slice(0,10);
     const iN=new Set(_entries.filter(e=>e.date===t&&!e.clockOut).map(e=>e.employeeId));
     const dN=new Set(_entries.filter(e=>e.date===t&&e.clockOut).map(e=>e.employeeId));
-    document.getElementById('today-strip').innerHTML=`<div class="tp-presence-panel">${teamPresenceHtml(t,iN,dN)}</div>`;
-    tpUpdateNowLine();
+    document.getElementById('today-strip').innerHTML=`<div class="today-strip-panels">${teamPresenceHtml(t,iN,dN)}</div>`;
   },60000);
   const sel=document.getElementById('filter-employee');
   if(sel){const prev=sel.value;sel.innerHTML='<option value="">All staff</option>';_emps.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.name;sel.appendChild(o);});sel.value=prev;}
@@ -5118,75 +5116,33 @@ function srUpdateNowLine(){
   if(badge) badge.textContent=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 }
 
-function tpUpdateNowLine(){
-  const line=document.getElementById('tp-gnow-now-line');
-  const badge=document.getElementById('tp-gnow-now-badge');
-  const body=document.getElementById('tp-gnow-body');
-  if(!line||!body) return;
-  const now=new Date();
-  const nowMin=now.getHours()*60+now.getMinutes();
-  const pct=(nowMin-GNOW_START)/GNOW_RANGE;
-  line.classList.remove('fixed','fixed-end');
-  if(pct<0||pct>1){ line.style.display='none'; return; }
-  body.style.setProperty('--now-pct',pct.toFixed(4));
-  line.style.display='block';
-  if(badge) badge.textContent=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-}
-
 function teamPresenceHtml(today, inNow, doneNow){
   const ROLE_ORDER=['Receptionist','Nurse','Manager'];
+  const ROLE_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
   const dnMap=buildDisplayNames(_emps);
-  const ticks=[];
-  for(let m=Math.ceil(GNOW_START/60)*60;m<=Math.floor(GNOW_END/60)*60;m+=60){
-    const h=Math.floor(m/60);
-    const label=h>12?`${h-12}pm`:h===12?'12pm':`${h}am`;
-    ticks.push(`<div class="sr-gnow-tick" style="left:${gnowPct(m).toFixed(2)}%"><div class="sr-gnow-tick-mark"></div><div class="sr-gnow-tick-label">${label}</div></div>`);
-  }
-  let hasAny=false;
   const groups=ROLE_ORDER.filter(r=>teamRoles.has(r)).map(role=>{
     const roleBar=SR_ROLE_BAR[role]||{bg:'var(--dusty)',text:'var(--charcoal)'};
     const roleShifts=_emps.filter(e=>e.role===role)
       .map(emp=>({emp,shift:srShiftForEmp(emp.id,today)}))
       .filter(x=>x.shift&&x.shift!=='off')
       .sort((a,b)=>a.shift.start.localeCompare(b.shift.start));
-    const rows=roleShifts.map(({emp,shift})=>{
+    const pills=roleShifts.map(({emp,shift})=>{
       const isIn=inNow.has(emp.id);
       const isDone=doneNow.has(emp.id);
-      const startMin=gnowToMin(shift.start);
-      const endMin=gnowToMin(shift.end);
-      const left=gnowPct(startMin);
-      const width=gnowPct(endMin)-left;
+      const p=isDone?{bg:'rgba(180,180,180,0.1)',color:'#b0a8ac'}:(SR_ROLE_PILL[role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
+      const sMin=gnowToMin(shift.start);
+      const eMin=gnowToMin(shift.end);
+      const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
+      const wPct=((eMin-sMin)/TL_RANGE*100).toFixed(1);
+      const tooltip=`${shift.start.slice(0,5)}–${shift.end.slice(0,5)}`;
       const name=dnMap[emp.id]||empFirstName(emp);
-      const barBg=isDone?'#c8c4c6':roleBar.bg;
-      const barText=isDone?'var(--muted)':roleBar.text;
-      const nameStyle=isDone?'color:var(--muted);opacity:0.55;':'';
-      const rowPill=isDone?{bg:'rgba(180,180,180,0.06)'}:(SR_ROLE_PILL[role]||{bg:'transparent'});
-      const dot=isIn?'<span class="tp-clocked-dot"></span>':'';
-      return`<div class="sr-gnow-row" style="background:${rowPill.bg}">
-        <div class="sr-gnow-row-name" style="${nameStyle}">${dot}${name}</div>
-        <div class="sr-gnow-track">
-          <div class="sr-gnow-bar" style="left:${left.toFixed(2)}%;width:${Math.max(0,width).toFixed(2)}%;background:${barBg};color:${barText};">
-            <span class="sr-gnow-bar-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}</span>
-            <span class="sr-gnow-bar-name">${name}</span>
-          </div>
-        </div>
-      </div>`;
+      const dot=`<span class="tp-dot ${isIn?'tp-dot-in':'tp-dot-out'}"></span>`;
+      return`<div class="sr-shift-pill" style="background:${p.bg};color:${p.color}" data-tooltip="${tooltip}">${dot}<span class="sr-shift-pill-name">${name}</span><div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div></div>`;
     });
-    if(!rows.length) return null;
-    hasAny=true;
-    return`<div class="sr-gnow-group"><div class="sr-gnow-rows">${rows.join('')}</div></div>`;
-  }).filter(Boolean);
-  if(!hasAny) return`<div class="sr-gnow-empty">No staff rostered today.</div>`;
-  return`<div class="sr-gnow">
-    <div class="sr-gnow-axis-row">
-      <div class="sr-gnow-name-col"></div>
-      <div class="sr-gnow-axis">${ticks.join('')}</div>
-    </div>
-    <div class="sr-gnow-body" id="tp-gnow-body">
-      <div class="sr-gnow-now-line" id="tp-gnow-now-line"><div class="sr-gnow-now-badge" id="tp-gnow-now-badge"></div></div>
-      ${groups.join('')}
-    </div>
-  </div>`;
+    const content=pills.length?pills.join(''):`<div class="sr-no-staff">No ${ROLE_LABELS[role].toLowerCase()} rostered</div>`;
+    return`<div class="tp-presence-panel"><div class="tp-role-label">${ROLE_LABELS[role]}</div>${content}</div>`;
+  });
+  return groups.join('');
 }
 
 function srByDayGantt(dateStr, today){
