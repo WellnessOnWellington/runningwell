@@ -3268,14 +3268,14 @@ const ROLE_C={Doctor:'c-doctor',Nurse:'c-nurse',Receptionist:'c-receptionist',Ma
 
 function renderTeam(){
   const today=new Date().toISOString().slice(0,10);
-  const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut).map(e=>e.employeeId));
-  const doneNow=new Set(_entries.filter(e=>e.date===today&&e.clockOut).map(e=>e.employeeId));
+  const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
+  const doneNow=new Set(_entries.filter(e=>e.date===today&&e.clockOut&&!e.leaveType).map(e=>e.employeeId));
   if(_tpNowInterval){clearInterval(_tpNowInterval);_tpNowInterval=null;}
   document.getElementById('today-strip').innerHTML=`<div class="today-strip-panels">${teamPresenceHtml(today,inNow,doneNow)}</div>`;
   _tpNowInterval=setInterval(()=>{
     const t=new Date().toISOString().slice(0,10);
-    const iN=new Set(_entries.filter(e=>e.date===t&&!e.clockOut).map(e=>e.employeeId));
-    const dN=new Set(_entries.filter(e=>e.date===t&&e.clockOut).map(e=>e.employeeId));
+    const iN=new Set(_entries.filter(e=>e.date===t&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
+    const dN=new Set(_entries.filter(e=>e.date===t&&e.clockOut&&!e.leaveType).map(e=>e.employeeId));
     document.getElementById('today-strip').innerHTML=`<div class="today-strip-panels">${teamPresenceHtml(t,iN,dN)}</div>`;
   },60000);
   const sel=document.getElementById('filter-employee');
@@ -5129,15 +5129,17 @@ function teamPresenceHtml(today, inNow, doneNow){
     const pills=roleShifts.map(({emp,shift})=>{
       const isIn=inNow.has(emp.id);
       const isDone=doneNow.has(emp.id);
-      const p=isDone?{bg:'rgba(180,180,180,0.1)',color:'#b0a8ac'}:(SR_ROLE_PILL[role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
+      const onLeave=isOnLeave(emp.id,today);
+      const p=isDone||onLeave?{bg:'rgba(180,180,180,0.1)',color:'#b0a8ac'}:(SR_ROLE_PILL[role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
       const sMin=gnowToMin(shift.start);
       const eMin=gnowToMin(shift.end);
       const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
       const wPct=((eMin-sMin)/TL_RANGE*100).toFixed(1);
-      const tooltip=`${shift.start.slice(0,5)}–${shift.end.slice(0,5)}`;
+      const tooltip=onLeave?`On leave (${shift.start.slice(0,5)}–${shift.end.slice(0,5)})`:`${shift.start.slice(0,5)}–${shift.end.slice(0,5)}`;
       const name=dnMap[emp.id]||empFirstName(emp);
       const dot=`<span class="tp-dot ${isIn?'tp-dot-in':'tp-dot-out'}"></span>`;
-      return`<div class="sr-shift-pill" style="background:${p.bg};color:${p.color}" data-tooltip="${tooltip}">${dot}<span class="sr-shift-pill-name">${name}</span><div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div></div>`;
+      const bar=`<div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div>`;
+      return`<div class="sr-shift-pill" style="background:${p.bg};color:${p.color}" data-tooltip="${tooltip}">${dot}<span class="sr-shift-pill-name">${name}</span>${bar}</div>`;
     });
     const content=pills.length?pills.join(''):`<div class="sr-no-staff">No ${ROLE_LABELS[role].toLowerCase()} rostered</div>`;
     return`<div class="tp-presence-panel"><div class="tp-role-label">${ROLE_LABELS[role]}</div>${content}</div>`;
