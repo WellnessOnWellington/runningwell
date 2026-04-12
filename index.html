@@ -2901,13 +2901,13 @@ function showView(v){
   if(v==='kiosk'||v==='requests'){
     setTimeout(focusRFID,80);
     if(v==='kiosk'){
-      Promise.all([db.get('employees'),db.get('entries'),db.get('roster_shifts')]).then(([emps,entries,shifts])=>{
-        _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry); _rosterShifts=shifts;
+      Promise.all([db.get('employees'),db.get('entries'),db.get('roster_shifts'),db.get('requests').catch(()=>[])]).then(([emps,entries,shifts,reqs])=>{
+        _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry); _rosterShifts=shifts; _requests=reqs.map(normaliseRequest);
         renderKioskPresence();
       }).catch(()=>{});
       _kioskRefreshInterval=setInterval(()=>{
-        Promise.all([db.get('employees'),db.get('entries'),db.get('roster_shifts')]).then(([emps,entries,shifts])=>{
-          _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry); _rosterShifts=shifts;
+        Promise.all([db.get('employees'),db.get('entries'),db.get('roster_shifts'),db.get('requests').catch(()=>[])]).then(([emps,entries,shifts,reqs])=>{
+          _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry); _rosterShifts=shifts; _requests=reqs.map(normaliseRequest);
           renderKioskPresence();
         }).catch(()=>{});
       },60000);
@@ -3160,7 +3160,6 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       await db.insert('entries', row);
       if(reason) await addNote(emp,noteType||'Arrival note',timeStr,reason,row.id,todayKey);
       const unseenIn=_requests.filter(r=>r.initiatorId===emp.id&&(r.status==='pending_manager'||r.status==='pending_peer')).length;
-      console.log('[flash] emp.id=',emp.id,'pending requests=',unseenIn,'all requests=',_requests.length);
       const pendingMsgIn=unseenIn===1?'📋 You have 1 pending request':unseenIn>1?`📋 You have ${unseenIn} pending requests`:'';
       showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,pendingMsgIn);
     } else {
