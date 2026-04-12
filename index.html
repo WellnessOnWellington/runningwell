@@ -3161,7 +3161,7 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       await db.insert('entries', row);
       if(reason) await addNote(emp,noteType||'Arrival note',timeStr,reason,row.id,todayKey);
       const unseenIn=_requests.filter(r=>r.initiatorId===emp.id&&(r.status==='pending_manager'||r.status==='pending_peer')).length;
-      const pendingMsgIn=unseenIn===1?'📋 You have 1 pending request':unseenIn>1?`📋 You have ${unseenIn} pending requests`:'';
+      const pendingMsgIn=`📋 DEBUG: ${unseenIn} pending / ${_requests.length} total requests`;
       showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,pendingMsgIn);
     } else {
       const[ih,im]=open.clockIn.split(':').map(Number);
