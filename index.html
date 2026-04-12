@@ -1206,7 +1206,7 @@
   /* ══════════════════════════════
      MOBILE — Who's On view only
   ══════════════════════════════ */
-  @media (max-width: 768px) {
+  @media (max-width: 960px) {
     /* Prevent iOS auto-zoom on any input — must be >= 16px */
     input, select, textarea { font-size: 16px !important; }
 
@@ -5098,7 +5098,7 @@ function adminMobUpdateFilter(){
   const activeTab=document.querySelector('.tab-panel.active')?.id;
   const wrap=document.getElementById('admin-mob-filter-wrap');
   if(wrap){
-    const isMob=window.matchMedia('(max-width:768px)').matches;
+    const isMob=window.matchMedia('(max-width:960px)').matches;
     wrap.style.display=(isMob&&FILTER_TABS.includes(activeTab))?'flex':'';
   }
   adminMobSyncFilterChecks();
