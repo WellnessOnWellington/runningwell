@@ -343,8 +343,31 @@
 
   .admin-brand { display: flex; align-items: center; gap: 0.5rem; flex: 1; }
 
-  /* Mobile admin nav pill — hidden on desktop */
+  /* Mobile admin nav + filter — hidden on desktop */
   #admin-mob-nav { display: none; position: relative; }
+  #admin-mob-filter-wrap { display: none; position: relative; }
+  #admin-mob-filter-btn {
+    display: flex; align-items: center; justify-content: center; position: relative;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--warm-white); border: 1.5px solid var(--border);
+    color: var(--muted); cursor: pointer; flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+  }
+  #admin-mob-filter-btn.active { background: var(--burgundy); color: #fff; border-color: var(--burgundy); }
+  #admin-mob-filter-dot {
+    display: none; position: absolute; top: 3px; right: 3px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--burgundy); border: 1.5px solid #fff;
+  }
+  #admin-mob-filter-btn.filtered #admin-mob-filter-dot { display: block; }
+  #admin-mob-filter-btn.active.filtered #admin-mob-filter-dot { background: #fff; border-color: var(--burgundy); }
+  #admin-mob-filter-popover {
+    display: none; position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(40,20,30,0.13); padding: 0.4rem 0; min-width: 175px;
+    animation: srFpIn 0.15s ease;
+  }
+  #admin-mob-filter-popover.open { display: block; }
   #admin-mob-pill {
     display: flex; align-items: center; gap: 0.5rem;
     height: 36px; padding: 0 0.85rem; border-radius: 20px;
@@ -1321,6 +1344,9 @@
     .admin-kiosk-btn-wrap { display: none; }
     .admin-brand { display: none; }
     #admin-mob-nav { display: block; }
+    #admin-mob-filter-wrap { display: flex; margin-left: auto; }
+    #tab-team .sr-role-tabs { display: none; }
+    .ts-role-tabs-bar { display: none; }
     .admin-content { padding: 1rem 0.75rem; }
     .today-strip-panels { flex-direction: column; }
     .section-header { flex-direction: column; gap: 0.5rem; }
@@ -1734,6 +1760,29 @@
       <button class="tab"        onclick="switchTab('timesheets',this)">Timesheets</button>
       <button class="tab"        onclick="switchTab('analytics',this)">Analytics</button>
       <button class="tab"        onclick="switchTab('settings',this)">Settings</button>
+    </div>
+    <div id="admin-mob-filter-wrap">
+      <button id="admin-mob-filter-btn" onclick="adminMobFilterToggle(event)" aria-label="Filter by role">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.5 3.5h13M4 8h8M6.5 12.5h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span id="admin-mob-filter-dot"></span>
+      </button>
+      <div id="admin-mob-filter-popover">
+        <div class="sr-fp-row" onclick="adminMobFilterRole('Receptionist')">
+          <span class="sr-fp-dot" style="background:#27AE60"></span>
+          <span class="sr-fp-label">Receptionists</span>
+          <span class="sr-fp-check active" id="admin-mob-fpc-Receptionist">&#10003;</span>
+        </div>
+        <div class="sr-fp-row" onclick="adminMobFilterRole('Nurse')">
+          <span class="sr-fp-dot" style="background:#2471A3"></span>
+          <span class="sr-fp-label">Nurses</span>
+          <span class="sr-fp-check active" id="admin-mob-fpc-Nurse">&#10003;</span>
+        </div>
+        <div class="sr-fp-row" onclick="adminMobFilterRole('Manager')">
+          <span class="sr-fp-dot" style="background:#7D3C98"></span>
+          <span class="sr-fp-label">Managers</span>
+          <span class="sr-fp-check active" id="admin-mob-fpc-Manager">&#10003;</span>
+        </div>
+      </div>
     </div>
     <div class="admin-kiosk-btn-wrap">
       <div class="admin-avatar" id="admin-avatar" title=""></div>
@@ -2674,7 +2723,7 @@ function showView(v){
   if(v==='login') populateManagerSelect();
   if(v==='admin'){
     setAdminAvatar();
-    loadAll().then(()=>{ renderTeam();renderTimesheets();renderApprovals();renderManagersTab();renderRoster();setDefaultDates();tsAutoLockSweep();reqExpirySweep(); });
+    loadAll().then(()=>{ renderTeam();renderTimesheets();renderApprovals();renderManagersTab();renderRoster();setDefaultDates();tsAutoLockSweep();reqExpirySweep(); adminMobUpdateFilter(); });
   }
 }
 
@@ -4996,11 +5045,76 @@ function adminMobileSwitchTab(name){
   document.getElementById('admin-mp-r-'+name)?.classList.add('active');
   const btn=document.querySelector(`.admin-tabs .tab[onclick*="'${name}'"]`);
   if(btn) switchTab(name,btn);
+  adminMobUpdateFilter();
+}
+
+function adminMobFilterToggle(e){
+  if(e) e.stopPropagation();
+  const p=document.getElementById('admin-mob-filter-popover');
+  const b=document.getElementById('admin-mob-filter-btn');
+  const isOpen=p.classList.toggle('open');
+  b.classList.toggle('active',isOpen);
+}
+
+function adminMobFilterRole(role){
+  document.getElementById('admin-mob-filter-popover')?.classList.remove('open');
+  document.getElementById('admin-mob-filter-btn')?.classList.remove('active');
+  const activeTab=document.querySelector('.tab-panel.active')?.id;
+  if(activeTab==='tab-team'){
+    const btn=document.querySelector(`#tab-team .sr-role-tabs .sr-tab[onclick*="'${role}'"]`);
+    if(btn) teamToggleRole(role,btn);
+  } else if(activeTab==='tab-timesheets'){
+    const btn=document.getElementById('ts-tab-'+role);
+    if(btn) tsSetRole(role,btn);
+  } else if(activeTab==='tab-notes'){
+    const btn=document.getElementById('notes-tab-'+role);
+    if(btn) notesSetRole(role,btn);
+  } else if(activeTab==='tab-requests'){
+    const btn=document.getElementById('req-tab-'+role);
+    if(btn) reqSetRole(role,btn);
+  }
+  adminMobSyncFilterChecks();
+}
+
+function adminMobSyncFilterChecks(){
+  const ROLES=['Receptionist','Nurse','Manager'];
+  const activeTab=document.querySelector('.tab-panel.active')?.id;
+  if(activeTab==='tab-team'){
+    ROLES.forEach(r=>document.getElementById('admin-mob-fpc-'+r)?.classList.toggle('active',teamRoles.has(r)));
+    const filtered=ROLES.some(r=>!teamRoles.has(r));
+    document.getElementById('admin-mob-filter-btn')?.classList.toggle('filtered',filtered);
+  } else {
+    let activeRole=null;
+    if(activeTab==='tab-timesheets') activeRole=document.querySelector('.ts-role-tab[id^="ts-tab-"].active')?.id.replace('ts-tab-','');
+    if(activeTab==='tab-notes') activeRole=document.querySelector('.ts-role-tab[id^="notes-tab-"].active')?.id.replace('notes-tab-','');
+    if(activeTab==='tab-requests') activeRole=document.querySelector('.ts-role-tab[id^="req-tab-"].active')?.id.replace('req-tab-','');
+    ROLES.forEach(r=>document.getElementById('admin-mob-fpc-'+r)?.classList.toggle('active',r===activeRole));
+    document.getElementById('admin-mob-filter-btn')?.classList.remove('filtered');
+  }
+}
+
+function adminMobUpdateFilter(){
+  const FILTER_TABS=['tab-team','tab-timesheets','tab-notes','tab-requests'];
+  const activeTab=document.querySelector('.tab-panel.active')?.id;
+  const wrap=document.getElementById('admin-mob-filter-wrap');
+  if(wrap){
+    const isMob=window.matchMedia('(max-width:768px)').matches;
+    wrap.style.display=(isMob&&FILTER_TABS.includes(activeTab))?'flex':'';
+  }
+  adminMobSyncFilterChecks();
 }
 
 document.addEventListener('click', e=>{
   const p=document.getElementById('admin-mob-popover');
   if(p?.classList.contains('open')&&!e.target.closest('#admin-mob-nav')) p.classList.remove('open');
+});
+
+document.addEventListener('click', e=>{
+  const p=document.getElementById('admin-mob-filter-popover');
+  const b=document.getElementById('admin-mob-filter-btn');
+  if(p?.classList.contains('open')&&!e.target.closest('#admin-mob-filter-wrap')){
+    p.classList.remove('open'); b?.classList.remove('active');
+  }
 });
 
 function srToggleRolePopover(role){
