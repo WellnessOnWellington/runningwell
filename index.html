@@ -7079,14 +7079,37 @@ function reqShowDetail(requestId){
       <strong>Dates:</strong> ${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)}
       ${r.reason?`<br><strong>Reason:</strong> ${escHtml(r.reason)}`:''}
     </div>`;
+  } else if(r.type==='swap'){
+    if(isPeer){
+      html+=`<div class="req-admin-shifts">
+        <div style="font-size:0.8rem;color:var(--muted);font-weight:500;margin-bottom:0.75rem;">${escHtml(r.initiatorName)} would like to swap shifts with you.</div>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;">
+          <div style="font-size:0.82rem;font-weight:700;color:var(--charcoal);">You give away your shift:</div>
+          <div style="font-size:0.85rem;color:var(--charcoal);background:var(--blush-lt);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem 0.75rem;">📅 ${reqFmtDate(r.colleagueShiftDate)} &nbsp;·&nbsp; ${r.colleagueShiftStart}–${r.colleagueShiftEnd}</div>
+          <div style="font-size:0.82rem;font-weight:700;color:var(--charcoal);margin-top:0.25rem;">You receive their shift:</div>
+          <div style="font-size:0.85rem;color:var(--charcoal);background:var(--blush-lt);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem 0.75rem;">📅 ${reqFmtDate(r.initiatorShiftDate)} &nbsp;·&nbsp; ${r.initiatorShiftStart}–${r.initiatorShiftEnd}</div>
+        </div>
+        ${r.reason?`<div style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem;"><strong>Their reason:</strong> ${escHtml(r.reason)}</div>`:''}
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.75rem;">If you accept, a manager will make the final decision.</div>
+      </div>`;
+    } else {
+      html+=`<div class="req-admin-shifts">
+        <div style="display:flex;flex-direction:column;gap:0.5rem;">
+          <div style="font-size:0.82rem;font-weight:700;color:var(--charcoal);">Your shift (you give away):</div>
+          <div style="font-size:0.85rem;color:var(--charcoal);background:var(--blush-lt);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem 0.75rem;">📅 ${reqFmtDate(r.initiatorShiftDate)} &nbsp;·&nbsp; ${r.initiatorShiftStart}–${r.initiatorShiftEnd}</div>
+          <div style="font-size:0.82rem;font-weight:700;color:var(--charcoal);margin-top:0.25rem;">${escHtml(r.colleagueName)}'s shift (you receive):</div>
+          <div style="font-size:0.85rem;color:var(--charcoal);background:var(--blush-lt);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0.5rem 0.75rem;">📅 ${reqFmtDate(r.colleagueShiftDate)} &nbsp;·&nbsp; ${r.colleagueShiftStart}–${r.colleagueShiftEnd}</div>
+        </div>
+        ${r.reason?`<div style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem;"><strong>Reason:</strong> ${escHtml(r.reason)}</div>`:''}
+      </div>`;
+    }
   } else {
     html+=`<div class="req-admin-shifts">
       <strong>${escHtml(r.initiatorName)}:</strong> ${reqFmtDate(r.initiatorShiftDate)} ${r.initiatorShiftStart}–${r.initiatorShiftEnd}<br>
-      ${r.type==='swap'?`<strong>${escHtml(r.colleagueName)}:</strong> ${reqFmtDate(r.colleagueShiftDate)} ${r.colleagueShiftStart}–${r.colleagueShiftEnd}`
-        :`<strong>Receiving:</strong> ${escHtml(r.colleagueName)}`}
+      <strong>Receiving:</strong> ${escHtml(r.colleagueName)}
       ${r.reason?`<br><strong>Reason:</strong> ${escHtml(r.reason)}`:''}
     </div>`;
-    if(r.type==='giveaway'&&isPeer) html+=`<div class="req-giveaway-notice">⚠ You are receiving this shift — ${escHtml(r.initiatorName)} gives away their ${reqFmtDate(r.initiatorShiftDate)} shift to you. You will not give anything in return.</div>`;
+    if(isPeer) html+=`<div class="req-giveaway-notice">⚠ You are receiving this shift — ${escHtml(r.initiatorName)} gives away their ${reqFmtDate(r.initiatorShiftDate)} shift to you. You will not give anything in return.</div>`;
   }
   if(r.type!=='leave'&&r.peerResponse){
     html+=`<div style="font-size:0.8rem;color:${r.peerResponse==='accepted'?'var(--success)':'var(--burgundy)'};font-weight:600;margin-bottom:0.5rem;">
