@@ -7415,9 +7415,25 @@ function buildReqAdminCard(r,isPending){
       <strong>Leave type:</strong> ${formatLeaveType(r.leaveType)}<br>
       <strong>Dates:</strong> ${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)}
       ${r.reason?`<br><strong>Reason:</strong> ${escHtml(r.reason)}`:''}`;
+  } else if(r.type==='swap'){
+    shiftsHtml=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:0.5rem;">
+        <div>
+          <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.25rem;">${escHtml(r.initiatorName)} gives away</div>
+          <div style="font-size:0.82rem;font-weight:600;color:var(--charcoal);">📅 ${reqFmtDate(r.initiatorShiftDate)}</div>
+          <div style="font-size:0.82rem;color:var(--charcoal);">${r.initiatorShiftStart}–${r.initiatorShiftEnd}</div>
+        </div>
+        <div>
+          <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.25rem;">${escHtml(r.colleagueName)} gives away</div>
+          <div style="font-size:0.82rem;font-weight:600;color:var(--charcoal);">📅 ${reqFmtDate(r.colleagueShiftDate)}</div>
+          <div style="font-size:0.82rem;color:var(--charcoal);">${r.colleagueShiftStart}–${r.colleagueShiftEnd}</div>
+        </div>
+      </div>
+      ${r.reason?`<div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.35rem;"><strong>Reason:</strong> ${escHtml(r.reason)}</div>`:''}
+      ${r.peerResponse==='accepted'?`<div style="font-size:0.78rem;color:var(--success);font-weight:600;">✓ Colleague approved</div>`:''}`;
   } else {
-    shiftsHtml=`<strong>${escHtml(r.initiatorName)}</strong> (${r.initiatorRole}) — ${reqFmtDate(r.initiatorShiftDate)} ${r.initiatorShiftStart}–${r.initiatorShiftEnd}<br>
-      ${r.type==='swap'?`<strong>${escHtml(r.colleagueName)}</strong> — ${reqFmtDate(r.colleagueShiftDate)} ${r.colleagueShiftStart}–${r.colleagueShiftEnd}`:`<strong>Receiving:</strong> ${escHtml(r.colleagueName)}`}
+    shiftsHtml=`<strong>${escHtml(r.initiatorName)}</strong> (${r.initiatorRole}) gives away ${reqFmtDate(r.initiatorShiftDate)} ${r.initiatorShiftStart}–${r.initiatorShiftEnd}<br>
+      <strong>Receiving:</strong> ${escHtml(r.colleagueName)}
       ${r.reason?`<br><strong>Reason:</strong> ${escHtml(r.reason)}`:''}
       ${r.peerResponse==='accepted'?`<br><em style="color:var(--success);">✓ Peer approved</em>`:''}`;
   }
