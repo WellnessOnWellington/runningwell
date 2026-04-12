@@ -3148,7 +3148,7 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
         await db.update('entries',leaveEntry.id,{leave_type:null,clock_in:sheetTimeStr,clock_in_iso:isoNow,clock_out:null,clock_out_iso:null,hours:null,status:'pending',reason_in:`Clocked in — was marked as ${leaveName}`});
         Object.assign(leaveEntry,{leaveType:null,clockIn:sheetTimeStr,clockInISO:isoNow,clockOut:null,hours:null,status:'pending',reasonIn:`Clocked in — was marked as ${leaveName}`});
         await addNote(emp,'Leave conflict',timeStr,`Clocked in but was marked as ${leaveName} for today — please review`,leaveEntry.id,todayKey);
-        const unseenLv=_requests.filter(r=>r.initiatorId===emp.id&&(r.status==='pending_manager'||r.status==='pending_peer')).length;
+        const unseenLv=_requests.filter(r=>(r.status==='pending_manager'||r.status==='pending_peer')&&(r.initiatorId===emp.id||(r.colleagueId===emp.id&&r.status==='pending_peer'))).length;
         const pendingMsgLv=unseenLv===1?'📋 You have 1 pending request':unseenLv>1?`📋 You have ${unseenLv} pending requests`:'';
         showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,pendingMsgLv);
         return;
@@ -3160,9 +3160,8 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       };
       await db.insert('entries', row);
       if(reason) await addNote(emp,noteType||'Arrival note',timeStr,reason,row.id,todayKey);
-      const unseenIn=_requests.filter(r=>r.initiatorId===emp.id&&(r.status==='pending_manager'||r.status==='pending_peer')).length;
-      const _dbg=_requests.slice(0,3).map(r=>`${r.initiatorId}/${r.status}`).join(' | ');
-      const pendingMsgIn=`emp:${emp.id} pending:${unseenIn} | ${_dbg}`;
+      const unseenIn=_requests.filter(r=>(r.status==='pending_manager'||r.status==='pending_peer')&&(r.initiatorId===emp.id||(r.colleagueId===emp.id&&r.status==='pending_peer'))).length;
+      const pendingMsgIn=unseenIn===1?'📋 You have 1 pending request':unseenIn>1?`📋 You have ${unseenIn} pending requests`:'';
       showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,pendingMsgIn);
     } else {
       const[ih,im]=open.clockIn.split(':').map(Number);
@@ -3184,7 +3183,7 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       if(cached) Object.assign(cached,{clockOut:sheetTimeStr,hours:hoursStr,unpaidBreakMins,paidBreakMins,breakNote:breakNote||null});
       if(reason) await addNote(emp,noteType||'Departure note',timeStr,reason,open.id,todayKey);
       if(breakFlagged) await addNote(emp,'Break note',timeStr,`Break shorter than expected — unpaid: ${unpaidBreakMins} min (expected ${unpaidExpected} min)${breakNote?' · '+breakNote:''}`,open.id,todayKey);
-      const unseenOut=_requests.filter(r=>r.initiatorId===emp.id&&(r.status==='pending_manager'||r.status==='pending_peer')).length;
+      const unseenOut=_requests.filter(r=>(r.status==='pending_manager'||r.status==='pending_peer')&&(r.initiatorId===emp.id||(r.colleagueId===emp.id&&r.status==='pending_peer'))).length;
       const pendingMsgOut=unseenOut===1?'📋 You have 1 pending request':unseenOut>1?`📋 You have ${unseenOut} pending requests`:'';
       showFlash('depart','🌸','See you next time,',emp.name.split(' ')[0],'Checked out · '+timeStr+' · '+hoursStr+'h',pendingMsgOut);
     }
