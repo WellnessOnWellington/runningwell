@@ -2753,7 +2753,7 @@ function showView(v){
 function renderKioskPresence(){
   const el=document.getElementById('kiosk-mob-presence');
   if(!el||!window.matchMedia('(max-width:960px)').matches) return;
-  const today=new Date().toISOString().slice(0,10);
+  const today=rbDateKey(new Date());
   const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
   if(!inNow.size){ el.innerHTML=`<div class="kmp-empty">No staff currently in</div>`; return; }
   const ROLE_ORDER=['Receptionist','Nurse','Manager'];
@@ -7637,6 +7637,17 @@ function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').re
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
 }
+
+window.addEventListener('load', ()=>{
+  if(window.matchMedia('(max-width:960px)').matches){
+    Promise.all([db.get('employees'),db.get('entries'),db.get('roster_shifts')]).then(([emps,entries,shifts])=>{
+      _emps=emps.filter(e=>e.active!==false);
+      _entries=entries.map(normaliseEntry);
+      _rosterShifts=shifts;
+      renderKioskPresence();
+    }).catch(()=>{});
+  }
+});
 </script>
 </body>
 </html>
