@@ -175,6 +175,7 @@
 
   .kiosk-footer-nav { display: flex; gap: 0.75rem; width: 100%; max-width: 440px; }
   .kiosk-build-credit { position:fixed; bottom:0.6rem; right:0.85rem; font-size:0.58rem; font-weight:600; color:var(--muted); opacity:0.45; letter-spacing:0.02em; pointer-events:none; }
+  #kiosk-mob-presence { display: none; }
 
   .nav-btn {
     flex: 1; background: var(--white); border: 1.5px solid var(--border);
@@ -1317,8 +1318,18 @@
     #view-staff-roster.sr-now-mode .sr-content { overflow: visible; min-height: 0; }
 
     /* ── Kiosk view ── */
-    #view-kiosk { padding: 1.25rem 1rem; gap: 1rem; justify-content: flex-start; padding-top: 1.75rem; }
-    .scan-card { padding: 1.5rem 1.25rem; border-radius: 18px; }
+    #view-kiosk { padding: 2.5rem 1.5rem 2rem; gap: 0; justify-content: flex-start; min-height: 100vh; }
+    .scan-card { display: none; }
+    .kiosk-logo-area { margin-top: 1.5rem; gap: 0.85rem; }
+    .kiosk-logo-area img { height: 56px; }
+    .kiosk-time-section { margin-top: 2.5rem; }
+    .kiosk-clock { font-size: clamp(5rem, 18vw, 7rem); }
+    .kiosk-date { font-size: 1rem; margin-top: 0.5rem; }
+    .kiosk-footer-nav { margin-top: auto; padding-bottom: 0.5rem; }
+    .kiosk-build-credit { margin-top: 0; }
+    #kiosk-mob-presence { display: block; width: 100%; margin-top: 2rem; }
+    .kmp-label { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.4rem; margin-top: 0.75rem; }
+    .kmp-empty { font-size: 0.78rem; color: var(--muted); font-style: italic; text-align: center; padding: 0.5rem 0; }
     .scan-emoji { font-size: 2rem; margin-bottom: 0.6rem; }
     .scan-sub { margin-bottom: 1.25rem; }
     .nav-btn { padding: 0.85rem 0.75rem; font-size: 0.95rem; min-height: 44px; }
@@ -1403,6 +1414,8 @@
       </div>
     </div>
   </div>
+
+  <div id="kiosk-mob-presence"></div>
 
   <div class="kiosk-footer-nav" style="flex-direction:column;">
     <button class="nav-btn" onclick="openRosterPIN()" style="width:100%;">👥 Who's On</button>
@@ -2714,11 +2727,18 @@ function showView(v){
   document.getElementById('view-'+v).classList.add('active');
   if(v==='kiosk'||v==='requests'){
     setTimeout(focusRFID,80);
-    if(v==='kiosk') _kioskRefreshInterval=setInterval(()=>{
-      Promise.all([db.get('employees'),db.get('entries')]).then(([emps,entries])=>{
-        _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry);
+    if(v==='kiosk'){
+      Promise.all([db.get('employees'),db.get('entries'),db.get('roster_shifts')]).then(([emps,entries,shifts])=>{
+        _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry); _rosterShifts=shifts;
+        renderKioskPresence();
       }).catch(()=>{});
-    },60000);
+      _kioskRefreshInterval=setInterval(()=>{
+        Promise.all([db.get('employees'),db.get('entries'),db.get('roster_shifts')]).then(([emps,entries,shifts])=>{
+          _emps=emps.filter(e=>e.active!==false); _entries=entries.map(normaliseEntry); _rosterShifts=shifts;
+          renderKioskPresence();
+        }).catch(()=>{});
+      },60000);
+    }
   }
   if(v==='login') populateManagerSelect();
   if(v==='admin'){
@@ -2730,6 +2750,37 @@ function showView(v){
 /* ═══════════════════════════════════════════
    CLOCK
 ═══════════════════════════════════════════ */
+function renderKioskPresence(){
+  const el=document.getElementById('kiosk-mob-presence');
+  if(!el||!window.matchMedia('(max-width:960px)').matches) return;
+  const today=new Date().toISOString().slice(0,10);
+  const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
+  if(!inNow.size){ el.innerHTML=`<div class="kmp-empty">No staff currently in</div>`; return; }
+  const ROLE_ORDER=['Receptionist','Nurse','Manager'];
+  const ROLE_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
+  const dnMap=buildDisplayNames(_emps);
+  let html='';
+  ROLE_ORDER.forEach(role=>{
+    const roleEmps=_emps.filter(e=>e.role===role&&inNow.has(e.id));
+    if(!roleEmps.length) return;
+    const p=SR_ROLE_PILL[role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'};
+    html+=`<div class="kmp-label">${ROLE_LABELS[role]}</div>`;
+    roleEmps.forEach(emp=>{
+      const name=dnMap[emp.id]||empFirstName(emp);
+      const shift=srShiftForEmp(emp.id,today);
+      let bar='';
+      if(shift&&shift!=='off'){
+        const sMin=gnowToMin(shift.start), eMin=gnowToMin(shift.end);
+        const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
+        const wPct=((eMin-sMin)/TL_RANGE*100).toFixed(1);
+        bar=`<div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div>`;
+      }
+      html+=`<div class="sr-shift-pill" style="background:${p.bg};color:${p.color}"><span class="tp-dot tp-dot-in"></span><span class="sr-shift-pill-name">${name}</span>${bar}</div>`;
+    });
+  });
+  el.innerHTML=html;
+}
+
 function tick(){
   try {
     const n = new Date();
@@ -2982,6 +3033,7 @@ function showFlash(type,wave,greeting,name,sub){
   document.getElementById('flash-greeting').textContent=greeting;
   document.getElementById('flash-name').textContent=name;
   document.getElementById('flash-sub').textContent=sub;
+  renderKioskPresence();
   clearTimeout(flashT);
   flashT=setTimeout(()=>{o.classList.remove('show');returnOrFocusRFID();},2800);
 }
