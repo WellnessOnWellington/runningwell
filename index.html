@@ -229,6 +229,8 @@
   }
 
   .flash-sub { font-size: 0.95rem; color: rgba(255,255,255,0.55); font-weight: 500; margin-top: 0.4rem; }
+  .flash-pending { display:none; margin-top:1.25rem; background:rgba(255,255,255,0.18); border:1.5px solid rgba(255,255,255,0.35); border-radius:999px; padding:0.45rem 1.1rem; font-size:0.82rem; font-weight:700; color:#fff; letter-spacing:0.01em; animation:nameIn 0.35s 0.2s ease both; }
+  .flash-pending.visible { display:block; }
 
   /* ══════════════════════════════
      REASON OVERLAY
@@ -1458,7 +1460,7 @@
     <div class="reader-pill"><div class="pulse-dot"></div>Reader ready</div>
 
     <!-- TESTING ONLY — restore display:block to re-enable manual RFID entry -->
-    <div style="display:none; margin-top:1.25rem; padding-top:1.25rem; border-top:1px dashed var(--border);">
+    <div style="display:block; margin-top:1.25rem; padding-top:1.25rem; border-top:1px dashed var(--border);">
       <div style="font-size:0.68rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--dusty);margin-bottom:0.5rem;">⌨ Test mode — type card number</div>
       <div style="display:flex;gap:0.5rem;">
         <input id="test-rfid" type="text" placeholder="e.g. 0001234567"
@@ -1511,7 +1513,7 @@
       <div class="scan-sub">Tap your RFID card to view your requests and notifications</div>
       <div class="reader-pill"><span class="pulse-dot"></span> READY TO SCAN</div>
       <!-- TESTING ONLY — restore display:block to re-enable manual RFID entry -->
-      <div style="display:none; margin-top:1.25rem;padding-top:1.25rem;border-top:1px dashed var(--border);">
+      <div style="display:block; margin-top:1.25rem;padding-top:1.25rem;border-top:1px dashed var(--border);">
         <div style="font-size:0.68rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--dusty);margin-bottom:0.5rem;">⌨ Test mode — type card number</div>
         <div style="display:flex;gap:0.5rem;">
           <input id="test-rfid-req" type="text" placeholder="e.g. 0001234567"
@@ -1691,6 +1693,7 @@
   <div class="flash-greeting" id="flash-greeting"></div>
   <div class="flash-name"     id="flash-name"></div>
   <div class="flash-sub"      id="flash-sub"></div>
+  <div class="flash-pending"  id="flash-pending"></div>
 </div>
 
 <!-- REASON -->
@@ -3144,7 +3147,9 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
         await db.update('entries',leaveEntry.id,{leave_type:null,clock_in:sheetTimeStr,clock_in_iso:isoNow,clock_out:null,clock_out_iso:null,hours:null,status:'pending',reason_in:`Clocked in — was marked as ${leaveName}`});
         Object.assign(leaveEntry,{leaveType:null,clockIn:sheetTimeStr,clockInISO:isoNow,clockOut:null,hours:null,status:'pending',reasonIn:`Clocked in — was marked as ${leaveName}`});
         await addNote(emp,'Leave conflict',timeStr,`Clocked in but was marked as ${leaveName} for today — please review`,leaveEntry.id,todayKey);
-        showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr);
+        const unseenLv=_requests.filter(r=>r.initiatorId===emp.id&&(r.status==='pending_manager'||r.status==='pending_peer')).length;
+        const pendingMsgLv=unseenLv===1?'📋 You have 1 pending request':unseenLv>1?`📋 You have ${unseenLv} pending requests`:'';
+        showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,pendingMsgLv);
         return;
       }
       const row = {
@@ -3154,7 +3159,10 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       };
       await db.insert('entries', row);
       if(reason) await addNote(emp,noteType||'Arrival note',timeStr,reason,row.id,todayKey);
-      showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr);
+      const unseenIn=_requests.filter(r=>r.initiatorId===emp.id&&(r.status==='pending_manager'||r.status==='pending_peer')).length;
+      console.log('[flash] emp.id=',emp.id,'pending requests=',unseenIn,'all requests=',_requests.length);
+      const pendingMsgIn=unseenIn===1?'📋 You have 1 pending request':unseenIn>1?`📋 You have ${unseenIn} pending requests`:'';
+      showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,pendingMsgIn);
     } else {
       const[ih,im]=open.clockIn.split(':').map(Number);
       const[oh,om]=sheetTimeStr.split(':').map(Number);
@@ -3175,7 +3183,9 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       if(cached) Object.assign(cached,{clockOut:sheetTimeStr,hours:hoursStr,unpaidBreakMins,paidBreakMins,breakNote:breakNote||null});
       if(reason) await addNote(emp,noteType||'Departure note',timeStr,reason,open.id,todayKey);
       if(breakFlagged) await addNote(emp,'Break note',timeStr,`Break shorter than expected — unpaid: ${unpaidBreakMins} min (expected ${unpaidExpected} min)${breakNote?' · '+breakNote:''}`,open.id,todayKey);
-      showFlash('depart','🌸','See you next time,',emp.name.split(' ')[0],'Checked out · '+timeStr+' · '+hoursStr+'h');
+      const unseenOut=_requests.filter(r=>r.initiatorId===emp.id&&(r.status==='pending_manager'||r.status==='pending_peer')).length;
+      const pendingMsgOut=unseenOut===1?'📋 You have 1 pending request':unseenOut>1?`📋 You have ${unseenOut} pending requests`:'';
+      showFlash('depart','🌸','See you next time,',emp.name.split(' ')[0],'Checked out · '+timeStr+' · '+hoursStr+'h',pendingMsgOut);
     }
   } catch(e) {
     showFlash('error','⚠','','Database error','Please try again');
@@ -3196,13 +3206,15 @@ async function addNote(emp,type,time,reason,entryId,date){
    FLASH + REASON
 ═══════════════════════════════════════════ */
 let flashT=null;
-function showFlash(type,wave,greeting,name,sub){
+function showFlash(type,wave,greeting,name,sub,pendingMsg=''){
   const o=document.getElementById('flash');
   o.className='flash-overlay show '+type;
   document.getElementById('flash-wave').textContent=wave;
   document.getElementById('flash-greeting').textContent=greeting;
   document.getElementById('flash-name').textContent=name;
   document.getElementById('flash-sub').textContent=sub;
+  const pd=document.getElementById('flash-pending');
+  if(pd){ pd.textContent=pendingMsg; pd.classList.toggle('visible',!!pendingMsg); }
   renderKioskPresence();
   clearTimeout(flashT);
   flashT=setTimeout(()=>{o.classList.remove('show');returnOrFocusRFID();},2800);
