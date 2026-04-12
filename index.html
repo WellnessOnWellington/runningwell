@@ -1367,13 +1367,21 @@
     .admin-kiosk-btn-wrap { display: none; }
     .admin-brand { display: none; }
     #admin-mob-nav { display: block; }
-    #admin-mob-filter-wrap { display: flex; margin-left: auto; }
+    #admin-mob-filter-wrap { display: flex; }
     #tab-team .sr-role-tabs { display: none; }
     .ts-role-tabs-bar { display: none; }
     .admin-content { padding: 1rem 0.75rem; }
     .today-strip-panels { flex-direction: column; }
     .section-header { flex-direction: column; gap: 0.5rem; }
     .page-ribbon { flex-wrap: wrap; gap: 0.5rem; }
+    /* Context label in admin bar */
+    #admin-mob-context-label { flex: 1; text-align: center; font-size: 0.78rem; font-weight: 800; color: var(--charcoal); font-family: 'Nunito', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: none; }
+    #admin-mob-context-label.visible { display: block; }
+    #admin-mob-context-label:not(.visible) ~ #admin-mob-filter-wrap { margin-left: auto; }
+    /* Roster — hide day nav buttons (swipe handles it) */
+    .rb-mob-day-header { display: none; }
+    /* Timesheets — hide page ribbon and role tabs on mobile */
+    #tab-timesheets .page-ribbon { display: none; }
     /* Timesheets — read-only card view */
     .ts-mob-notice { display: block; }
     .export-btn { display: none; }
@@ -1798,8 +1806,16 @@
         <div class="sr-lp-row" onclick="adminMobileSwitchTab('timesheets')"><span class="sr-lp-radio" id="admin-mp-r-timesheets"></span><span class="sr-lp-label">Timesheets</span></div>
         <div class="sr-lp-row" onclick="adminMobileSwitchTab('analytics')"><span class="sr-lp-radio" id="admin-mp-r-analytics"></span><span class="sr-lp-label">Analytics</span></div>
         <div class="sr-lp-row" onclick="adminMobileSwitchTab('settings')"><span class="sr-lp-radio" id="admin-mp-r-settings"></span><span class="sr-lp-label">Settings</span></div>
+        <div style="border-top:1.5px solid var(--border);margin:0.3rem 0;"></div>
+        <div class="sr-lp-row" onclick="document.getElementById('admin-mob-popover').classList.remove('open');showView('kiosk');" style="color:var(--muted);">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0;">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8.5 2.5L4 7l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="sr-lp-label" style="color:var(--muted);">Return to Kiosk</span>
+        </div>
       </div>
     </div>
+    <span id="admin-mob-context-label"></span>
     <div class="admin-tabs">
       <button class="tab active" onclick="switchTab('team',this)">Team</button>
       <button class="tab"        onclick="switchTab('roster',this)">Roster</button>
@@ -1873,7 +1889,7 @@
         <div class="page-ribbon-spacer"></div>
         <button class="export-btn" onclick="exportMYOB()">⬇ Export for MYOB</button>
       </div>
-      <div class="ts-mob-notice">View only on mobile — open on desktop to edit and approve shifts</div>
+      <div class="ts-mob-notice">View only · approve & export on desktop</div>
       <div class="ts-role-tabs-bar">
         <button class="ts-role-tab active" id="ts-tab-Receptionist" onclick="tsSetRole('Receptionist',this)">Receptionists</button>
         <button class="ts-role-tab" id="ts-tab-Nurse" onclick="tsSetRole('Nurse',this)">Nurses</button>
@@ -4046,6 +4062,7 @@ function renderTimesheets(){
   }).filter(Boolean).join('');
 
   content.innerHTML=blocks||`<div class="ts-no-shifts">No shifts found for this fortnight.</div>`;
+  adminMobUpdateContextLabel();
 
   // Check if ALL employees across ALL roles are fully locked for this fortnight
   const exportBtn=document.querySelector('.export-btn');
@@ -5193,6 +5210,29 @@ function adminMobSyncFilterChecks(){
   }
 }
 
+function adminMobUpdateContextLabel(){
+  const el=document.getElementById('admin-mob-context-label');
+  if(!el||!window.matchMedia('(max-width:960px)').matches) return;
+  const activeTab=document.querySelector('.tab-panel.active')?.id;
+  if(activeTab==='tab-roster'){
+    if(!_rbMobDate) _rbMobDate=rbDateKey(new Date());
+    const d=new Date(_rbMobDate+'T12:00:00');
+    el.textContent=d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+    el.classList.add('visible');
+  } else if(activeTab==='tab-timesheets'){
+    const fn=getFortnightStart(tsOffset);
+    const fnDays=getFortnight14Days(fn);
+    const s=new Date(fnDays[0]+'T12:00:00');
+    const e=new Date(fnDays[fnDays.length-1]+'T12:00:00');
+    const fmt=d=>d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+    el.textContent=`${fmt(s)} – ${fmt(e)}`;
+    el.classList.add('visible');
+  } else {
+    el.textContent='';
+    el.classList.remove('visible');
+  }
+}
+
 function adminMobUpdateFilter(){
   const FILTER_TABS=['tab-team','tab-timesheets','tab-notes','tab-requests'];
   const activeTab=document.querySelector('.tab-panel.active')?.id;
@@ -5202,6 +5242,7 @@ function adminMobUpdateFilter(){
     wrap.style.display=(isMob&&FILTER_TABS.includes(activeTab))?'flex':'';
   }
   adminMobSyncFilterChecks();
+  adminMobUpdateContextLabel();
 }
 
 document.addEventListener('click', e=>{
@@ -5677,6 +5718,7 @@ function renderRosterMob(){
   const d=new Date(_rbMobDate+'T12:00:00');
   const labelEl=document.getElementById('rb-mob-date-label');
   if(labelEl) labelEl.textContent=d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+  adminMobUpdateContextLabel();
 }
 
 function rbMobNavDay(dir){
