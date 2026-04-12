@@ -342,6 +342,24 @@
   }
 
   .admin-brand { display: flex; align-items: center; gap: 0.5rem; flex: 1; }
+
+  /* Mobile admin nav pill — hidden on desktop */
+  #admin-mob-nav { display: none; position: relative; }
+  #admin-mob-pill {
+    display: flex; align-items: center; gap: 0.5rem;
+    height: 36px; padding: 0 0.85rem; border-radius: 20px;
+    background: var(--warm-white); border: 1.5px solid var(--border);
+    font-family: 'Nunito',sans-serif; font-size: 0.82rem; font-weight: 700; color: var(--charcoal);
+    cursor: pointer; transition: background 0.15s, border-color 0.15s; white-space: nowrap;
+  }
+  #admin-mob-pill:active { background: var(--blush); border-color: var(--dusty); }
+  #admin-mob-popover {
+    display: none; position: absolute; top: calc(100% + 8px); left: 0; z-index: 200;
+    background: var(--white); border: 1.5px solid var(--border); border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(40,20,30,0.13); padding: 0.4rem 0; min-width: 175px;
+    animation: srFpIn 0.15s ease;
+  }
+  #admin-mob-popover.open { display: block; }
   .admin-kiosk-btn-wrap { display:flex; flex-direction:row; align-items:center; gap:0.75rem; flex: 1; justify-content:flex-end; }
   .admin-avatar { width:36px; height:36px; border-radius:50%; background:var(--blush); color:var(--dusty); font-family:'Nunito',sans-serif; font-size:0.78rem; font-weight:800; display:flex; align-items:center; justify-content:center; letter-spacing:0.03em; flex-shrink:0; user-select:none; border:1.5px solid var(--border-dk); }
   .admin-kiosk-btn { background:var(--burgundy); color:#fff; border:none; border-radius:10px; padding:0.75rem 1.5rem; font-size:1rem; font-weight:800; font-family:'Nunito',sans-serif; cursor:pointer; letter-spacing:0.01em; transition:background 0.15s; white-space:nowrap; }
@@ -1295,6 +1313,18 @@
     .req-accept-confirm-actions { flex-direction: column; }
     .req-accept-btn, .req-decline-peer-btn { min-height: 44px; }
     .req-accept-confirm-row { font-size: 0.78rem; }
+
+    /* ── Admin panel mobile ── */
+    #view-admin { height: 100vh; overflow: hidden; }
+    .admin-bar { padding: 0.65rem 1rem; justify-content: flex-start; flex-wrap: nowrap; gap: 0; }
+    .admin-tabs { display: none; }
+    .admin-kiosk-btn-wrap { display: none; }
+    .admin-brand { display: none; }
+    #admin-mob-nav { display: block; }
+    .admin-content { padding: 1rem 0.75rem; }
+    .today-strip-panels { flex-direction: column; }
+    .section-header { flex-direction: column; gap: 0.5rem; }
+    .page-ribbon { flex-wrap: wrap; gap: 0.5rem; }
   }
 </style>
 </head>
@@ -1679,6 +1709,21 @@
           <path d="M 82 0 L 88 1 L 83 6"
             stroke="#8B2535" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
+      </div>
+    </div>
+    <div id="admin-mob-nav">
+      <button id="admin-mob-pill" onclick="adminToggleTabPicker(event)">
+        <span id="admin-mob-pill-label">Team</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div id="admin-mob-popover">
+        <div class="sr-lp-row" onclick="adminMobileSwitchTab('team')"><span class="sr-lp-radio active" id="admin-mp-r-team"></span><span class="sr-lp-label">Team</span></div>
+        <div class="sr-lp-row" onclick="adminMobileSwitchTab('roster')"><span class="sr-lp-radio" id="admin-mp-r-roster"></span><span class="sr-lp-label">Roster</span></div>
+        <div class="sr-lp-row" onclick="adminMobileSwitchTab('notes')"><span class="sr-lp-radio" id="admin-mp-r-notes"></span><span class="sr-lp-label">Notes</span></div>
+        <div class="sr-lp-row" onclick="adminMobileSwitchTab('requests')"><span class="sr-lp-radio" id="admin-mp-r-requests"></span><span class="sr-lp-label">Requests</span></div>
+        <div class="sr-lp-row" onclick="adminMobileSwitchTab('timesheets')"><span class="sr-lp-radio" id="admin-mp-r-timesheets"></span><span class="sr-lp-label">Timesheets</span></div>
+        <div class="sr-lp-row" onclick="adminMobileSwitchTab('analytics')"><span class="sr-lp-radio" id="admin-mp-r-analytics"></span><span class="sr-lp-label">Analytics</span></div>
+        <div class="sr-lp-row" onclick="adminMobileSwitchTab('settings')"><span class="sr-lp-radio" id="admin-mp-r-settings"></span><span class="sr-lp-label">Settings</span></div>
       </div>
     </div>
     <div class="admin-tabs">
@@ -2251,6 +2296,15 @@
       <div class="rb-panels" id="rb-panels"></div>
 
     </div>
+
+    <div class="sr-brand-footer">
+      Running <span>Well</span>
+      <svg width="72" height="9" viewBox="0 0 72 9" fill="none" style="display:block;margin:3px auto 0;">
+        <path d="M 0 6 C 12 6, 24 1, 38 1 C 50 1, 61 3, 70 1" stroke="#8B2535" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+        <path d="M 0 8 C 12 8, 24 3, 38 3 C 50 3, 61 6, 70 3" stroke="#D4899A" stroke-width="0.7" stroke-linecap="round" fill="none" opacity="0.5"/>
+      </svg>
+    </div>
+
   </div>
 </div>
 
@@ -4926,6 +4980,27 @@ function srPickLayout(layout){
 document.addEventListener('click', e=>{
   const lp=document.getElementById('sr-layout-popover');
   if(lp?.classList.contains('open')&&!e.target.closest('#sr-layout-pill-wrap')) lp.classList.remove('open');
+});
+
+function adminToggleTabPicker(e){
+  if(e) e.stopPropagation();
+  document.getElementById('admin-mob-popover')?.classList.toggle('open');
+}
+
+function adminMobileSwitchTab(name){
+  document.getElementById('admin-mob-popover')?.classList.remove('open');
+  const LABELS={team:'Team',roster:'Roster',notes:'Notes',requests:'Requests',timesheets:'Timesheets',analytics:'Analytics',settings:'Settings'};
+  const pill=document.getElementById('admin-mob-pill-label');
+  if(pill) pill.textContent=LABELS[name]||name;
+  document.querySelectorAll('#admin-mob-popover .sr-lp-radio').forEach(r=>r.classList.remove('active'));
+  document.getElementById('admin-mp-r-'+name)?.classList.add('active');
+  const btn=document.querySelector(`.admin-tabs .tab[onclick*="'${name}'"]`);
+  if(btn) switchTab(name,btn);
+}
+
+document.addEventListener('click', e=>{
+  const p=document.getElementById('admin-mob-popover');
+  if(p?.classList.contains('open')&&!e.target.closest('#admin-mob-nav')) p.classList.remove('open');
 });
 
 function srToggleRolePopover(role){
