@@ -3607,13 +3607,13 @@ function switchTab(name,btn){
 const ROLE_C={Doctor:'c-doctor',Nurse:'c-nurse',Receptionist:'c-receptionist',Manager:'c-manager'};
 
 function renderTeam(){
-  const today=new Date().toISOString().slice(0,10);
+  const today=rbDateKey(new Date());
   const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
   const doneNow=new Set(_entries.filter(e=>e.date===today&&e.clockOut&&!e.leaveType).map(e=>e.employeeId));
   if(_tpNowInterval){clearInterval(_tpNowInterval);_tpNowInterval=null;}
   document.getElementById('today-strip').innerHTML=`<div class="today-strip-panels">${teamPresenceHtml(today,inNow,doneNow)}</div>`;
   _tpNowInterval=setInterval(()=>{
-    const t=new Date().toISOString().slice(0,10);
+    const t=rbDateKey(new Date());
     const iN=new Set(_entries.filter(e=>e.date===t&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
     const dN=new Set(_entries.filter(e=>e.date===t&&e.clockOut&&!e.leaveType).map(e=>e.employeeId));
     document.getElementById('today-strip').innerHTML=`<div class="today-strip-panels">${teamPresenceHtml(t,iN,dN)}</div>`;
@@ -5591,7 +5591,7 @@ function teamPresenceHtml(today, inNow, doneNow){
       const isIn=inNow.has(emp.id);
       const isDone=doneNow.has(emp.id);
       const onLeave=isOnLeave(emp.id,today);
-      const p=isDone||onLeave?{bg:'rgba(180,180,180,0.1)',color:'#b0a8ac'}:(SR_ROLE_PILL[role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
+      const p=onLeave?{bg:'rgba(180,180,180,0.1)',color:'#b0a8ac'}:(SR_ROLE_PILL[role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
       const sMin=gnowToMin(shift.start);
       const eMin=gnowToMin(shift.end);
       const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
