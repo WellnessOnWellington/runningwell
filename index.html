@@ -1939,7 +1939,7 @@
           <div class="settings-section-chevron" id="ss-chevron-clockaudit">&#9658;</div>
           <div style="flex:1;">
             <div class="settings-section-title">Clock Audit</div>
-            <div class="settings-section-hint">Every clock-in and clock-out event across all staff. Entries marked * were auto-generated from approved leave — not a physical clock.</div>
+            <div class="settings-section-hint">Every clock-in and clock-out event across all staff. Entries marked * were auto-generated from approved leave — not a physical clock. Entries marked † were removed from the timesheet export by a manager — clock record preserved.</div>
           </div>
         </div>
         <div class="settings-section-body" id="ss-body-clockaudit" style="display:none;">
@@ -2796,6 +2796,7 @@ function normaliseEntry(r) {
     unpaidBreakMins: r.unpaid_break_mins ?? null,
     paidBreakMins: r.paid_break_mins ?? null,
     breakNote: r.break_note || null,
+    deleted: r.deleted || false,
   };
 }
 
@@ -2930,7 +2931,7 @@ function renderKioskPresence(){
   const el=document.getElementById('kiosk-mob-presence');
   if(!el||!window.matchMedia('(max-width:960px)').matches) return;
   const today=rbDateKey(new Date());
-  const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
+  const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut&&!e.leaveType&&!e.deleted).map(e=>e.employeeId));
   if(!inNow.size){ el.innerHTML=`<div class="kmp-empty">No staff currently in</div>`; return; }
   const ROLE_ORDER=['Receptionist','Nurse','Manager'];
   const ROLE_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
@@ -3608,14 +3609,14 @@ const ROLE_C={Doctor:'c-doctor',Nurse:'c-nurse',Receptionist:'c-receptionist',Ma
 
 function renderTeam(){
   const today=rbDateKey(new Date());
-  const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
-  const doneNow=new Set(_entries.filter(e=>e.date===today&&e.clockOut&&!e.leaveType).map(e=>e.employeeId));
+  const inNow=new Set(_entries.filter(e=>e.date===today&&!e.clockOut&&!e.leaveType&&!e.deleted).map(e=>e.employeeId));
+  const doneNow=new Set(_entries.filter(e=>e.date===today&&e.clockOut&&!e.leaveType&&!e.deleted).map(e=>e.employeeId));
   if(_tpNowInterval){clearInterval(_tpNowInterval);_tpNowInterval=null;}
   document.getElementById('today-strip').innerHTML=`<div class="today-strip-panels">${teamPresenceHtml(today,inNow,doneNow)}</div>`;
   _tpNowInterval=setInterval(()=>{
     const t=rbDateKey(new Date());
-    const iN=new Set(_entries.filter(e=>e.date===t&&!e.clockOut&&!e.leaveType).map(e=>e.employeeId));
-    const dN=new Set(_entries.filter(e=>e.date===t&&e.clockOut&&!e.leaveType).map(e=>e.employeeId));
+    const iN=new Set(_entries.filter(e=>e.date===t&&!e.clockOut&&!e.leaveType&&!e.deleted).map(e=>e.employeeId));
+    const dN=new Set(_entries.filter(e=>e.date===t&&e.clockOut&&!e.leaveType&&!e.deleted).map(e=>e.employeeId));
     document.getElementById('today-strip').innerHTML=`<div class="today-strip-panels">${teamPresenceHtml(t,iN,dN)}</div>`;
   },60000);
   const sel=document.getElementById('filter-employee');
@@ -4005,7 +4006,7 @@ function tsBuildRow(emp, date, shift, entry, splitSegment=false){
             ?`<button class="ts-lock-btn locked" onclick="tsOverrideAutoApproved('${overrideKey}',event)" title="Click to override auto-approval">🔒 Locked</button>`
             :entry||shift?lockBtn:''}
         <div style="flex:1"></div>
-        ${entry?deleteBtn:''}
+        ${deleteBtn}
       </div>
     </div>
     ${breakRowHtml}
@@ -4111,7 +4112,7 @@ function renderTimesheets(){
 
   const blocks=emps.map(emp=>{
     const empShifts=_rosterShifts.filter(s=>s.employee_id===emp.id&&fnDays.includes(s.date)&&!s.is_day_off);
-    const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date));
+    const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date)&&!e.deleted);
     const activeDays=[...new Set([...empShifts.map(s=>s.date),...empEntries.map(e=>e.date)])].sort();
     if(!activeDays.length) return '';
 
@@ -4191,7 +4192,7 @@ function renderTimesheets(){
   if(exportBtn){
     const allEmpsReady=_emps.filter(e=>e.active!==false).every(emp=>{
       const empShifts=_rosterShifts.filter(s=>s.employee_id===emp.id&&fnDays.includes(s.date)&&!s.is_day_off);
-      const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date));
+      const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date)&&!e.deleted);
       const activeDays=[...new Set([...empShifts.map(s=>s.date),...empEntries.map(e=>e.date)])];
       if(!activeDays.length) return true; // no shifts this fortnight — not blocking
       return activeDays.every(date=>{
@@ -4212,7 +4213,7 @@ function renderTimesheets(){
     const roleEmps=_emps.filter(e=>e.role===role&&e.active!==false);
     const roleReady=roleEmps.length>0&&roleEmps.every(emp=>{
       const empShifts=_rosterShifts.filter(s=>s.employee_id===emp.id&&fnDays.includes(s.date)&&!s.is_day_off);
-      const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date));
+      const empEntries=_entries.filter(e=>e.employeeId===emp.id&&fnDays.includes(e.date)&&!e.deleted);
       const activeDays=[...new Set([...empShifts.map(s=>s.date),...empEntries.map(e=>e.date)])];
       if(!activeDays.length) return true;
       return activeDays.every(date=>{
@@ -4327,19 +4328,19 @@ async function tsDeleteRow(entryId, empId, empName, date, e){
   e.stopPropagation();
   if(!entryId){showToast('No entry to delete');return;}
   const mgr=currentManager?.name||'Manager';
-  if(!confirm(`Delete the timesheet entry for ${empName} on ${date}?\n\nThis cannot be undone and will be logged in the audit trail.`)) return;
+  if(!confirm(`Remove this timesheet entry for ${empName} on ${date} from the MYOB export?\n\nThe clock record will be preserved in the audit log.`)) return;
   try{
     const entry=_entries.find(en=>en.id===entryId);
     await tsSaveAudit({entry_id:entryId,employee_id:empId,employee_name:empName,date,
       rostered_start:null,rostered_end:null,
       clocked_start:entry?.clockIn||null,clocked_end:entry?.clockOut||null,
       final_start:entry?.finalStart||entry?.clockIn||null,final_end:entry?.finalEnd||entry?.clockOut||null,
-      action:'delete',reason:'Manual deletion by manager',manager_name:mgr});
-    await db.delete('entries',entryId);
-    _entries=_entries.filter(en=>en.id!==entryId);
+      action:'delete',reason:'Removed from timesheet export by manager',manager_name:mgr});
+    await db.update('entries',entryId,{deleted:true});
+    if(entry) entry.deleted=true;
     renderTimesheets();
-    showToast('Entry deleted.');
-  }catch(err){showToast('Could not delete entry');console.error(err);}
+    showToast('Entry removed from export.');
+  }catch(err){showToast('Could not remove entry');console.error(err);}
 }
 
 function tsValidTime(v){ return /^([01]?\d|2[0-3]):[0-5]\d$/.test((v||'').trim()); }
@@ -4545,7 +4546,7 @@ function calcMYOBRows(entry, emp, isPH=false){
 function exportMYOB(){
   const fnStart=getFortnightStart(tsOffset);
   const fnDays=getFortnight14Days(fnStart);
-  const allEntries=_entries.filter(e=>fnDays.includes(e.date));
+  const allEntries=_entries.filter(e=>fnDays.includes(e.date)&&!e.deleted);
   const locked=allEntries.filter(e=>e.locked&&(e.finalStart||e.clockIn)&&(e.finalEnd||e.clockOut));
   const unlocked=allEntries.filter(e=>!e.locked);
 
@@ -4660,7 +4661,7 @@ async function rbMarkLeave(empId, date, shiftId, leaveType){
 }
 
 function isOnLeave(empId, date){
-  if(_entries.length) return _entries.some(e=>e.employeeId===empId&&e.date===date&&e.leaveType);
+  if(_entries.length) return _entries.some(e=>e.employeeId===empId&&e.date===date&&e.leaveType&&!e.deleted);
   return _rosterShifts.some(s=>s.employee_id===empId&&s.date===date&&s.on_leave);
 }
 
@@ -4797,9 +4798,10 @@ function renderClockAudit(resetPage=false){
     const hrs=r.hours?`<span class="mono">${r.hours}h</span>`:'—';
     const badge=r.status==='pending'?'<span class="badge badge-pending">Pending</span>':r.status==='approved'?'<span class="badge badge-approved">✓ Acknowledged</span>':r.status==='flagged'?'<span class="badge badge-flagged">Flagged</span>':'<span class="badge badge-normal">✓ Normal</span>';
     const isAuto=String(r.id).startsWith('L');
-    return`<tr>
+    const isDeleted=r.deleted;
+    return`<tr${isDeleted?' style="opacity:0.5;"':''}>
       <td>${dateF}</td>
-      <td><strong>${r.employeeName}</strong>${isAuto?'<span style="color:var(--muted);font-size:0.75rem;margin-left:0.3rem;" title="Auto-generated — leave entry, not a physical clock">*</span>':''}</td>
+      <td><strong>${r.employeeName}</strong>${isAuto?'<span style="color:var(--muted);font-size:0.75rem;margin-left:0.3rem;">*</span>':''}${isDeleted?'<span style="color:var(--muted);font-size:0.75rem;margin-left:0.3rem;">†</span>':''}</td>
       <td style="color:var(--muted)">${r.role}</td>
       <td><span class="mono">${r.clockIn}</span></td>
       <td>${out}</td>
