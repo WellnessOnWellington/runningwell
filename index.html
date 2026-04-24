@@ -5190,6 +5190,7 @@ async function showStaffRoster(){
   if(srSel) srSel.value='';
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-staff-roster').classList.add('active');
+  setTimeout(focusRFID,100);
   db.get('public_holidays').catch(()=>[]).then(phs=>{ _publicHolidays=new Set((phs||[]).map(r=>r.date)); renderStaffRoster(); });
   requestAnimationFrame(srSyncRightWidth);
   _srRefreshInterval=setInterval(async()=>{
