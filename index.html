@@ -2302,6 +2302,54 @@
         </div>
       </div>
 
+      <!-- Leave Log -->
+      <div class="settings-section" id="ss-leavelog">
+        <div class="settings-section-header" onclick="toggleSettingsSection('leavelog')">
+          <div class="settings-section-chevron" id="ss-chevron-leavelog">&#9658;</div>
+          <div style="flex:1;">
+            <div class="settings-section-title">Leave Log</div>
+            <div class="settings-section-hint">Every leave decision, who made it and when &mdash; including approvals that reached no roster and so wrote nothing. Rows marked <strong>Not applied</strong> are leave that has been granted but does not yet exist on any timesheet.</div>
+          </div>
+        </div>
+        <div class="settings-section-body" id="ss-body-leavelog" style="display:none;">
+          <div class="page-ribbon" style="margin-bottom:1rem;box-shadow:none;border-color:var(--border);">
+            <input class="form-input" type="search" id="ll-filter-text" oninput="renderLeaveLog(true)" placeholder="Search name, type, manager, note&hellip;" style="width:15rem;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);" />
+            <select class="form-select" id="ll-filter-emp" onchange="renderLeaveLog(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);"><option value="">All staff</option></select>
+            <select class="form-select" id="ll-filter-role" onchange="renderLeaveLog(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);">
+              <option value="">All roles</option>
+              <option>Receptionist</option><option>Nurse</option><option>Manager</option>
+            </select>
+            <select class="form-select" id="ll-filter-event" onchange="renderLeaveLog(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);">
+              <option value="">All events</option>
+              <option value="approved">Approved</option>
+              <option value="marked">Marked by hand</option>
+              <option value="cleared">Cleared by hand</option>
+              <option value="revoked">Revoked</option>
+              <option value="applied_later">Applied when rostered</option>
+            </select>
+            <select class="form-select" id="ll-filter-basis" onchange="renderLeaveLog(true)" title="Which date the range below filters on" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);">
+              <option value="leave">Dates of leave</option>
+              <option value="decided">Date decided</option>
+            </select>
+            <input class="form-input" type="date" id="ll-filter-from" onchange="renderLeaveLog(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);" />
+            <span style="font-size:0.78rem;color:var(--muted);font-weight:600;">to</span>
+            <input class="form-input" type="date" id="ll-filter-to" onchange="renderLeaveLog(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);" />
+            <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;" title="Leave that was granted but has not reached any timesheet"><input type="checkbox" id="ll-only-unapplied" onchange="renderLeaveLog(true)" style="accent-color:var(--burgundy);width:14px;height:14px;cursor:pointer;">Not applied only</label>
+          </div>
+          <!-- overflow-x:auto on this wrapper only. The shared .table-wrap is overflow:hidden,
+               which for the seven-column audits is fine because they fit exactly; this table
+               carries more per row and its Note column holds a variable-length list of dates,
+               so anything past the edge would be unreachable rather than scrollable. Scoped
+               here rather than changed on the class, which ten tables depend on. -->
+          <div class="table-wrap" style="overflow-x:auto;">
+            <table class="timesheet-table">
+              <thead><tr><th>Decided</th><th>Event</th><th>Staff</th><th>Leave</th><th>Dates</th><th>Decided by</th><th>Applied</th><th>Note</th></tr></thead>
+              <tbody id="leave-log-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Timesheet Audit -->
       <div class="settings-section" id="ss-tsaudit">
         <div class="settings-section-header" onclick="toggleSettingsSection('tsaudit')">
@@ -3493,6 +3541,11 @@ function normaliseEntry(r) {
     leaveTypeGapStart: r.leave_type_gap_start || null,
     leaveGapHoursStart: r.leave_gap_hours_start ?? null,
     breakGapDecision: r.break_gap_decision || null,
+    // Where this leave came from. Lets a leave row explain itself without a join,
+    // and lets a leave_log row be reconstructed if one is ever lost.
+    requestId: r.request_id || null,
+    approvedBy: r.approved_by || null,
+    approvedAt: r.approved_at || null,
   };
 }
 
@@ -3525,7 +3578,80 @@ function denormaliseEntry(e){
     leave_type_gap_start: e.leaveTypeGapStart,
     leave_gap_hours_start: e.leaveGapHoursStart,
     break_gap_decision: e.breakGapDecision,
+    request_id: e.requestId,
+    approved_by: e.approvedBy,
+    approved_at: e.approvedAt,
   };
+}
+
+/* ═══════════════════════════════════════════
+   LEAVE LOG
+   ═══════════════════════════════════════════
+   A permanent record of every leave decision, including the ones that wrote
+   nothing. The requests row cannot serve this: it is overwritten in place, so
+   re-deciding destroys the prior decision; it does not exist at all for leave
+   marked by hand from the roster dropdown; and it cannot say what the approval
+   ACTUALLY DID, which is the part that matters — approving leave for dates
+   whose roster does not exist yet writes nothing and used to say nothing.
+
+   Read on demand when the Leave Log section is opened, never in loadAll. An
+   unfiltered read on page load is what exhausted the Supabase egress allowance
+   in August; this table is not needed to render anything else.               */
+
+function normaliseLeaveLog(r){
+  return {
+    id:r.id, event:r.event, employeeId:r.employee_id, employeeName:r.employee_name,
+    role:r.role||null, leaveType:r.leave_type||null,
+    startDate:r.start_date, endDate:r.end_date,
+    requestId:r.request_id||null, managerId:r.manager_id||null,
+    managerName:r.manager_name||'', decidedAt:r.decided_at||r.created_at||null,
+    daysApplied:r.days_applied??0, daysUnrostered:r.days_unrostered??0,
+    unrosteredDates:r.unrostered_dates||null, note:r.note||null,
+  };
+}
+
+const LEAVE_LOG_EVENTS={
+  approved:'Approved', marked:'Marked by hand', cleared:'Cleared by hand',
+  revoked:'Revoked', applied_later:'Applied when rostered',
+};
+
+/* Never throws. A log write that fails must not roll back leave that was
+   already applied — the leave is the real work and it has already happened.
+   But it must not pass silently either, or the record is a promise the app
+   does not keep: the failure is shown, and the journal triggers still hold the
+   rows that WERE written. Called after the work, for that reason. */
+async function logLeaveEvent(fields){
+  try{
+    const row={
+      id:'LL'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      event:fields.event,
+      employee_id:fields.employeeId,
+      employee_name:fields.employeeName||'',
+      role:fields.role||null,
+      leave_type:fields.leaveType||null,
+      start_date:fields.startDate,
+      end_date:fields.endDate||fields.startDate,
+      request_id:fields.requestId||null,
+      manager_id:currentManager?.id||null,
+      manager_name:currentManager?.name||'Manager',
+      decided_at:new Date().toISOString(),
+      days_applied:fields.daysApplied??0,
+      days_unrostered:fields.daysUnrostered??0,
+      unrostered_dates:(fields.unrosteredDates||[]).join(',')||null,
+      note:fields.note||null,
+    };
+    await db.insert('leave_log',row);
+    return true;
+  }catch(e){
+    // The failure path must not throw either. The caller has already applied the leave
+    // by this point, so an exception escaping here would surface to the manager as
+    // "approval failed" for work that in fact succeeded.
+    try{
+      console.error('leave_log write failed:',e);
+      showToast('⚠ Leave recorded, but the Leave Log entry failed to save');
+    }catch(_){}
+    return false;
+  }
 }
 
 function normaliseNote(r) {
@@ -7264,6 +7390,12 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
         renderDayTimelineForRole(role); renderTimesheets();
       });
     }
+    if(snapLeave) await logLeaveEvent({
+      event:'cleared', employeeId:empId, employeeName:emp.name, role:emp.role,
+      leaveType:snapLeave.leaveType, startDate:date, endDate:date,
+      requestId:snapLeave.requestId||null, daysApplied:0, daysUnrostered:0,
+      note:`Block ${(shift.start_time||'').slice(0,5)}–${(shift.end_time||'').slice(0,5)} cleared from the roster`,
+    });
     renderDayTimelineForRole(role); renderTimesheets(); return;
   }
   const sMin=timeStrToMin(shift.start_time)||TL_START;
@@ -7272,11 +7404,15 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
   const clockIn=(shift.start_time||'').slice(0,5);
   const clockOut=(shift.end_time||'').slice(0,5);
   try{
+    // Leave marked by hand carried no manager and no timestamp at all — the one write
+    // path into payroll data that recorded nothing about who did it.
+    const _attr={approved_by:currentManager?.name||'Manager',approved_at:new Date().toISOString()};
     if(existingLeave){
-      await db.update('entries',existingLeave.id,{leave_type:leaveType,clock_in:clockIn,clock_out:clockOut,hours,shift_id:shiftId});
-      Object.assign(existingLeave,{leaveType,clockIn,clockOut,hours,shiftId});
+      await db.update('entries',existingLeave.id,{leave_type:leaveType,clock_in:clockIn,clock_out:clockOut,hours,shift_id:shiftId,..._attr});
+      Object.assign(existingLeave,{leaveType,clockIn,clockOut,hours,shiftId,
+        approvedBy:_attr.approved_by,approvedAt:_attr.approved_at});
     }else{
-      const row={id:'L'+Date.now(),employee_id:empId,employee_name:emp.name,role:emp.role,date,clock_in:clockIn,clock_out:clockOut,hours,leave_type:leaveType,shift_id:shiftId,status:'normal'};
+      const row={id:'L'+Date.now(),employee_id:empId,employee_name:emp.name,role:emp.role,date,clock_in:clockIn,clock_out:clockOut,hours,leave_type:leaveType,shift_id:shiftId,status:'normal',..._attr};
       const returned=await db.insert('entries',row);
       const saved=Array.isArray(returned)?returned[0]:returned;
       _entries.push(normaliseEntry({...row,id:saved?.id||row.id}));
@@ -7293,6 +7429,11 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
     });
     showToast(formatLeaveType(leaveType)+' marked');
     renderDayTimelineForRole(role); renderTimesheets();
+    await logLeaveEvent({
+      event:'marked', employeeId:empId, employeeName:emp.name, role:emp.role,
+      leaveType, startDate:date, endDate:date, daysApplied:1, daysUnrostered:0,
+      note:`Block ${clockIn}–${clockOut} marked from the roster`,
+    });
   }catch(err){showToast('Could not save leave');console.error(err);}
 }
 
@@ -9703,6 +9844,7 @@ function toggleSettingsSection(key){
   if(open&&key==='notesaudit') renderNotesAudit();
   if(open&&key==='tsaudit') renderTimesheetAudit();
   if(open&&key==='reqaudit') loadReqAudit();
+  if(open&&key==='leavelog') loadLeaveLog();
   if(open&&key==='inactive') renderInactiveStaff();
 }
 
@@ -11335,9 +11477,26 @@ async function managerApproveRequest(id){
       if(r.colleagueId) await reqCreateNotification(r.colleagueId,id,`${r.type==='swap'?'Shift swap':'Shift give away'} with ${r.initiatorName} was approved by ${mgr} — roster has been updated`,'manager_approved');
     }
     const _skipped=_wb?.skippedLeaveBlocks||[];
-    showToast(_skipped.length
-      ? `Approved — leave skipped on ${_skipped.length} already-worked block${_skipped.length===1?'':'s'}`
-      : 'Request approved');
+    const _unrostered=_wb?.unrosteredDates||[];
+    if(r.type==='leave'){
+      await logLeaveEvent({
+        event:'approved', employeeId:r.initiatorId, employeeName:r.initiatorName,
+        role:r.initiatorRole, leaveType:r.leaveType,
+        startDate:r.leaveStartDate, endDate:r.leaveEndDate, requestId:r.id,
+        daysApplied:(_wb?.appliedDates||[]).length,
+        daysUnrostered:_unrostered.length,
+        unrosteredDates:_unrostered,
+        note:_skipped.length?`${_skipped.length} block(s) skipped — already worked`:null,
+      });
+    }
+    // Say what actually happened. "Request approved" was true and useless: it read the
+    // same whether the leave reached the roster or vanished into dates that have none.
+    showToast(
+      _unrostered.length
+        ? `Approved — ${_unrostered.length} day${_unrostered.length===1?'':'s'} not yet rostered, leave will need applying when that roster is built`
+      : _skipped.length
+        ? `Approved — leave skipped on ${_skipped.length} already-worked block${_skipped.length===1?'':'s'}`
+        : 'Request approved');
     renderRequests();
     // applyRosterWriteback has mutated _rosterShifts/_entries — refresh the views that
     // read them, and clear the pending-request markers this request was driving.
@@ -11412,6 +11571,11 @@ function reqLeaveWorkedClashes(req){
 
 async function applyRosterWriteback(req){
   const skippedLeaveBlocks=[];
+  // What the leave branch actually did, RECORDED rather than inferred afterwards.
+  // `unrosteredDates` is the one the system had no way of knowing: a day this leave
+  // covers where the roster does not exist yet, so nothing was written and nothing
+  // ever said so. It is the whole reason leave could be approved into silence.
+  const appliedDates=new Set(), unrosteredDates=[];
   if(req.type==='leave'){
     const dates=[];
     const cur=new Date(req.leaveStartDate+'T12:00:00');
@@ -11425,7 +11589,7 @@ async function applyRosterWriteback(req){
       // an unexplained no-clock-in. Previously this took only the first shift of the day and
       // set no shift_id at all, so split-shift leave was both half-applied and orphaned.
       const dayShifts=_rosterShifts.filter(s=>s.employee_id===req.initiatorId&&s.date===date&&!s.is_day_off&&s.start_time&&s.end_time);
-      if(!dayShifts.length) continue;
+      if(!dayShifts.length){ unrosteredDates.push(date); continue; }
       for(const rShift of dayShifts){
         // Never write leave over a block that already carries worked time — see
         // rbWorkedEntryCoveringShift. The manager has already consented to this being
@@ -11442,15 +11606,20 @@ async function applyRosterWriteback(req){
         // (written before this fix) — the first segment claims it and stamps shift_id on it,
         // so a later segment in the same loop no longer matches and creates its own.
         const existingLeave=_entries.find(e=>e.employeeId===req.initiatorId&&e.date===date&&e.leaveType&&(e.shiftId===rShift.id||!e.shiftId));
+        // Stamp where this leave came from onto the row itself, so a timesheet line can
+        // explain its own origin and the log can be rebuilt if a log row is ever lost.
+        const _attr={request_id:req.id,approved_by:currentManager?.name||'Manager',approved_at:new Date().toISOString()};
         if(existingLeave){
-          await db.update('entries',existingLeave.id,{leave_type:req.leaveType,clock_in:clockIn,clock_out:clockOut,hours,shift_id:rShift.id});
-          Object.assign(existingLeave,{leaveType:req.leaveType,clockIn,clockOut,hours,shiftId:rShift.id});
+          await db.update('entries',existingLeave.id,{leave_type:req.leaveType,clock_in:clockIn,clock_out:clockOut,hours,shift_id:rShift.id,..._attr});
+          Object.assign(existingLeave,{leaveType:req.leaveType,clockIn,clockOut,hours,shiftId:rShift.id,
+            requestId:_attr.request_id,approvedBy:_attr.approved_by,approvedAt:_attr.approved_at});
         } else {
-          const row={id:'L'+Date.now()+'_'+rShift.id,employee_id:req.initiatorId,employee_name:req.initiatorName,role:req.initiatorRole,date,clock_in:clockIn,clock_out:clockOut,hours,leave_type:req.leaveType,shift_id:rShift.id,status:'normal'};
+          const row={id:'L'+Date.now()+'_'+rShift.id,employee_id:req.initiatorId,employee_name:req.initiatorName,role:req.initiatorRole,date,clock_in:clockIn,clock_out:clockOut,hours,leave_type:req.leaveType,shift_id:rShift.id,status:'normal',..._attr};
           const returned=await db.insert('entries',row);
           const saved=Array.isArray(returned)?returned[0]:returned;
           _entries.push(normaliseEntry({...row,id:saved?.id||row.id}));
         }
+        appliedDates.add(date);
       }
     }
   } else if(req.type==='swap'){
@@ -11502,7 +11671,7 @@ async function applyRosterWriteback(req){
     _rosterShifts=freshShifts.filter(s=>s.id!==coverShift.id);
     _rosterShifts.push(newRow);
   }
-  return {skippedLeaveBlocks};
+  return {skippedLeaveBlocks,appliedDates:[...appliedDates],unrosteredDates};
 }
 
 /* ═══════════════════════════════════════════
@@ -11658,6 +11827,115 @@ async function loadReqAudit(){
     _reqAuditRows=(await db.get('requests')).map(normaliseRequest).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
     renderReqAudit(true);
   }catch(e){ showToast('Error loading audit'); console.error(e); }
+}
+
+/* ═══════════════════════════════════════════
+   LEAVE LOG — VIEW
+═══════════════════════════════════════════ */
+let _llPage=0;
+let _leaveLogRows=[];
+
+async function loadLeaveLog(){
+  try{
+    _leaveLogRows=(await db.get('leave_log')).map(normaliseLeaveLog)
+      .sort((a,b)=>new Date(b.decidedAt)-new Date(a.decidedAt));
+    renderLeaveLog(true);
+  }catch(e){
+    console.error('leave_log load failed:',e);
+    const tb=document.getElementById('leave-log-body');
+    if(tb) tb.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="empty-msg">Could not load the Leave Log.</div></div></td></tr>`;
+  }
+}
+
+function renderLeaveLog(resetPage=false){
+  const tbody=document.getElementById('leave-log-body');
+  if(!tbody) return;
+  // Staff dropdown, narrowed by the role filter — same behaviour as the other audits.
+  const empSel=document.getElementById('ll-filter-emp');
+  const rf0=document.getElementById('ll-filter-role')?.value;
+  if(empSel){
+    const prev=empSel.value;
+    const visible=rf0?_emps.filter(e=>e.role===rf0):_emps;
+    empSel.innerHTML='<option value="">All staff</option>';
+    visible.forEach(e=>{const o=document.createElement('option');o.value=e.name;o.textContent=e.name;empSel.appendChild(o);});
+    empSel.value=visible.some(e=>e.name===prev)?prev:'';
+  }
+  // Deliberately NOT defaulted to today. The Request Audit does that and opens empty
+  // on almost every visit — a log whose default view is "nothing" is not a log.
+  if(resetPage) _llPage=0;
+  const q=(document.getElementById('ll-filter-text')?.value||'').trim().toLowerCase();
+  const ef=document.getElementById('ll-filter-emp')?.value;
+  const rf=document.getElementById('ll-filter-role')?.value;
+  const ev=document.getElementById('ll-filter-event')?.value;
+  const basis=document.getElementById('ll-filter-basis')?.value||'leave';
+  const df=document.getElementById('ll-filter-from')?.value;
+  const dt=document.getElementById('ll-filter-to')?.value;
+  const unappliedOnly=document.getElementById('ll-only-unapplied')?.checked;
+
+  let rows=[..._leaveLogRows];
+  if(ef) rows=rows.filter(r=>r.employeeName===ef);
+  else if(rf) rows=rows.filter(r=>r.role===rf);
+  if(ev) rows=rows.filter(r=>r.event===ev);
+  if(unappliedOnly) rows=rows.filter(r=>r.daysUnrostered>0);
+  // "Dates of leave" matches any OVERLAP with the window, not containment — asking for
+  // October should find leave that runs late September to early October.
+  if(df||dt) rows=rows.filter(r=>{
+    if(basis==='decided'){
+      const d=(r.decidedAt||'').slice(0,10);
+      return (!df||d>=df)&&(!dt||d<=dt);
+    }
+    return (!dt||r.startDate<=dt)&&(!df||r.endDate>=df);
+  });
+  if(q) rows=rows.filter(r=>[r.employeeName,r.role,formatLeaveType(r.leaveType),
+    LEAVE_LOG_EVENTS[r.event]||r.event,r.managerName,r.note,r.unrosteredDates]
+    .filter(Boolean).join(' ').toLowerCase().includes(q));
+
+  if(!rows.length){
+    tbody.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="empty-msg">${_leaveLogRows.length?'No leave events match these filters.':'No leave events recorded yet.'}</div></div></td></tr>`;
+    document.getElementById('ll-pagination')?.remove();
+    return;
+  }
+  const totalPages=Math.ceil(rows.length/CA_PAGE_SIZE);
+  _llPage=Math.min(_llPage,totalPages-1);
+  const page=rows.slice(_llPage*CA_PAGE_SIZE,(_llPage+1)*CA_PAGE_SIZE);
+  tbody.innerHTML=page.map(r=>{
+    const sameDay=r.startDate===r.endDate;
+    const dates=sameDay?reqFmtDate(r.startDate):`${reqFmtDate(r.startDate)} – ${reqFmtDate(r.endDate)}`;
+    // The column that carries the point of the table: leave granted that reached no roster.
+    const applied=r.daysUnrostered>0
+      ? `<span style="color:var(--burgundy);font-weight:700;">Not applied — ${r.daysUnrostered} day${r.daysUnrostered===1?'':'s'} unrostered</span>`
+      : r.event==='cleared'||r.event==='revoked' ? '—'
+      : `${r.daysApplied} day${r.daysApplied===1?'':'s'}`;
+    const noteBits=[r.note];
+    if(r.unrosteredDates) noteBits.push('Unrostered: '+r.unrosteredDates.split(',').map(d=>reqFmtDate(d)).join(', '));
+    // Capped and ellipsised, full text on hover. .table-wrap is overflow:hidden and shared
+    // by ten tables, so a cell wide enough to push the table past the wrapper does not
+    // scroll — the column simply becomes unreachable. The cap has to sit on an inner DIV:
+    // auto table layout treats max-width on a <td> as a suggestion and ignores it, which
+    // let one 1009px unrostered-date list widen the whole table by 124px.
+    const noteText=noteBits.filter(Boolean).join(' · ');
+    return`<tr>
+      <td>${reqFmtDate(r.decidedAt)}</td>
+      <td><span class="req-admin-type-pill">${escHtml(LEAVE_LOG_EVENTS[r.event]||r.event)}</span></td>
+      <td>${escHtml(r.employeeName)}${r.role?`<div style="font-size:0.7rem;color:var(--muted);">${escHtml(r.role)}</div>`:''}</td>
+      <td>${escHtml(formatLeaveType(r.leaveType))}</td>
+      <td>${dates}</td>
+      <td style="font-size:0.78rem;color:var(--muted);">${escHtml(r.managerName||'—')}</td>
+      <td style="font-size:0.78rem;">${applied}</td>
+      <td style="font-size:0.75rem;color:var(--muted);" title="${escHtml(noteText)}"><div style="max-width:13rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(noteText||'—')}</div></td>
+    </tr>`;
+  }).join('');
+  let pag=document.getElementById('ll-pagination');
+  if(!pag){
+    pag=document.createElement('div');
+    pag.id='ll-pagination';
+    pag.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:0.75rem 0 0.25rem;';
+    tbody.closest('.table-wrap').after(pag);
+  }
+  pag.innerHTML=`
+    <button onclick="_llPage--;renderLeaveLog()" ${_llPage===0?'disabled':''} style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:0.35rem 0.9rem;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;${_llPage===0?'opacity:0.35;cursor:not-allowed;':''}">← Prev</button>
+    <span style="font-size:0.75rem;color:var(--muted);font-weight:600;">Page ${_llPage+1} of ${totalPages} · ${rows.length} of ${_leaveLogRows.length} events</span>
+    <button onclick="_llPage++;renderLeaveLog()" ${_llPage>=totalPages-1?'disabled':''} style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:0.35rem 0.9rem;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;${_llPage>=totalPages-1?'opacity:0.35;cursor:not-allowed;':''}">Next →</button>`;
 }
 
 /* ── What an approval actually did to the roster ─────────────────────────────
