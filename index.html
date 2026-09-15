@@ -2817,11 +2817,18 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 2.6 &middot; August 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 2.8 &middot; September 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
             <div style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v2.8</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">7 September 2026 &mdash; Split Shifts Paid in Full</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">A day rostered as two separate blocks was only ever exported to payroll once, so the second block went unpaid. Both blocks are now paid, each gets its own timesheet row and its own line on the printed timesheet, and each is judged against the block it actually belongs to rather than the first one of the day. Two affected days were found in the existing records and corrected. Separately, &ldquo;hours worked&rdquo; was being worked out in several different places by several different methods, and only some of them matched what payroll pays &mdash; in one fortnight a staff member&rsquo;s header total read 23.8 hours higher than the rows beneath it. There is now one definition of paid hours &mdash; snapped times, less the unpaid break, plus any paid leave &mdash; and the timesheet row, the fortnight total and the payroll export all read from it, so they cannot drift apart again. Clocking in early is no longer unlimited: beyond an hour early the kiosk asks why, exactly as it already did for lateness, and the entry goes to a manager instead of approving itself. Three hours early used to look identical to three minutes early, which is how a seven-hour day came to be paid as three and a half. The figure the kiosk shows at clock-out is now labelled as your two clock times and time on site, which is what it is &mdash; it is not your paid hours, because it deducts no break. Finally, the kiosk and Who&rsquo;s On screens no longer re-read the entire database every minute, which was slowing older tablets.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v2.7</div>
                 <div>
