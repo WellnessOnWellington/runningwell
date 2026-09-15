@@ -1175,6 +1175,16 @@
   .rb-tl-row.open-shift .rb-tl-name-text { font-style:italic; color:var(--muted); }
   .rb-tl-row.open-shift .rb-tl-track { background-image:repeating-linear-gradient(to right,rgba(180,160,165,0.18) 0px,rgba(180,160,165,0.18) 1px,transparent 1px,transparent calc(100%/55)); opacity:0.75; }
   .rb-shift-pill.open-shift { background:#f0eeee; color:var(--muted); border:1.5px dashed rgba(180,160,165,0.8); font-style:italic; }
+  /* Approved leave with no shift: present but not staffed. Dashed like open-shift
+     because both mean "this is not settled", gold rather than grey because this
+     one is a decision already made that the roster has not honoured. */
+  /* Span both columns. The pills grid is 1fr 1fr, so a half-width pill plus a
+     glyph truncated "Esther" to "Est…" — and a warning nobody can read the name
+     on is not a warning. There are only ever a handful of these, and spanning
+     makes them read as an exception to the row rather than one more name in it. */
+  .rb-shift-pill.leave-gap, .rb-shift-pill.leave-clash { grid-column:1 / -1; }
+  .rb-shift-pill.leave-gap { background:rgba(253,243,226,0.9); color:#8a5a12; border:1.5px dashed rgba(160,114,40,0.75); font-weight:800; }
+  .rb-shift-pill.leave-clash { background:rgba(139,37,53,0.09); color:var(--burgundy); border:1.5px solid rgba(139,37,53,0.45); font-weight:800; }
   .rb-tl-row.clinic .rb-tl-name { background:rgba(91,122,94,0.09); border-right:1px solid rgba(91,122,94,0.25); }
   .rb-tl-row.clinic .rb-tl-track { background-image:repeating-linear-gradient(to right,rgba(91,122,94,0.18) 0px,rgba(91,122,94,0.18) 1px,transparent 1px,transparent calc(100% / 55)); background-color:rgba(91,122,94,0.04); }
   .rb-tl-row.admin .rb-tl-name { background:rgba(125,60,152,0.08); border-right:1px solid rgba(125,60,152,0.22); }
@@ -1184,6 +1194,22 @@
   .rb-add-shift-btn { flex-shrink:0; background:transparent; border:1.5px solid rgba(180,160,165,0.5); border-radius:5px; width:20px; height:20px; font-size:0.8rem; font-weight:900; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-family:'Nunito',sans-serif; transition:all 0.15s; line-height:1; }
   .rb-add-shift-btn:hover { border-color:var(--burgundy); color:var(--burgundy); background:var(--blush-lt); }
   .rb-tl-track { flex:1; position:relative; height:44px; background-image:repeating-linear-gradient(to right,rgba(190,175,180,0.22) 0px,rgba(190,175,180,0.22) 1px,transparent 1px,transparent calc(100% / 55)); }
+  /* Approved leave the roster has not caught up with. The unrostered case is the
+     one with room to say anything: rows are built from the employee list, not from
+     shifts, so someone with approved leave and no shift still has a full empty
+     track. The rostered case has bars in the way, so it gets a name-cell warning
+     and a tint instead of text it has nowhere to put. */
+  .rb-tl-leave-gap { position:absolute; left:0; right:0; top:6px; height:30px; border-radius:6px;
+    background:repeating-linear-gradient(135deg,rgba(160,114,40,0.13) 0px,rgba(160,114,40,0.13) 8px,rgba(160,114,40,0.06) 8px,rgba(160,114,40,0.06) 16px);
+    border:1.5px dashed rgba(160,114,40,0.65); display:flex; align-items:center; gap:0.4rem;
+    padding:0 0.6rem; cursor:pointer; overflow:hidden; }
+  .rb-tl-leave-gap:hover { border-color:rgba(160,114,40,0.95); background:rgba(253,243,226,0.75); }
+  .rb-tl-leave-gap-text { font-size:0.6rem; font-weight:800; color:#8a5a12; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; letter-spacing:0.01em; }
+  .rb-tl-row.leave-clash { background:rgba(139,37,53,0.05); }
+  .rb-tl-row.leave-clash .rb-tl-name { background:rgba(139,37,53,0.08); }
+  .rb-tl-leave-warn { flex:0 0 auto; font-size:0.72rem; line-height:1; cursor:pointer; }
+
   .rb-shift-bar { position:absolute; top:6px; height:30px; border-radius:6px; background:linear-gradient(135deg,var(--burgundy),#c0495c); cursor:move; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,0.15); min-width:14px; user-select:none; overflow:visible; }
   .rb-shift-bar:hover { box-shadow:0 2px 8px rgba(140,30,50,0.28); }
   .rb-shift-bar.dragging { opacity:0.85; box-shadow:0 4px 16px rgba(0,0,0,0.22); z-index:10; }
@@ -3756,6 +3782,144 @@ function reqBuildMarkerIndex(){
     }
   });
   return idx;
+}
+
+/* ── Approved leave the roster has not caught up with ────────────────────────
+   The gap this whole feature exists to close. Leave approved for dates whose
+   roster does not exist yet writes nothing (applyRosterWriteback does
+   `if(!dayShifts.length) continue;`), and the roster is then built weeks later
+   by someone who has no way of knowing. Esther Kiir, annual leave 21-28 Sep
+   approved 27 Jul, rostered to work five of those days by a later build.
+
+   Deliberately NOT folded into reqBuildMarkerIndex. That index is keyed on
+   REQ_MARKER_STATUSES = pending_manager + expired, and its wording is "awaiting
+   your approval". Adding 'approved' there would put a marker on every approved
+   swap, give-away and pick-up as well — noise on exactly the screens that are
+   already busy. This asks a narrower question: is there approved leave on this
+   day that no timesheet row reflects?                                        */
+let _leaveGapIndex=null;
+
+/* Where a leave-gap marker goes when clicked.
+
+   NOT the request card. reqJumpToRequest exists and works, but renderRequests
+   only renders pending requests plus decisions from the last seven days — and a
+   gap marker is by definition about leave approved long enough ago that the
+   roster has moved on without it. Esther's was approved eight weeks before the
+   roster was built. The card is not on screen to glow, so the jump would land
+   on a toast saying the request is no longer pending.
+
+   The Leave Log holds every decision permanently, which is what this needs. */
+async function rbOpenLeaveLogFor(employeeName){
+  const tabBtn=document.querySelector('.tab[onclick*="analytics"]');
+  switchTab('analytics',tabBtn);
+  const body=document.getElementById('ss-body-leavelog');
+  if(body&&body.style.display==='none') toggleSettingsSection('leavelog');
+  else if(body) await loadLeaveLog();
+  // toggleSettingsSection kicks off loadLeaveLog itself; wait for the rows before
+  // filtering, or the search runs against an empty list and shows nothing.
+  for(let i=0;i<20&&!_leaveLogRows.length;i++) await new Promise(r=>setTimeout(r,100));
+  const search=document.getElementById('ll-filter-text');
+  if(search){ search.value=employeeName||''; renderLeaveLog(true); }
+  document.getElementById('ss-leavelog')?.scrollIntoView({block:'start',behavior:'smooth'});
+}
+
+function rbBuildLeaveGapIndex(){
+  const idx=new Map();
+  (_requests||[]).forEach(r=>{
+    if(r.type!=='leave'||r.status!=='approved'||!r.leaveStartDate||!r.leaveEndDate) return;
+    const cur=new Date(r.leaveStartDate+'T12:00:00'), end=new Date(r.leaveEndDate+'T12:00:00');
+    let guard=0;
+    while(cur<=end&&guard++<400){
+      // Last approval wins if two overlap — the later decision is the live one.
+      idx.set(r.initiatorId+'|'+rbDateKey(cur), r);
+      cur.setDate(cur.getDate()+1);
+    }
+  });
+  return idx;
+}
+
+// Rebuilt per render rather than cached across them: approvals, declines and the
+// expiry sweep all move underneath it, and a stale gap marker is worse than none.
+function rbInvalidateLeaveGaps(){ _leaveGapIndex=null; }
+
+/* The approved leave covering this employee/date, or null. Says nothing about
+   whether it reached the roster — that is rbLeaveGapFor's job. */
+function rbApprovedLeaveOn(empId,date){
+  if(!_leaveGapIndex) _leaveGapIndex=rbBuildLeaveGapIndex();
+  return _leaveGapIndex.get(empId+'|'+date)||null;
+}
+
+/* Approved leave on this day that no leave entry reflects, plus which of the two
+   shapes it is. Returns null when the leave HAS been applied — that is the
+   normal, healthy state and needs no marker.
+     kind:'unrostered' — no shift at all. The leave was approved before the
+                         roster existed and nothing was ever written. A shift
+                         still has to be placed for the leave to be PAID.
+     kind:'rostered'   — rostered to work, on approved leave. The contradiction
+                         nothing in the app used to hold. */
+function rbLeaveGapFor(empId,date){
+  const req=rbApprovedLeaveOn(empId,date);
+  if(!req) return null;
+  if((_entries||[]).some(e=>e.employeeId===empId&&e.date===date&&e.leaveType&&!e.deleted)) return null;
+  const shifts=(_rosterShifts||[]).filter(s=>String(s.employee_id)===String(empId)&&String(s.date)===date&&!s.is_day_off);
+  if(shifts.length) return {req, kind:'rostered', shifts};
+  /* No shift can mean two opposite things, and the difference is the whole point:
+     a day this person does not work, or a day whose roster does not exist yet.
+     Only the second is a problem — nobody is owed leave pay for a day they were
+     never going to work, and flagging those buries the real ones. Esther's leave
+     range covers three of her regular days off.
+
+     Tell them apart by whether ANYONE of that role is rostered that day. If the
+     day is built, her absence from it is a roster decision. If nobody is on it,
+     the day has not been written yet. Same test that stopped reqCheckCoverage
+     firing on every request. */
+  const emp=(_emps||[]).find(e=>String(e.id)===String(empId));
+  const dayIsBuilt=(_rosterShifts||[]).some(s=>{
+    if(String(s.date)!==date||s.is_day_off) return false;
+    const o=(_emps||[]).find(e=>String(e.id)===String(s.employee_id));
+    return o&&!o.is_placeholder&&o.role===emp?.role;
+  });
+  return dayIsBuilt?null:{req, kind:'unrostered', shifts};
+}
+
+/* Every approved leave overlapping a fortnight, sorted into what actually
+   happened to it. One check in one place, run before a roster is published —
+   the per-day markers are easy to scroll past, and publishing is the moment the
+   roster becomes the thing staff plan their lives around. */
+function rbLeaveAuditForFortnight(fnStartKey,role){
+  const days=getFortnight14Days(fnStartKey);
+  const emps=rbGetEmpsForRole(role).filter(e=>!e.is_placeholder);
+  const unrostered=[], clashes=[];
+  emps.forEach(emp=>days.forEach(d=>{
+    const gap=rbLeaveGapFor(emp.id,d);
+    if(!gap) return;
+    (gap.kind==='unrostered'?unrostered:clashes).push({name:emp.name,date:d,gap});
+  }));
+  return {unrostered,clashes,total:unrostered.length+clashes.length};
+}
+
+// Collapse consecutive dates per person: "Esther Kiir — 21–28 Sep" beats eight
+// identical lines, and a leave range is almost always consecutive.
+function rbLeaveAuditSummary(rows){
+  const byName={};
+  rows.forEach(r=>{(byName[r.name]=byName[r.name]||[]).push(r.date);});
+  return Object.entries(byName).map(([name,dates])=>{
+    dates.sort();
+    const span=dates.length===1?reqFmtDate(dates[0])
+      :`${reqFmtDate(dates[0])} – ${reqFmtDate(dates[dates.length-1])} (${dates.length} days)`;
+    return `${name} — ${span}`;
+  });
+}
+
+// One sentence, used by every surface that shows a gap, so they cannot disagree.
+function rbLeaveGapText(gap){
+  const r=gap.req;
+  const who=r.managerName?` · approved by ${r.managerName}`:'';
+  const when=r.managerDecidedAt?` ${reqFmtDate(r.managerDecidedAt)}`:'';
+  const range=r.leaveStartDate===r.leaveEndDate
+    ? reqFmtDate(r.leaveStartDate)
+    : `${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)}`;
+  return `${formatLeaveType(r.leaveType)} · ${range}${who}${when}`;
 }
 
 function reqMarkersFor(empId,date){
@@ -9087,8 +9251,25 @@ function rbIsPublished(fnStart){ return RB_ROLES.some(r=>rbIsPublishedForRole(fn
 let _rbConfirmCallback=null;
 let _rbConfirmCancelCallback=null;
 let _rbCopyPending=null;
-function rbConfirmClose(){ document.getElementById('rb-confirm-overlay').classList.remove('show'); if(_rbConfirmCancelCallback) _rbConfirmCancelCallback(); _rbConfirmCallback=null; _rbConfirmCancelCallback=null; }
-function rbConfirmProceed(){ document.getElementById('rb-confirm-overlay').classList.remove('show'); if(_rbConfirmCallback) _rbConfirmCallback(); _rbConfirmCallback=null; _rbConfirmCancelCallback=null; }
+/* Clear the pending callbacks BEFORE running one, not after.
+   Running first and clearing after silently breaks any confirm that leads to
+   another confirm: the callback opens the next dialog and sets the next
+   callback, then these two lines wipe it, so the second dialog appears with a
+   button that does nothing. Adding a shift onto approved leave does exactly
+   that — "Mark as Leave" can lead to "Roster Already Published" — and the leave
+   was never written, with no error anywhere. */
+function rbConfirmClose(){
+  document.getElementById('rb-confirm-overlay').classList.remove('show');
+  const cb=_rbConfirmCancelCallback;
+  _rbConfirmCallback=null; _rbConfirmCancelCallback=null;
+  if(cb) cb();
+}
+function rbConfirmProceed(){
+  document.getElementById('rb-confirm-overlay').classList.remove('show');
+  const cb=_rbConfirmCallback;
+  _rbConfirmCallback=null; _rbConfirmCancelCallback=null;
+  if(cb) cb();
+}
 
 function rbPastFortGuard(shiftDate, onConfirm, onCancel){
   if(shiftDate && shiftDate < rbDateKey(new Date())){
@@ -9137,6 +9318,27 @@ function rbTogglePublishForRole(role){
   document.getElementById('rb-confirm-msg').innerHTML=published
     ?`This will take the ${RB_ROLE_LABELS[role]} roster<br><strong>${dateRange}</strong><br>down from Who's On and allow it to be edited again.`
     :`This will publish the ${RB_ROLE_LABELS[role]} roster<br><strong>${dateRange}</strong><br>and lock it from further edits. Staff will be able to see it in the Who's On screen.`;
+  /* Publishing is the last cheap moment to notice that approved leave never
+     reached this roster. After it, staff have seen the roster and are planning
+     around it, and a correction is a conversation rather than a click. Warn,
+     never block: the leave may have been cancelled, or cover already arranged. */
+  if(!published){
+    const audit=rbLeaveAuditForFortnight(key,role);
+    if(audit.total){
+      let warn='<div style="background:#fdf3e2;border:1.5px solid rgba(160,114,40,0.7);border-radius:8px;padding:0.7rem 0.9rem;margin-top:0.9rem;text-align:left;">';
+      if(audit.unrostered.length){
+        warn+=`<div style="font-size:0.8rem;font-weight:800;color:#8a5a12;margin-bottom:0.3rem;">🌴 Approved leave with no shift rostered</div>`;
+        warn+=rbLeaveAuditSummary(audit.unrostered).map(l=>`<div style="font-size:0.78rem;color:var(--charcoal);">${escHtml(l)}</div>`).join('');
+        warn+=`<div style="font-size:0.72rem;color:var(--muted);margin-top:0.25rem;">Leave is only paid if a shift exists to attach it to.</div>`;
+      }
+      if(audit.clashes.length){
+        warn+=`<div style="font-size:0.8rem;font-weight:800;color:var(--burgundy);margin:0.5rem 0 0.3rem;">⚠ Rostered to work on approved leave</div>`;
+        warn+=rbLeaveAuditSummary(audit.clashes).map(l=>`<div style="font-size:0.78rem;color:var(--charcoal);">${escHtml(l)}</div>`).join('');
+      }
+      warn+='</div>';
+      document.getElementById('rb-confirm-msg').innerHTML+=warn;
+    }
+  }
   const okBtn=document.getElementById('rb-confirm-ok');
   okBtn.textContent=published?'Unpublish':'Publish';
   okBtn.className=published?'rb-confirm-ok danger':'rb-confirm-ok';
@@ -9263,6 +9465,25 @@ async function rbCopyLastFnForRole(role){
   } else {
     html+=`<div style="font-size:0.83rem;color:var(--muted);font-style:italic;padding:0.5rem 0;">All shifts conflict with existing entries — nothing to copy.</div>`;
   }
+  /* Shifts landing on approved leave. Reported, never auto-applied: a copy is a
+     hundred-plus writes and silently turning some of them into leave is exactly
+     the kind of invisible bulk change this whole piece of work exists to stop.
+     The manager sees it here and the day cells carry the marker afterwards. */
+  const onLeave=toInsert.map(sh=>{
+    const gap=rbLeaveGapFor(sh.employee_id,sh.date);
+    return gap?{...sh,empName:_emps.find(e=>e.id===sh.employee_id)?.name||'Unknown',gap}:null;
+  }).filter(Boolean);
+  if(onLeave.length){
+    html+=`<div style="background:#fdf3e2;border:1.5px solid rgba(160,114,40,0.7);border-radius:8px;padding:0.75rem 1rem;margin-top:1rem;">`;
+    html+=`<div style="font-size:0.82rem;font-weight:700;color:#8a5a12;margin-bottom:0.45rem;">🌴 ${onLeave.length} shift${onLeave.length!==1?'s':''} land on approved leave</div>`;
+    html+=`<div style="font-size:0.76rem;color:var(--muted);margin-bottom:0.5rem;">They will be copied as normal. Mark them as leave afterwards &mdash; the day cells flag them until you do.</div>`;
+    html+=onLeave.slice(0,8).map(sh=>{
+      const d=new Date(sh.date+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+      return`<div style="font-size:0.8rem;color:var(--charcoal);padding:0.15rem 0;">${escHtml(sh.empName)} &mdash; ${d}, ${escHtml(formatLeaveType(sh.gap.req.leaveType))}</div>`;
+    }).join('');
+    if(onLeave.length>8) html+=`<div style="font-size:0.78rem;color:var(--muted);padding-top:0.2rem;">+${onLeave.length-8} more</div>`;
+    html+=`</div>`;
+  }
   if(conflicts.length){
     html+=`<div style="background:#fff8f0;border:1.5px solid #e6a817;border-radius:8px;padding:0.75rem 1rem;margin-top:1rem;">`;
     html+=`<div style="font-size:0.82rem;font-weight:700;color:#7a5200;margin-bottom:0.45rem;">⚠ ${conflicts.length} shift${conflicts.length!==1?'s':''} will be skipped — existing shift already present</div>`;
@@ -9374,6 +9595,7 @@ function rbRemoveDuplicates(role){
 }
 
 function renderFnGridForRole(role){
+  rbInvalidateLeaveGaps();
   const grid=document.getElementById('rb-fn-grid-'+role);
   if(!grid) return;
   const fnStart=rbGetFnStart();
@@ -9399,6 +9621,18 @@ function renderFnGridForRole(role){
       const leaveClass=leaveEntry?.leaveType?` ${leaveEntry.leaveType.replace(/_/g,'-')}`:'';
       return`<div class="rb-shift-pill${leaveClass}${emp?.is_placeholder?' open-shift':''}">${emp?dnMap[emp.id]||empFirstName(emp):'?'}</div>`;
     }).join('');
+    /* Approved leave with no shift puts nobody in this cell at all — the day looks
+       simply unstaffed, which is how a whole fortnight gets built over someone's
+       leave. Add a pill for them, and mark anyone rostered ON approved leave.
+       Placeholders are cover slots, not people, so they cannot be on leave. */
+    const gapPills=emps.filter(e=>!e.is_placeholder).map(e=>{
+      const gap=rbLeaveGapFor(e.id,key);
+      if(!gap) return '';
+      const nm=dnMap[e.id]||empFirstName(e);
+      if(gap.kind==='unrostered')
+        return `<div class="rb-shift-pill leave-gap" title="${escHtml(rbLeaveGapText(gap))} — approved, no shift rostered">🌴 ${escHtml(e.name)}</div>`;
+      return `<div class="rb-shift-pill leave-clash" title="${escHtml(rbLeaveGapText(gap))} — rostered to work on approved leave">⚠ ${escHtml(e.name)}</div>`;
+    }).join('');
     const roleLabel=role==='Receptionist'?'Receptionists':role==='Nurse'?'Nurses':role+'s';
     const isHighlighted=_rbHighlightDates.has(key)&&_rbHighlightRole===role;
     const isCellPH=_publicHolidays.has(key);
@@ -9406,7 +9640,7 @@ function renderFnGridForRole(role){
     return`<div class="rb-day-cell${isToday?' today':''}${isPast?' past':''}${isCellPH?' public-holiday':''}${isHighlighted?' req-highlight':''}" data-date="${key}" onclick="rbOpenDay('${key}','${role}')">
       <div class="rb-day-hdr">${dayName} ${monthStr}</div>
       <div class="rb-day-date">${d.getDate()}</div>
-      <div class="rb-pills-grid">${pills}</div>
+      <div class="rb-pills-grid">${pills}${gapPills}</div>
       <div class="rb-cov-badge ${covCls}">Total ${roleLabel}: ${covCount}</div>
       ${phBtn}
     </div>`;
@@ -9470,6 +9704,7 @@ function timeStrToMin(t){ if(!t) return null; const[h,m]=t.split(':').map(Number
 function snapMin(min){ return Math.round(min/TL_SNAP)*TL_SNAP; }
 
 function renderDayTimelineForRole(role){
+  rbInvalidateLeaveGaps();
   const selectedDay=rbSelectedDay;
   const header=document.getElementById('rb-tl-header-'+role);
   const rows=document.getElementById('rb-tl-rows-'+role);
@@ -9521,6 +9756,28 @@ function renderDayTimelineForRole(role){
       ${lHandle}${laneBtn}<span class="rb-shift-label">${lbl}</span>${rHandle}${leaveBtn}${splitBtn}${delBtn}
     </div>`;
   }
+  /* Approved leave this day that the roster does not reflect. Two shapes, two
+     treatments — see .rb-tl-leave-gap. Both click through to the Leave Log,
+     because the request card itself may be months old and renderRequests only
+     renders pending plus the last seven days of decisions. */
+  function leaveGapBar(emp){
+    const gap=rbLeaveGapFor(emp.id,selectedDay);
+    if(!gap) return '';
+    const label=escHtml(rbLeaveGapText(gap));
+    if(gap.kind==='unrostered') return `<div class="rb-tl-leave-gap" title="${label} — approved, but no shift is rostered, so nothing will be paid. Add a shift and mark it as leave. Click to open the Leave Log." onclick="event.stopPropagation();rbOpenLeaveLogFor('${escHtml(emp.name)}')">
+      <span class="rb-tl-leave-gap-text">🌴 ${label} — no shift rostered</span></div>`;
+    return '';
+  }
+  function leaveClashAttrs(emp){
+    const gap=rbLeaveGapFor(emp.id,selectedDay);
+    return (gap&&gap.kind==='rostered')?' leave-clash':'';
+  }
+  function leaveClashWarn(emp){
+    const gap=rbLeaveGapFor(emp.id,selectedDay);
+    if(!gap||gap.kind!=='rostered') return '';
+    return `<span class="rb-tl-leave-warn" title="${escHtml(rbLeaveGapText(gap))} — rostered to work on approved leave. Click to open the Leave Log." onclick="event.stopPropagation();rbOpenLeaveLogFor('${escHtml(emp.name)}')">⚠</span>`;
+  }
+
   // Staff rows
   if(isNurse){
     const getFloor=id=>_rosterShifts.filter(s=>s.date===selectedDay&&s.employee_id===id&&!s.is_day_off&&(s.lane==='floor'||!s.lane));
@@ -9531,7 +9788,7 @@ function renderDayTimelineForRole(role){
       const overlapSegs=rbOverlapSegHtml(rbOverlapSegments(allEmpShifts));
       const bars=floorShifts.map(s=>makeBar(s,emp)).join('');
       const addBtn=!readOnly&&!floorShifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
-      return`<div class="rb-tl-row${emp.is_placeholder?' open-shift':''}"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${bars}${overlapSegs}</div></div>`;
+      return`<div class="rb-tl-row${emp.is_placeholder?' open-shift':''}${leaveClashAttrs(emp)}"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${leaveClashWarn(emp)}${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${leaveGapBar(emp)}${bars}${overlapSegs}</div></div>`;
     }).join('');
     const has75=emps.some(emp=>getClinic(emp.id).length>0);
     const clinicEmps=has75?emps.filter(emp=>getClinic(emp.id).length>0):[];
@@ -9556,7 +9813,7 @@ function renderDayTimelineForRole(role){
       const overlapSegs=rbOverlapSegHtml(rbOverlapSegments(allEmpShifts));
       const bars=floorShifts.map(s=>makeBar(s,emp)).join('');
       const addBtn=!readOnly&&!floorShifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
-      return`<div class="rb-tl-row${emp.is_placeholder?' open-shift':''}"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${bars}${overlapSegs}</div></div>`;
+      return`<div class="rb-tl-row${emp.is_placeholder?' open-shift':''}${leaveClashAttrs(emp)}"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${leaveClashWarn(emp)}${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${leaveGapBar(emp)}${bars}${overlapSegs}</div></div>`;
     }).join('');
     const hasAdmin=emps.some(emp=>getAdmin(emp.id).length>0);
     const adminEmps=hasAdmin?emps.filter(emp=>getAdmin(emp.id).length>0):[];
@@ -9576,7 +9833,7 @@ function renderDayTimelineForRole(role){
       const overlapSegs=rbOverlapSegHtml(rbOverlapSegments(shifts));
       const bars=shifts.map(s=>makeBar(s,emp)).join('');
       const addBtn=!readOnly&&!shifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
-      return`<div class="rb-tl-row${emp.is_placeholder?' open-shift':''}"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${bars}${overlapSegs}</div></div>`;
+      return`<div class="rb-tl-row${emp.is_placeholder?' open-shift':''}${leaveClashAttrs(emp)}"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${leaveClashWarn(emp)}${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${leaveGapBar(emp)}${bars}${overlapSegs}</div></div>`;
     }).join('');
   }
   // Coverage segments — floor-only for Nurses
@@ -9611,7 +9868,23 @@ async function rbAddShift(empId,date,role){
     _rbUndoStack.push(undoEntry);
     try{
       await db.insert('roster_shifts',row);
-      showToast('Shift added');
+      /* A shift landing on approved leave is not an error — annual leave still
+         needs a shift for payroll to pay it, so this is usually exactly the right
+         move, just half-finished. Ask, rather than block or auto-apply: the leave
+         may also have been cancelled, and only the manager knows which. */
+      const gap=rbLeaveGapFor(empId,date);
+      if(gap){
+        document.getElementById('rb-confirm-title').textContent='Approved Leave on This Day';
+        document.getElementById('rb-confirm-msg').innerHTML=
+          `<strong>${escHtml(_emps.find(e=>e.id===empId)?.name||'This person')}</strong> has approved leave on this date:<br>`+
+          `<strong>${escHtml(rbLeaveGapText(gap))}</strong><br><br>`+
+          `The shift has been added. Mark it as leave so payroll pays it?`;
+        const ok=document.getElementById('rb-confirm-ok');
+        ok.textContent='Mark as Leave'; ok.className='rb-confirm-ok';
+        _rbConfirmCallback=()=>rbMarkLeave(empId,date,row.id,gap.req.leaveType);
+        _rbConfirmCancelCallback=null;
+        document.getElementById('rb-confirm-overlay').classList.add('show');
+      } else showToast('Shift added');
     }catch(e){
       const idx=_rbUndoStack.indexOf(undoEntry); if(idx!==-1) _rbUndoStack.splice(idx,1);
       _rosterShifts=_rosterShifts.filter(s=>s.id!==row.id);
