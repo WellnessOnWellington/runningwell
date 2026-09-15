@@ -3496,6 +3496,38 @@ function normaliseEntry(r) {
   };
 }
 
+/* Inverse of normaliseEntry. _entries holds camelCase objects, so an entry
+   snapshot taken from it cannot be handed straight back to db.insert — every key
+   would be an unknown column and the write fails. The undo path for a deleted
+   leave entry did exactly that and never restored anything; this is what makes
+   "Ctrl+Z puts it back" true rather than assumed.
+   adjusted_at and created_at are not carried: normaliseEntry never reads them,
+   so a restored row loses them. Everything the app itself reads survives. */
+function denormaliseEntry(e){
+  return {
+    id: e.id, employee_id: e.employeeId, employee_name: e.employeeName,
+    role: e.role, date: e.date, clock_in: e.clockIn, clock_in_iso: e.clockInISO,
+    clock_out: e.clockOut, clock_out_iso: e.clockOutISO, hours: e.hours,
+    reason_in: e.reasonIn, reason_out: e.reasonOut, status: e.status,
+    leave_type: e.leaveType, shift_id: e.shiftId,
+    final_start: e.finalStart, final_end: e.finalEnd,
+    locked: e.locked, locked_by: e.lockedBy, locked_at: e.lockedAt,
+    manually_adjusted: e.manuallyAdjusted,
+    adjustment_reason: e.adjustmentReason, adjusted_by: e.adjustedBy,
+    payroll_type: e.payrollType,
+    unpaid_break_mins: e.unpaidBreakMins,
+    paid_break_mins: e.paidBreakMins,
+    break_note: e.breakNote,
+    deleted: e.deleted,
+    travel_km: e.travelKm,
+    leave_type_gap: e.leaveTypeGap,
+    leave_gap_hours: e.leaveGapHours,
+    leave_type_gap_start: e.leaveTypeGapStart,
+    leave_gap_hours_start: e.leaveGapHoursStart,
+    break_gap_decision: e.breakGapDecision,
+  };
+}
+
 function normaliseNote(r) {
   return {
     id: r.id, entryId: r.entry_id, employeeId: r.employee_id,
@@ -7138,17 +7170,78 @@ async function setLeaveType(entryId, leaveType){
   }catch(err){showToast('Could not update leave type');console.error(err);}
 }
 
+/* ── Marking leave by hand ───────────────────────────────────────────────
+   The leave <select> is the one control in makeBar that stays live on a locked
+   roster, and that is deliberate — someone calls in sick after the fortnight is
+   published and it has to be recordable. But "still usable" meant no checking at
+   all: this wrote leave onto pay periods already exported to MYOB, and deleted
+   LOCKED leave entries, both silently and both invisible afterwards.
+
+   managerApproveRequest has refused to touch a finalised period since it was
+   written, and rbCleanupLinkedEntryOnShiftDelete has always refused to delete a
+   locked leave entry. This is the same two rules applied to the other door into
+   the same data. A published roster and a past fortnight get a confirm rather
+   than a refusal: late sickness is normal and the manager is the one who knows. */
 async function rbMarkLeave(empId, date, shiftId, leaveType){
   const shift=_rosterShifts.find(s=>s.id==shiftId);
   const emp=_emps.find(e=>e.id===empId);
   if(!shift||!emp) return;
-  // Block if employee has actually clocked in on this specific shift (real entry, not a leave entry)
-  const realEntry=_entries.find(e=>e.employeeId===empId&&e.date===date&&!e.leaveType&&e.clockIn);
   const role=rbRoleForEmp(empId);
-  if(realEntry){showToast('Cannot mark leave — employee has already clocked in');renderDayTimelineForRole(role);return;}
+  // Re-render on every refusal. The <select> has already moved to the new value on
+  // screen, so leaving it there would display leave that was never written.
+  const abort=msg=>{ showToast(msg); renderDayTimelineForRole(role); };
+  if(reqPeriodFinalised(date)){
+    alert(`${srFortnightLabel(payPeriodStartFor(date))} has already been finalised and exported to MYOB.\n\nChanging leave now would change a pay period that has been paid. If it genuinely needs correcting, un-push that period in Timesheets first, then change it there.`);
+    renderDayTimelineForRole(role);
+    return;
+  }
+  // Refuse if this BLOCK already has an entry that pays it. The test here was wrong in
+  // both directions at once, and had been since it was written in March: it read
+  // `e.clockIn`, so it only ever saw kiosk records, and it tested the whole DAY.
+  //
+  // A manager-created manual entry carries final_start/final_end and no clock_in at all,
+  // so it was invisible: Anushayan Naresh 8 Sep 2026 has a locked manual personal-leave
+  // entry on 17:30–20:30 and a second leave row written through this dropdown four hours
+  // later, both claiming that one block. Nobody was paid twice, but only because the MYOB
+  // dedup key started including the block on 17 Aug — before that this shape double-paid.
+  //
+  // Day-wide is wrong the other way: a split shift legitimately has one block worked and
+  // the other on leave (Sue Mckellar 18 May and 15 Jun 2026 are both exactly that).
+  //
+  // rbWorkedEntryCoveringShift answers precisely this question — one block, by time
+  // overlap, reading finalStart||clockIn — and is what managerApproveRequest already uses.
+  // The comment above this line has claimed "on this specific shift" since 25 March while
+  // the code never did; this is that comment finally becoming true.
+  //
+  // Only when SETTING leave. Clearing has to stay possible: removing a stray leave row
+  // from a block that already carries a worked entry is exactly how the above is repaired.
+  const blocking=leaveType?rbWorkedEntryCoveringShift(empId,shift):null;
+  if(blocking) return abort(blocking.locked
+    ? 'That block already has a locked timesheet entry — change it in Timesheets'
+    : 'That block already has a timesheet entry — change it in Timesheets');
   // Per-shift leave lookup: match by shift_id first, fall back to employee+date for legacy entries
   const existingLeave=_entries.find(e=>e.shiftId===shiftId&&e.leaveType)
     ||_entries.find(e=>!e.shiftId&&e.employeeId===empId&&e.date===date&&e.leaveType);
+  if(existingLeave?.locked) return abort('That leave entry is locked — change it in Timesheets');
+  const proceed=()=>rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,existingLeave);
+  const cancel=()=>renderDayTimelineForRole(role);
+  if(rbIsLockedForRole(rbGetFnStart(),role)){
+    document.getElementById('rb-confirm-title').textContent='Roster Already Published';
+    document.getElementById('rb-confirm-msg').textContent='This fortnight is published and locked for '+(RB_ROLE_LABELS[role]||role)+'. Staff have already seen it. Change leave anyway?';
+    const okBtn=document.getElementById('rb-confirm-ok');
+    okBtn.textContent='Change Anyway'; okBtn.className='rb-confirm-ok danger';
+    // Straight to proceed, not on through rbPastFortGuard: a past AND published
+    // fortnight would otherwise stack two dialogs for one click. "Staff have already
+    // seen it" is the stronger of the two statements, and the date is on screen.
+    _rbConfirmCallback=proceed;
+    _rbConfirmCancelCallback=cancel;
+    document.getElementById('rb-confirm-overlay').classList.add('show');
+    return;
+  }
+  rbPastFortGuard(date,proceed,cancel);
+}
+
+async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,existingLeave){
   if(!leaveType){
     const snapLeave=existingLeave?{...existingLeave}:null;
     const sMin2=timeStrToMin(shift.start_time)||TL_START;
@@ -9099,20 +9192,34 @@ function rbRemoveDuplicates(role){
       // Each duplicate may own a linked leave entry — clean up what's safe, skip anything locked
       let blockedCount=0, cleanedCount=0;
       const deletableIds=[];
+      // Snapshot before deleting. This is a bulk delete of shifts AND of the leave
+      // entries hanging off them, and it ran with no undo at all — the one caller of
+      // rbCleanupLinkedEntryOnShiftDelete that could not be walked back. It is also
+      // the one most likely to be used after a roster rebuild, which is exactly when
+      // approved leave is sitting on those shifts.
+      const shiftSnaps=[], entrySnaps=[];
       for(const id of toDeleteIds){
+        const snap=_rosterShifts.find(s=>s.id===id);
         const cleanup=await rbCleanupLinkedEntryOnShiftDelete(id);
         if(!cleanup.ok){blockedCount++;continue;}
-        if(cleanup.deletedEntry) cleanedCount++;
+        if(cleanup.deletedEntry){ cleanedCount++; entrySnaps.push(cleanup.deletedEntry); }
+        if(snap) shiftSnaps.push({...snap});
         deletableIds.push(id);
       }
       await Promise.all(deletableIds.map(id=>db.delete('roster_shifts',id)));
       _rosterShifts=_rosterShifts.filter(s=>!deletableIds.includes(s.id));
       renderRoster();
       if(cleanedCount) renderTimesheets();
+      if(shiftSnaps.length||entrySnaps.length) rbPushUndo(`${deletableIds.length} duplicates removed`,async()=>{
+        for(const sh of shiftSnaps){ await db.insert('roster_shifts',sh); _rosterShifts.push(sh); }
+        for(const en of entrySnaps){ await db.insert('entries',denormaliseEntry(en)); _entries.push(en); }
+        renderRoster();
+        if(entrySnaps.length) renderTimesheets();
+      });
       const parts=[`${deletableIds.length} duplicate shift${deletableIds.length!==1?'s':''} removed`];
       if(cleanedCount) parts.push(`${cleanedCount} linked leave entr${cleanedCount===1?'y':'ies'} cleaned up`);
       if(blockedCount) parts.push(`${blockedCount} skipped — locked leave entry, remove from Timesheets first`);
-      showToast(parts.join(' · '));
+      showToast(parts.join(' · ')+'\nCtrl+Z to undo');
     }catch(e){showToast('Error removing duplicates: '+e.message.slice(0,80));console.error(e);}
   };
   document.getElementById('rb-confirm-overlay').classList.add('show');
@@ -9449,8 +9556,8 @@ async function rbDeleteShift(shiftId,role){
         await db.insert('roster_shifts',snapshot);
         _rosterShifts.push(snapshot);
         if(cleanup.deletedEntry){
-          await db.insert('entries',cleanup.deletedEntry);
-          _entries.push(normaliseEntry(cleanup.deletedEntry));
+          await db.insert('entries',denormaliseEntry(cleanup.deletedEntry));
+          _entries.push(cleanup.deletedEntry);
         }
         renderDayTimelineForRole(r);
         renderTimesheets();
@@ -11099,9 +11206,37 @@ function reqCheckCoverage(r){
   const cur=new Date(r.leaveStartDate+'T12:00:00');
   const end=new Date(r.leaveEndDate+'T12:00:00');
   while(cur<=end){ dates.push(rbDateKey(cur)); cur.setDate(cur.getDate()+1); }
+  // roster_shifts has NEITHER a `role` NOR a `leave_type` column (see schema.sql:
+  // id, employee_id, date, start_time, end_time, is_day_off, notes, lane, on_leave).
+  // This filtered on both, so every term was undefined, onThatDay was always empty,
+  // and every date counted as at risk — the amber "Low coverage" banner fired on
+  // EVERY leave request, for every role, including on the approved and declined
+  // cards still showing in Recent Decisions. A warning that always fires teaches
+  // managers to ignore amber. Role comes from the employee, leave from the entries.
   const atRisk=dates.filter(d=>{
-    const onThatDay=_rosterShifts.filter(s=>s.date===d&&s.role===r.initiatorRole&&s.employee_id!==r.initiatorId&&!s.leave_type);
-    return onThatDay.length<minWarn;
+    // Count PEOPLE, not shifts: a split shift is two rows for one person and would
+    // otherwise read as two staff on the floor. Placeholders are "Cover Required"
+    // slots, not staff — the coverage strip excludes them too.
+    const covering=new Set();
+    let rosteredAtAll=0;
+    _rosterShifts.forEach(s=>{
+      if(s.date!==d||s.is_day_off) return;
+      const e=_emps.find(x=>String(x.id)===String(s.employee_id));
+      if(!e||e.is_placeholder||e.role!==r.initiatorRole) return;
+      rosteredAtAll++;
+      if(String(s.employee_id)===String(r.initiatorId)) return;
+      if(isOnLeave(s.employee_id,d)) return;
+      covering.add(String(s.employee_id));
+    });
+    // A day nobody of this role is rostered on is a day whose roster has not been
+    // BUILT — not a day that is short-staffed. Counting it as at risk is what made
+    // this fire on every request for leave far enough ahead to matter, which is most
+    // of them: leave is usually asked for months out, and the roster is built a
+    // fortnight out. Zero staff always looked like a crisis. The genuinely useful
+    // signal for those dates is "no roster yet", which the Request Audit's Roster
+    // column now states outright.
+    if(!rosteredAtAll) return false;
+    return covering.size<minWarn;
   });
   if(!atRisk.length) return null;
   if(atRisk.length===1) return `Low coverage on ${reqFmtDate(atRisk[0])} after this leave`;
@@ -11525,6 +11660,52 @@ async function loadReqAudit(){
   }catch(e){ showToast('Error loading audit'); console.error(e); }
 }
 
+/* ── What an approval actually did to the roster ─────────────────────────────
+   For swap, give-away and pick-up this can be inferred from status: their
+   applyRosterWriteback branches THROW on failure and managerApproveRequest only
+   stamps status='approved' after it returns, so approved really does mean the
+   roster was rewritten.
+
+   Leave is the exception, and the audit used to claim "Roster updated" for it on
+   the same inference. The leave branch does `if(!dayShifts.length) continue;` —
+   approve leave for dates whose roster does not exist yet and it writes nothing,
+   silently, while the audit reported success. Live case: Esther Kiir, annual
+   leave 21–28 Sep 2026 approved 27 Jul, nothing written, then rostered to work
+   five of those days by a later roster build.
+
+   So for leave, go and look. Counted against ROSTERED days, not calendar days —
+   a Mon–Fri range over someone's days off should not read as half applied. */
+function reqLeaveApplication(r){
+  if(r.type!=='leave'||!r.leaveStartDate||!r.leaveEndDate) return null;
+  const cur=new Date(r.leaveStartDate+'T12:00:00'), end=new Date(r.leaveEndDate+'T12:00:00');
+  // Classify each day rather than counting rostered days and leave days separately:
+  // one rostered day with no leave plus one leave day with no roster would otherwise
+  // net out to "applied" while a real gap sat in the middle of the range.
+  let applied=0, gaps=0, guard=0;
+  while(cur<=end&&guard++<400){
+    const d=rbDateKey(cur);
+    const hasShift=(_rosterShifts||[]).some(s=>String(s.employee_id)===String(r.initiatorId)&&s.date===d&&!s.is_day_off);
+    const hasLeave=(_entries||[]).some(e=>String(e.employeeId)===String(r.initiatorId)&&e.date===d&&e.leaveType&&!e.deleted);
+    if(hasLeave) applied++;
+    else if(hasShift) gaps++;   // rostered to work on a day this leave covers
+    cur.setDate(cur.getDate()+1);
+  }
+  return {applied,gaps};
+}
+
+// Wording shared by the audit column and anything later that needs to say the
+// same thing — the phrasing is the point, so keep one copy of it.
+function reqRosterOutcomeLabel(r){
+  if(r.status!=='approved') return '—';
+  if(r.type!=='leave') return 'Roster updated';
+  const a=reqLeaveApplication(r);
+  if(!a) return '—';
+  if(!a.applied&&!a.gaps) return 'No roster yet — nothing written';
+  if(!a.applied) return `Not applied — rostered to work ${a.gaps} day${a.gaps===1?'':'s'}`;
+  if(a.gaps) return `Leave on ${a.applied} day${a.applied===1?'':'s'}, rostered to work ${a.gaps}`;
+  return `Leave applied (${a.applied} day${a.applied===1?'':'s'})`;
+}
+
 function renderReqAudit(resetPage=false){
   const tbody=document.getElementById('req-audit-body');
   if(!tbody) return;
@@ -11568,7 +11749,11 @@ function renderReqAudit(resetPage=false){
     const typeLabel=r.type==='leave'?'Leave':r.type==='swap'?'Swap':r.type==='pickup'?'Pick Up':'Give Away';
     const parties=r.type==='leave'||r.type==='pickup'?escHtml(r.initiatorName):`${escHtml(r.initiatorName)} ↔ ${escHtml(r.colleagueName||'—')}`;
     const detail=r.type==='leave'?`${formatLeaveType(r.leaveType)} ${reqFmtDate(r.leaveStartDate)}–${reqFmtDate(r.leaveEndDate)}`:r.type==='pickup'?`Cover shift ${reqFmtDate(r.initiatorShiftDate||'')} ${r.initiatorShiftStart||''}–${r.initiatorShiftEnd||''}`:`${reqFmtDate(r.initiatorShiftDate||'')} shift`;
-    const rosterChange=r.status==='approved'?'Roster updated':'—';
+    const rosterChange=reqRosterOutcomeLabel(r);
+    // Leave that was approved but never reached the roster is the thing this column
+    // exists to surface — give it the weight of a warning, not of a muted footnote.
+    const rosterStyle=/^(No roster|Not applied|Leave on)/.test(rosterChange)
+      ? 'color:var(--burgundy);font-weight:700;' : 'color:var(--muted);';
     return`<tr>
       <td>${reqFmtDate(r.createdAt)}</td>
       <td><span class="req-admin-type-pill">${typeLabel}</span></td>
@@ -11576,7 +11761,7 @@ function renderReqAudit(resetPage=false){
       <td><span class="req-status-pill ${r.status}" style="display:inline-block;">${reqStatusLabel(r.status)}</span></td>
       <td style="font-size:0.78rem;color:var(--muted);">${escHtml(r.managerName||'—')}</td>
       <td style="font-size:0.78rem;color:var(--muted);">${r.managerDecidedAt?reqFmtDate(r.managerDecidedAt):'—'}</td>
-      <td style="font-size:0.78rem;color:var(--muted);">${rosterChange}</td>
+      <td style="font-size:0.78rem;${rosterStyle}">${escHtml(rosterChange)}</td>
     </tr>`;
   }).join('');
   let pag=document.getElementById('raq-pagination');
