@@ -1058,6 +1058,7 @@
   .req-status-pill.approved { background:var(--success-lt); color:var(--success); }
   .req-status-pill.declined { background:#fde8ea; color:var(--burgundy); }
   .req-status-pill.expired { background:#f0f0f0; color:var(--muted); }
+  .req-status-pill.revoked { background:#fde8ea; color:var(--burgundy); }
   .req-status-title { font-size:0.88rem; font-weight:700; color:var(--charcoal); }
   .req-status-sub { font-size:0.75rem; color:var(--muted); margin-top:0.15rem; }
   .req-section-label { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin:1rem 0 0.5rem; }
@@ -10956,11 +10957,18 @@ function reqStatusLabel(status){
   if(status==='approved') return 'Approved ✓';
   if(status==='declined') return 'Declined';
   if(status==='expired') return 'Expired';
+  if(status==='revoked') return 'Revoked';
   return status;
 }
 
 function reqStatusSub(r,isInitiator){
-  if(r.type==='leave'||r.type==='pickup') return `Submitted ${reqFmtDate(r.createdAt)}`;
+  /* Only while still awaiting a decision. This used to return for leave and
+     pick-up unconditionally, so every line below was unreachable for them: a
+     staff member whose leave was approved, declined or withdrawn saw "Submitted
+     27 July 2026" and had to infer the outcome from the pill. The decision is
+     the thing they came to read. */
+  if((r.type==='leave'||r.type==='pickup')&&(r.status==='pending_peer'||r.status==='pending_manager'))
+    return `Submitted ${reqFmtDate(r.createdAt)}`;
   if(r.status==='pending_peer') return isInitiator?`Waiting for ${r.colleagueName} to respond`:`${r.initiatorName} is requesting this`;
   if(r.status==='pending_manager') return 'Peer approved · Waiting for manager';
   if(r.status==='approved') return `Approved by ${r.managerName||'manager'} on ${reqFmtDate(r.managerDecidedAt)}`;
@@ -10970,6 +10978,9 @@ function reqStatusSub(r,isInitiator){
   }
   // Must fit legacy rows too: the four requests expired under the pre-v2.7
   // created_at+7 rule have nothing to do with a finalised period.
+  if(r.status==='revoked') return r.managerReason
+    ? `Leave withdrawn by ${r.managerName||'a manager'}: ${r.managerReason}`
+    : `Leave withdrawn by ${r.managerName||'a manager'} on ${reqFmtDate(r.managerDecidedAt)}`;
   if(r.status==='expired') return 'Nobody responded in time';
   return `Submitted ${reqFmtDate(r.createdAt)}`;
 }
@@ -11514,13 +11525,72 @@ function reqSetRole(role, btn){
   renderRequests();
 }
 
+/* ── Upcoming approved leave ─────────────────────────────────────────────────
+   Driven by the REQUESTS, never by the entries. That is the whole point: leave
+   whose entries do not exist is exactly the leave worth showing, and a list
+   built from entries would omit precisely the rows that need attention.
+
+   Each tile says which of three states it is in, because "approved" on its own
+   is what let Esther Kiir's week disappear. */
+function reqUpcomingLeave(role){
+  const today=rbDateKey(new Date());
+  return (_requests||[])
+    .filter(r=>r.type==='leave'&&r.status==='approved'&&r.leaveEndDate&&r.leaveEndDate>=today
+      &&(!role||r.initiatorRole===role))
+    .sort((a,b)=>(a.leaveStartDate||'').localeCompare(b.leaveStartDate||''));
+}
+
+function buildUpcomingLeaveCard(r){
+  const a=reqLeaveApplication(r)||{applied:0,gaps:0};
+  // Count the days that have no roster at all, separately from days rostered as
+  // work — they need different things from a manager.
+  let unrostered=0;
+  {
+    const cur=new Date(r.leaveStartDate+'T12:00:00'), end=new Date(r.leaveEndDate+'T12:00:00');
+    let guard=0;
+    while(cur<=end&&guard++<400){
+      const g=rbLeaveGapFor(r.initiatorId,rbDateKey(cur));
+      if(g&&g.kind==='unrostered') unrostered++;
+      cur.setDate(cur.getDate()+1);
+    }
+  }
+  const state = a.gaps
+    ? {txt:`⚠ Rostered to work on ${a.gaps} day${a.gaps===1?'':'s'} of this leave`,col:'var(--burgundy)'}
+    : unrostered
+      ? {txt:`🌴 ${unrostered} day${unrostered===1?'':'s'} not yet rostered — leave is only paid once a shift exists`,col:'#8a5a12'}
+      : a.applied
+        ? {txt:`✓ Applied to ${a.applied} day${a.applied===1?'':'s'}`,col:'var(--success)'}
+        : {txt:'No working days in this range — nothing to apply',col:'var(--muted)'};
+  const days=Math.max(0,Math.round((new Date(r.leaveStartDate+'T12:00:00')-new Date(rbDateKey(new Date())+'T12:00:00'))/86400000));
+  const away=days===0?'starts today':days===1?'starts tomorrow':`in ${days} days`;
+  return `<div class="req-admin-card" data-req-id="${r.id}">
+    <div class="req-admin-header">
+      <div>
+        <div class="req-admin-names">${escHtml(r.initiatorName)}</div>
+        <div style="font-size:0.75rem;color:var(--muted);">${escHtml(formatLeaveType(r.leaveType))} · ${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)} · ${away}</div>
+      </div>
+      <span class="req-admin-type-pill">Leave</span>
+    </div>
+    <div class="req-admin-shifts">
+      <div style="font-size:0.8rem;font-weight:700;color:${state.col};margin-bottom:0.35rem;">${state.txt}</div>
+      <div style="font-size:0.76rem;color:var(--muted);">Approved by ${escHtml(r.managerName||'manager')}${r.managerDecidedAt?' · '+reqFmtDate(r.managerDecidedAt):''}</div>
+      ${r.reason?`<div style="font-size:0.76rem;color:var(--muted);margin-top:0.2rem;">Reason: ${escHtml(r.reason)}</div>`:''}
+      <br><button onclick="reqViewInRoster('${r.id}')" style="background:none;border:none;color:var(--muted);font-size:0.75rem;font-weight:700;cursor:pointer;padding:0.2rem 0;font-family:'Nunito',sans-serif;text-decoration:underline;text-underline-offset:2px;" title="Jump to these dates in the Roster tab">📅 View in Roster</button>
+    </div>
+    <div class="req-admin-actions">
+      <button class="req-decline-btn" onclick="reqRevokeLeave('${r.id}')" title="Withdraw this approved leave">✗ Withdraw Leave</button>
+    </div>
+  </div>`;
+}
+
 function renderRequests(){
+  rbInvalidateLeaveGaps();
   // Oldest first. Nothing expires on the manager side and nothing chased these,
   // so they simply accumulated — a leave request for Christmas Day sat 55 days
   // unanswered. Newest-first buried exactly the ones that needed attention.
   const pending=_requests.filter(r=>r.status==='pending_manager'&&r.initiatorRole===reqRole).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
   const sevenDays=7*86400000;
-  const recentlyClosed=_requests.filter(r=>['approved','declined'].includes(r.status)&&r.initiatorRole===reqRole&&r.managerDecidedAt&&Date.now()-new Date(r.managerDecidedAt).getTime()<sevenDays).sort((a,b)=>new Date(b.managerDecidedAt)-new Date(a.managerDecidedAt));
+  const recentlyClosed=_requests.filter(r=>['approved','declined','revoked'].includes(r.status)&&r.initiatorRole===reqRole&&r.managerDecidedAt&&Date.now()-new Date(r.managerDecidedAt).getTime()<sevenDays).sort((a,b)=>new Date(b.managerDecidedAt)-new Date(a.managerDecidedAt));
   const totalPending=_requests.filter(r=>r.status==='pending_manager').length;
   const badge=document.getElementById('req-admin-badge');
   if(badge){ badge.style.display=totalPending?'':'none'; badge.textContent=totalPending; }
@@ -11534,11 +11604,17 @@ function renderRequests(){
     html+=`<div style="font-size:0.78rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:0.75rem;">Pending (${pending.length})</div>`;
     pending.forEach(r=>{ html+=buildReqAdminCard(r,true); });
   }
+  const upcoming=reqUpcomingLeave(reqRole);
+  if(upcoming.length){
+    const needsAction=upcoming.filter(r=>{const a=reqLeaveApplication(r)||{gaps:0};return a.gaps>0;}).length;
+    html+=`<div style="font-size:0.78rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.75rem;">Upcoming Approved Leave (${upcoming.length})${needsAction?` · <span style="color:var(--burgundy);">${needsAction} need${needsAction===1?'s':''} attention</span>`:''}</div>`;
+    upcoming.forEach(r=>{ html+=buildUpcomingLeaveCard(r); });
+  }
   if(recentlyClosed.length){
     html+=`<div style="font-size:0.78rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.75rem;">Recent Decisions (last 7 days)</div>`;
     recentlyClosed.forEach(r=>{ html+=buildReqAdminCard(r,false); });
   }
-  if(!pending.length&&!recentlyClosed.length){
+  if(!pending.length&&!recentlyClosed.length&&!upcoming.length){
     html=`<div class="req-empty" style="padding:3rem 1rem;">✓ No pending requests</div>`;
   }
   document.getElementById('req-admin-content').innerHTML=html;
@@ -11782,6 +11858,81 @@ async function managerApproveRequest(id){
     // read them, and clear the pending-request markers this request was driving.
     renderTimesheets(); renderApprovals();
   }catch(e){ showToast('Error: '+(e?.message||String(e)).slice(0,120)); console.error('Approve error:',e); }
+}
+
+/* ── Withdrawing leave that was already approved ─────────────────────────────
+   There was no way to do this at all. Undoing approved leave meant finding the
+   leave rows in Timesheets and deleting them one by one, which left the request
+   still saying "approved", the audit still saying the roster was updated, the
+   gap markers still firing, and the staff member never told.
+
+   Same guard rails as approving, because it is the same kind of act in reverse:
+   refuse outright on a finalised period, refuse on locked rows, show exactly
+   what will be deleted before deleting it, tell the staff member, log it.       */
+async function reqRevokeLeave(id){
+  const r=_requests.find(x=>x.id===id);
+  if(!r||r.type!=='leave'||r.status!=='approved') return;
+
+  // Same test, same wording as managerApproveRequest: a revoke rewrites the same
+  // history an approve would. Check every period the range touches.
+  const _blocked=[r.leaveStartDate,r.leaveEndDate].filter(Boolean).find(d=>reqPeriodFinalised(d));
+  if(_blocked){
+    alert(`${srFortnightLabel(payPeriodStartFor(_blocked))} has already been finalised and exported to MYOB.\n\nWithdrawing this leave now would change a pay period that has been paid. If it genuinely needs correcting, un-push that period in Timesheets first.`);
+    return;
+  }
+
+  // Everything this leave actually put on the timesheet.
+  const dates=[];
+  {
+    const cur=new Date(r.leaveStartDate+'T12:00:00'), end=new Date(r.leaveEndDate+'T12:00:00');
+    let guard=0;
+    while(cur<=end&&guard++<400){ dates.push(rbDateKey(cur)); cur.setDate(cur.getDate()+1); }
+  }
+  const rows=(_entries||[]).filter(e=>String(e.employeeId)===String(r.initiatorId)&&dates.includes(e.date)&&e.leaveType&&!e.deleted);
+  const locked=rows.filter(e=>e.locked);
+  if(locked.length){
+    alert(`${locked.length} of these leave rows ${locked.length===1?'is':'are'} locked and ready for payroll:\n\n${locked.map(e=>'  '+reqFmtDate(e.date)+'  '+e.clockIn+'–'+e.clockOut).join('\n')}\n\nUnlock or remove them in Timesheets first — that path confirms and audits the change.`);
+    return;
+  }
+
+  // Say exactly what is about to happen, including when the answer is "nothing".
+  const what=rows.length
+    ? `This will delete ${rows.length} leave row${rows.length===1?'':'s'} from the timesheet:\n\n${rows.slice(0,8).map(e=>'  '+reqFmtDate(e.date)+'  '+e.clockIn+'–'+e.clockOut+'  '+formatLeaveType(e.leaveType)).join('\n')}${rows.length>8?`\n  +${rows.length-8} more`:''}\n\nThe rostered shifts stay, and will be paid as worked time.`
+    : `No leave rows were ever written for this request, so nothing will be deleted from the timesheet.`;
+  if(!confirm(`Withdraw ${r.initiatorName}'s ${formatLeaveType(r.leaveType).toLowerCase()} (${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)})?\n\n${what}\n\n${r.initiatorName} will be notified.`)) return;
+  const reason=prompt('Reason for withdrawing (optional — leave blank to skip):');
+  if(reason===null) return;
+
+  const mgr=currentManager?.name||'Manager';
+  const now=new Date().toISOString();
+  try{
+    for(const e of rows){
+      await db.delete('entries',e.id);
+      _entries=_entries.filter(x=>x.id!==e.id);
+      // rbMarkLeave sets on_leave when marking; clear it so the roster views agree.
+      if(e.shiftId){
+        const sh=_rosterShifts.find(x=>String(x.id)===String(e.shiftId));
+        if(sh&&sh.on_leave){ try{ await db.update('roster_shifts',sh.id,{on_leave:false}); sh.on_leave=false; }catch(_){} }
+      }
+    }
+    await db.update('requests',id,{status:'revoked',manager_id:currentManager?.id||null,manager_name:mgr,manager_decision:'revoked',manager_reason:reason||null,manager_decided_at:now});
+    Object.assign(r,{status:'revoked',managerName:mgr,managerDecision:'revoked',managerReason:reason||null,managerDecidedAt:now});
+    await reqCreateNotification(r.initiatorId,id,
+      `Your approved leave (${formatLeaveType(r.leaveType)}, ${reqFmtDate(r.leaveStartDate)}–${reqFmtDate(r.leaveEndDate)}) has been withdrawn by ${mgr}${reason?': '+reason:''}`,
+      'manager_declined');
+    await logLeaveEvent({
+      event:'revoked', employeeId:r.initiatorId, employeeName:r.initiatorName,
+      role:r.initiatorRole, leaveType:r.leaveType,
+      startDate:r.leaveStartDate, endDate:r.leaveEndDate, requestId:r.id,
+      daysApplied:0, daysUnrostered:0,
+      note:rows.length?`${rows.length} leave row(s) removed${reason?' — '+reason:''}`:`No leave rows existed${reason?' — '+reason:''}`,
+    });
+    // status is no longer 'approved', so the gap markers and the audit's Roster
+    // column stop reporting this leave on their own.
+    rbInvalidateLeaveGaps();
+    showToast(rows.length?`Leave withdrawn — ${rows.length} row${rows.length===1?'':'s'} removed`:'Leave withdrawn');
+    renderRequests(); renderTimesheets(); renderRoster();
+  }catch(e){ showToast('Error: '+(e?.message||String(e)).slice(0,120)); console.error('Revoke error:',e); }
 }
 
 async function managerDeclineRequest(id){
