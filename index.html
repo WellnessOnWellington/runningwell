@@ -1344,6 +1344,61 @@
   .ts-payroll-select:focus { outline:none; border-color:var(--burgundy); }
   .ts-payroll-label { font-size:0.72rem; font-weight:700; color:var(--muted); width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ts-locked-label { font-size:0.68rem; color:var(--muted); font-weight:600; white-space:nowrap; width:70px; text-align:left; }
+  /* Compact rows for the Requests tab's Upcoming Leave and Recent Decisions.
+     Deliberately built on .ts-shift-row / .ts-row-main / .ts-row-detail rather
+     than a new pattern: managers already read the coloured left border on the
+     Timesheets tab as a state, and the expand-on-click is the same gesture.
+     Pending requests stay as full cards — they are the only section that needs
+     a decision, and should keep the visual weight. */
+  .rql-wrap { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); }
+  /* Own classes, not .ts-shift-row/.ts-row-detail. Those carry a deliberate
+     contract this section does not share: under 960px Timesheets disables row
+     expansion outright (max-height:0 !important, cursor:default), because its
+     detail panel is dense payroll controls that do not work narrow. Borrowing
+     them would have made Withdraw and "approved by" unreachable on every tablet.
+     These rows expand to three lines of text and two links, which is fine at any
+     width. Same look, same gesture, different rule about small screens. */
+  .rql-row { border-bottom:1px solid rgba(234,217,220,0.5); }
+  .rql-row:last-of-type { border-bottom:none; }
+  .rql-main { display:flex; align-items:center; gap:1rem; padding:0.62rem 1rem; cursor:pointer;
+    transition:background 0.15s; user-select:none; border-left:3px solid transparent; }
+  .rql-main:hover { background:var(--blush-lt); }
+  .rql-row.flag-red    .rql-main { border-left-color:var(--burgundy); }
+  .rql-row.flag-yellow .rql-main { border-left-color:#e6a817; }
+  .rql-row.flag-green  .rql-main { border-left-color:var(--success); }
+  .rql-row.flag-grey   .rql-main { border-left-color:var(--muted); }
+  /* Shown and hidden with the `hidden` property, not a max-height transition.
+     The animated version could not be made to work in this stylesheet: an inline
+     max-height of the measured content height still computed to 0, with no
+     !important rule matching the element to explain it. Rather than keep chasing
+     a cascade problem in 127KB of CSS for the sake of a 0.22s slide, this hides
+     the panel outright — deterministic, and one less thing to break. */
+  .rql-detail { background:rgba(250,245,246,0.7); border-top:1px solid rgba(234,217,220,0.5); }
+  .rql-detail-inner { padding:0.55rem 1rem 0.7rem; }
+  .rql-chev { flex:0 0 auto; font-size:0.6rem; color:var(--muted); transition:transform 0.22s ease-out; }
+  .rql-row.expanded .rql-chev { transform:rotate(90deg); }
+  .rql-name { font-size:0.84rem; font-weight:800; color:var(--charcoal); flex:0 0 auto; min-width:8.5rem; }
+  .rql-meta { font-size:0.8rem; color:var(--charcoal); flex:0 0 auto; }
+  .rql-when { font-size:0.75rem; color:var(--muted); font-weight:600; flex:0 0 auto; }
+  .rql-state { font-size:0.78rem; font-weight:700; margin-left:auto; text-align:right; flex:0 1 auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rql-detail-line { font-size:0.78rem; color:var(--muted); line-height:1.55; }
+  .rql-actions { display:flex; align-items:center; gap:1rem; margin-top:0.5rem; }
+  /* Withdraw is destructive and rare. A text link inside the expanded panel, not
+     a button on every row: reaching it takes a deliberate expand plus a click,
+     and a loud button repeated down the page is the kind of noise that trains
+     people to dismiss the confirm dialog without reading it. */
+  .rql-withdraw { background:none; border:none; color:var(--burgundy); font-size:0.75rem; font-weight:700;
+    cursor:pointer; padding:0.2rem 0; font-family:'Nunito',sans-serif; text-decoration:underline;
+    text-underline-offset:2px; margin-left:auto; }
+  .rql-withdraw:hover { color:#6d1c2a; }
+  .rql-showall { display:block; width:100%; background:none; border:none; border-top:1px solid rgba(234,217,220,0.6);
+    color:var(--muted); font-size:0.76rem; font-weight:700; cursor:pointer; padding:0.55rem;
+    font-family:'Nunito',sans-serif; }
+  .rql-showall:hover { background:var(--blush-lt); color:var(--charcoal); }
+  @media (max-width:760px){
+    .rql-state { margin-left:0; width:100%; text-align:left; }
+    .rql-name { min-width:0; }
+  }
   .ts-row-detail { background:rgba(250,245,246,0.7); border-top:1px solid rgba(234,217,220,0.5); max-height:0; overflow:hidden; transition:max-height 0.22s ease-out; position:relative; }
   .ts-row-detail.ts-detail-open { max-height:600px; }
   .ts-row-detail-inner { padding:0.5rem 1.1rem 0.75rem; }
@@ -11540,48 +11595,98 @@ function reqUpcomingLeave(role){
     .sort((a,b)=>(a.leaveStartDate||'').localeCompare(b.leaveStartDate||''));
 }
 
-function buildUpcomingLeaveCard(r){
+/* The four states, shared by the row and its colour. Reuses the Timesheets flag
+   palette so the left border means the same thing here as it does there. */
+function reqLeaveState(r){
   const a=reqLeaveApplication(r)||{applied:0,gaps:0};
-  // Count the days that have no roster at all, separately from days rostered as
-  // work — they need different things from a manager.
   let unrostered=0;
-  {
-    const cur=new Date(r.leaveStartDate+'T12:00:00'), end=new Date(r.leaveEndDate+'T12:00:00');
-    let guard=0;
-    while(cur<=end&&guard++<400){
-      const g=rbLeaveGapFor(r.initiatorId,rbDateKey(cur));
-      if(g&&g.kind==='unrostered') unrostered++;
-      cur.setDate(cur.getDate()+1);
-    }
+  const cur=new Date(r.leaveStartDate+'T12:00:00'), end=new Date(r.leaveEndDate+'T12:00:00');
+  let guard=0;
+  while(cur<=end&&guard++<400){
+    const g=rbLeaveGapFor(r.initiatorId,rbDateKey(cur));
+    if(g&&g.kind==='unrostered') unrostered++;
+    cur.setDate(cur.getDate()+1);
   }
-  const state = a.gaps
-    ? {txt:`⚠ Rostered to work on ${a.gaps} day${a.gaps===1?'':'s'} of this leave`,col:'var(--burgundy)'}
-    : unrostered
-      ? {txt:`🌴 ${unrostered} day${unrostered===1?'':'s'} not yet rostered — leave is only paid once a shift exists`,col:'#8a5a12'}
-      : a.applied
-        ? {txt:`✓ Applied to ${a.applied} day${a.applied===1?'':'s'}`,col:'var(--success)'}
-        : {txt:'No working days in this range — nothing to apply',col:'var(--muted)'};
-  const days=Math.max(0,Math.round((new Date(r.leaveStartDate+'T12:00:00')-new Date(rbDateKey(new Date())+'T12:00:00'))/86400000));
-  const away=days===0?'starts today':days===1?'starts tomorrow':`in ${days} days`;
-  return `<div class="req-admin-card" data-req-id="${r.id}">
-    <div class="req-admin-header">
-      <div>
-        <div class="req-admin-names">${escHtml(r.initiatorName)}</div>
-        <div style="font-size:0.75rem;color:var(--muted);">${escHtml(formatLeaveType(r.leaveType))} · ${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)} · ${away}</div>
+  if(a.gaps)     return {flag:'red',   col:'var(--burgundy)', txt:`⚠ Rostered to work on ${a.gaps} day${a.gaps===1?'':'s'}`};
+  if(unrostered) return {flag:'yellow',col:'#8a5a12',         txt:`🌴 ${unrostered} day${unrostered===1?'':'s'} not yet rostered`};
+  if(a.applied)  return {flag:'green', col:'var(--success)',  txt:`✓ Applied to ${a.applied} day${a.applied===1?'':'s'}`};
+  return {flag:'grey', col:'var(--muted)', txt:'No working days in this range'};
+}
+
+/* Height set inline from scrollHeight rather than by toggling a class that sets
+   a max-height. Two reasons, both learned the hard way here. This stylesheet is
+   127KB with `max-height:0 !important` mobile overrides in it, and a class-based
+   open state has to win a specificity fight it cannot be relied on to win — the
+   first version of this silently refused to open. And scrollHeight is the actual
+   content height, so the transition is correct for a two-line row and a six-line
+   one alike, with no magic number to outgrow. */
+function rqlToggleRow(el){
+  const row=el.closest('.rql-row'); if(!row) return;
+  const d=row.querySelector('.rql-detail'); if(!d) return;
+  row.classList.toggle('expanded');
+  d.hidden=!d.hidden;
+}
+
+function buildUpcomingLeaveRow(r){
+  const st=reqLeaveState(r);
+  const today=rbDateKey(new Date());
+  const days=Math.max(0,Math.round((new Date(r.leaveStartDate+'T12:00:00')-new Date(today+'T12:00:00'))/86400000));
+  const when=days===0?'starts today':days===1?'tomorrow':`in ${days} days`;
+  const range=r.leaveStartDate===r.leaveEndDate
+    ? reqFmtDate(r.leaveStartDate)
+    : `${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)}`;
+  return `<div class="rql-row flag-${st.flag}" data-req-id="${r.id}">
+    <div class="rql-main" onclick="rqlToggleRow(this)">
+      <span class="rql-chev">▶</span>
+      <div class="rql-name">${escHtml(r.initiatorName)}</div>
+      <div class="rql-meta">${escHtml(formatLeaveType(r.leaveType))} · ${range}</div>
+      <div class="rql-when">${when}</div>
+      <div class="rql-state" style="color:${st.col};">${st.txt}</div>
+    </div>
+    <div class="rql-detail" hidden><div class="rql-detail-inner">
+      <div class="rql-detail-line">Approved by ${escHtml(r.managerName||'manager')}${r.managerDecidedAt?' · '+reqFmtDate(r.managerDecidedAt):''}</div>
+      ${r.reason?`<div class="rql-detail-line">Reason: ${escHtml(r.reason)}</div>`:''}
+      <div class="rql-actions">
+        <button onclick="event.stopPropagation();reqViewInRoster('${r.id}')" style="background:none;border:none;color:var(--muted);font-size:0.75rem;font-weight:700;cursor:pointer;padding:0.2rem 0;font-family:'Nunito',sans-serif;text-decoration:underline;text-underline-offset:2px;" title="Jump to these dates in the Roster tab">📅 View in Roster</button>
+        <button class="rql-withdraw" onclick="event.stopPropagation();reqRevokeLeave('${r.id}')" title="Withdraw this approved leave">Withdraw leave</button>
       </div>
-      <span class="req-admin-type-pill">Leave</span>
-    </div>
-    <div class="req-admin-shifts">
-      <div style="font-size:0.8rem;font-weight:700;color:${state.col};margin-bottom:0.35rem;">${state.txt}</div>
-      <div style="font-size:0.76rem;color:var(--muted);">Approved by ${escHtml(r.managerName||'manager')}${r.managerDecidedAt?' · '+reqFmtDate(r.managerDecidedAt):''}</div>
-      ${r.reason?`<div style="font-size:0.76rem;color:var(--muted);margin-top:0.2rem;">Reason: ${escHtml(r.reason)}</div>`:''}
-      <br><button onclick="reqViewInRoster('${r.id}')" style="background:none;border:none;color:var(--muted);font-size:0.75rem;font-weight:700;cursor:pointer;padding:0.2rem 0;font-family:'Nunito',sans-serif;text-decoration:underline;text-underline-offset:2px;" title="Jump to these dates in the Roster tab">📅 View in Roster</button>
-    </div>
-    <div class="req-admin-actions">
-      <button class="req-decline-btn" onclick="reqRevokeLeave('${r.id}')" title="Withdraw this approved leave">✗ Withdraw Leave</button>
-    </div>
+    </div></div>
   </div>`;
 }
+
+function buildRecentDecisionRow(r){
+  const flag=r.status==='approved'?'green':'grey';
+  const col=r.status==='approved'?'var(--success)':r.status==='revoked'?'var(--burgundy)':'var(--muted)';
+  const label=r.status==='approved'?'✓ Approved':r.status==='revoked'?'Withdrawn':'✗ Declined';
+  const what=r.type==='leave'
+    ? `${formatLeaveType(r.leaveType)} · ${reqFmtDate(r.leaveStartDate)}${r.leaveEndDate!==r.leaveStartDate?' – '+reqFmtDate(r.leaveEndDate):''}`
+    : `${r.type==='swap'?'Shift swap':r.type==='pickup'?'Cover pick-up':'Give-away'}${r.initiatorShiftDate?' · '+reqFmtDate(r.initiatorShiftDate):''}`;
+  return `<div class="rql-row flag-${flag}" data-req-id="${r.id}">
+    <div class="rql-main" onclick="rqlToggleRow(this)">
+      <span class="rql-chev">▶</span>
+      <div class="rql-name">${escHtml(r.initiatorName)}</div>
+      <div class="rql-meta">${escHtml(what)}</div>
+      <div class="rql-when">${reqFmtDate(r.managerDecidedAt)}</div>
+      <div class="rql-state" style="color:${col};">${label} by ${escHtml(r.managerName||'manager')}</div>
+    </div>
+    <div class="rql-detail" hidden><div class="rql-detail-inner">
+      ${r.reason?`<div class="rql-detail-line">Staff reason: ${escHtml(r.reason)}</div>`:''}
+      ${r.managerReason?`<div class="rql-detail-line">Manager: ${escHtml(r.managerReason)}</div>`:''}
+      ${r.type==='leave'?`<div class="rql-detail-line">${escHtml(reqRosterOutcomeLabel(r))}</div>`:''}
+      <div class="rql-actions">
+        <button onclick="event.stopPropagation();reqViewInRoster('${r.id}')" style="background:none;border:none;color:var(--muted);font-size:0.75rem;font-weight:700;cursor:pointer;padding:0.2rem 0;font-family:'Nunito',sans-serif;text-decoration:underline;text-underline-offset:2px;">📅 View in Roster</button>
+      </div>
+    </div></div>
+  </div>`;
+}
+
+/* Upcoming leave is the only unbounded section here — pending clears itself and
+   recent decisions is capped at seven days. It already runs to March 2027, and
+   leave six months out takes the same room as leave next week while needing
+   nothing from anyone. Show the next eight weeks; the rest is one click away. */
+const REQ_LEAVE_HORIZON_DAYS=56;
+let _reqShowAllLeave=false;
+function reqToggleShowAllLeave(){ _reqShowAllLeave=!_reqShowAllLeave; renderRequests(); }
 
 function renderRequests(){
   rbInvalidateLeaveGaps();
@@ -11606,13 +11711,27 @@ function renderRequests(){
   }
   const upcoming=reqUpcomingLeave(reqRole);
   if(upcoming.length){
+    // Anything already running, or starting inside the horizon. Leave that began
+    // weeks ago must never fall behind "show all" — it is the most current of all.
+    const cutoff=new Date(); cutoff.setDate(cutoff.getDate()+REQ_LEAVE_HORIZON_DAYS);
+    const cutoffKey=rbDateKey(cutoff);
+    const near=upcoming.filter(r=>r.leaveStartDate<=cutoffKey);
+    const far=upcoming.filter(r=>r.leaveStartDate>cutoffKey);
+    // Counted across the WHOLE list, not the visible slice: a clash sitting beyond
+    // the horizon still needs a manager, and this header is what tells them.
     const needsAction=upcoming.filter(r=>{const a=reqLeaveApplication(r)||{gaps:0};return a.gaps>0;}).length;
+    const shown=_reqShowAllLeave?upcoming:near;
     html+=`<div style="font-size:0.78rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.75rem;">Upcoming Approved Leave (${upcoming.length})${needsAction?` · <span style="color:var(--burgundy);">${needsAction} need${needsAction===1?'s':''} attention</span>`:''}</div>`;
-    upcoming.forEach(r=>{ html+=buildUpcomingLeaveCard(r); });
+    html+=`<div class="rql-wrap">`;
+    shown.forEach(r=>{ html+=buildUpcomingLeaveRow(r); });
+    if(far.length) html+=`<button class="rql-showall" onclick="reqToggleShowAllLeave()">${_reqShowAllLeave?`Show only the next ${Math.round(REQ_LEAVE_HORIZON_DAYS/7)} weeks`:`Show ${far.length} more starting later →`}</button>`;
+    html+=`</div>`;
   }
   if(recentlyClosed.length){
     html+=`<div style="font-size:0.78rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.75rem;">Recent Decisions (last 7 days)</div>`;
-    recentlyClosed.forEach(r=>{ html+=buildReqAdminCard(r,false); });
+    html+=`<div class="rql-wrap">`;
+    recentlyClosed.forEach(r=>{ html+=buildRecentDecisionRow(r); });
+    html+=`</div>`;
   }
   if(!pending.length&&!recentlyClosed.length&&!upcoming.length){
     html=`<div class="req-empty" style="padding:3rem 1rem;">✓ No pending requests</div>`;
