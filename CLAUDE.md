@@ -12,8 +12,8 @@ wages. Clinic is in **Melbourne, Australia** (`Australia/Melbourne`, UTC+10/+11)
 
 ## ⚠ After ANY change to the Supabase schema
 
-Adding, renaming or dropping a table or column affects three things, and only
-one of them notices on its own. **Do all three in the same sitting.**
+Adding, renaming or dropping a table or column affects four things, and only
+one of them notices on its own. **Do all four in the same sitting.**
 
 ### 1. Re-capture the schema — manual, nothing checks this
 Run `Runningwell-Vault/capture_schema.sql` in the Supabase SQL Editor. Replace
@@ -27,7 +27,19 @@ backup tells you if it needs updating.
 New *columns* need nothing — the backup does `select=*`.
 New *tables* must be added to `TABLES`.
 
-### 3. Run the journal coverage query — the only live check
+### 3. Re-capture the access rules — also manual, also nothing checks this
+Run `Runningwell-Vault/capture_policies.sql` in the Supabase SQL Editor and
+replace `Runningwell-Vault/schema/policies.sql` with the output.
+
+A new table arrives with RLS enabled and **no policy**, which does not error —
+the anon key just sees an empty table and every write fails silently. `leave_log`
+shipped that way on 15 Sep 2026 and read back empty to the app while holding 17
+rows. Write the policies when you create the table, and capture them here.
+
+Model new audit-style tables on `timesheet_audit` and `leave_log` (select and
+insert only, so the published key cannot rewrite them), not on `entries`.
+
+### 4. Run the journal coverage query — the only live check
 In `Runningwell-Vault/journal_tables.sql`, the block headed **COVERAGE CHECK**.
 Expect **zero rows**. Anything listed has no `trg_journal`, meaning deletions
 from it are unrecoverable — silently. New tables also need adding to the array
