@@ -65,8 +65,20 @@ else pushes normally.
 ## Things that will bite you
 
 - **The Supabase anon key is published** in this file and grants full read and
-  delete on every table. All PIN checks are client-side and bypassable. See the
-  Database Lockdown plan. Remediation is planned, not built.
+  delete on almost every table. All PIN checks are client-side and bypassable.
+  See the Database Lockdown plan. Remediation is planned, not built.
+  The mechanism is **permissive policies, not absent RLS** — this note used to
+  say otherwise and it cost an afternoon. RLS is ENABLED on every table; most
+  carry `for all ... using (true) with check (true)`, which is what grants the
+  key everything. Two do not: `timesheet_audit` and `leave_log` grant only
+  SELECT and INSERT, so the published key cannot rewrite or erase them.
+  **A new table therefore needs its policies written explicitly.** Created
+  without them it has RLS on and no policy, which does not error — the anon key
+  just sees an empty table and every write fails. `leave_log` shipped that way
+  and read back empty while holding 17 rows. Model new audit-shaped tables on
+  `timesheet_audit`, not on `entries`.
+  These policies exist only in the live database: `capture_schema.sql` does not
+  read them, so `schema.sql` cannot rebuild them. See the vault README.
 - **Two `ON DELETE CASCADE` chains**: `employees → entries` and
   `entries → notes`. Deleting one employee row removes **every timesheet they
   ever had**. The app soft-deletes (`active:false`) so it never fires normally —
