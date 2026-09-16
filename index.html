@@ -2335,7 +2335,7 @@
           <div class="settings-section-chevron" id="ss-chevron-leavelog">&#9658;</div>
           <div style="flex:1;">
             <div class="settings-section-title">Leave Log</div>
-            <div class="settings-section-hint">Every leave decision, who made it and when &mdash; including approvals that reached no roster and so wrote nothing. Rows marked <strong>Not applied</strong> are leave that has been granted but does not yet exist on any timesheet.</div>
+            <div class="settings-section-hint">Every leave decision, who made it and when &mdash; including approvals that reached no roster and so wrote nothing. Rows marked <strong>Not rostered</strong> are leave that has been granted but does not yet exist on any roster.</div>
           </div>
         </div>
         <div class="settings-section-body" id="ss-body-leavelog" style="display:none;">
@@ -2361,7 +2361,7 @@
             <input class="form-input" type="date" id="ll-filter-from" onchange="renderLeaveLog(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);" />
             <span style="font-size:0.78rem;color:var(--muted);font-weight:600;">to</span>
             <input class="form-input" type="date" id="ll-filter-to" onchange="renderLeaveLog(true)" style="width:auto;font-size:0.8rem;padding:0.4rem 0.75rem;background:var(--warm-white);" />
-            <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;" title="Leave that was granted but has not reached any timesheet"><input type="checkbox" id="ll-only-unapplied" onchange="renderLeaveLog(true)" style="accent-color:var(--burgundy);width:14px;height:14px;cursor:pointer;">Not applied only</label>
+            <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;" title="Leave that was granted for dates with no roster built yet"><input type="checkbox" id="ll-only-unapplied" onchange="renderLeaveLog(true)" style="accent-color:var(--burgundy);width:14px;height:14px;cursor:pointer;">Not rostered only</label>
           </div>
           <!-- overflow-x:auto on this wrapper only. The shared .table-wrap is overflow:hidden,
                which for the seven-column audits is fine because they fit exactly; this table
@@ -12334,7 +12334,7 @@ function renderLeaveLog(resetPage=false){
     const dates=sameDay?reqFmtDate(r.startDate):`${reqFmtDate(r.startDate)} – ${reqFmtDate(r.endDate)}`;
     // The column that carries the point of the table: leave granted that reached no roster.
     const applied=r.daysUnrostered>0
-      ? `<span style="color:var(--burgundy);font-weight:700;">Not applied — ${r.daysUnrostered} day${r.daysUnrostered===1?'':'s'} unrostered</span>`
+      ? `<span style="color:var(--burgundy);font-weight:700;">Not rostered — ${r.daysUnrostered} day${r.daysUnrostered===1?'':'s'}</span>`
       : r.event==='cleared'||r.event==='revoked' ? '—'
       : `${r.daysApplied} day${r.daysApplied===1?'':'s'}`;
     const noteBits=[r.note];
