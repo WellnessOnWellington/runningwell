@@ -890,8 +890,48 @@
   .sr-gnow-bar { position: absolute; top: 0; bottom: 0; border-radius: 6px; display: flex; align-items: center; justify-content: center; padding: 0 0.5rem; overflow: hidden; min-width: 3px; }
   .sr-gnow-bar-time { font-size: 0.6rem; font-weight: 700; color: inherit; white-space: nowrap; font-family: 'Courier New',monospace; position: absolute; left: 0.4rem; opacity: 0.8; }
   .sr-gnow-bar-name { font-size: 0.62rem; font-weight: 800; color: inherit; opacity: 0.35; white-space: nowrap; overflow: hidden; text-overflow: clip; letter-spacing: 0.03em; pointer-events: none; }
+  /* Same slot, different job: a repeat of the name can sit at 0.35 because it
+     is decoration, a leave tag is the only thing on the bar that says why. */
+  .sr-gnow-bar-name.leave-tag { opacity: 0.92; font-weight: 900; letter-spacing: 0.06em; }
 
   /* Now — mobile card list (hidden on desktop) */
+  /* ── Leave layout ──────────────────────────────────────────────────────
+     Vertical by construction. Who's On clips horizontal overflow on mobile
+     (#view-staff-roster overflow-x:hidden) and its swipe handler calls
+     preventDefault on any horizontal drag anywhere in the view, so a side
+     scrolling timeline cannot work here — an inner scroll would be eaten by
+     page navigation. A month grid fits 390px and swipes month to month. */
+  .sr-leave { max-width: 620px; margin: 0 auto; }
+  .sr-leave-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.9rem; }
+  .sr-leave-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.3rem; }
+  .sr-leave-dow { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: center; padding-bottom: 0.3rem; }
+  .sr-leave-cell { position: relative; height: 58px; border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; border: 1.5px solid transparent; background: var(--warm-white); }
+  .sr-leave-cell.blank { background: transparent; }
+  .sr-leave-cell.free { background: var(--warm-white); }
+  .sr-leave-cell.annual { background: #fef0b0; border-color: #f5c030; }
+  .sr-leave-cell.other { background: #ececec; border-color: #c8c4c6; }
+  .sr-leave-cell.past { opacity: 0.6; }
+  .sr-leave-cell.today { outline: 2px solid var(--burgundy); outline-offset: 1px; }
+  .sr-leave-daynum { font-size: 0.72rem; font-weight: 700; color: var(--charcoal); line-height: 1; }
+  .sr-leave-cell.free .sr-leave-daynum { color: var(--muted); font-weight: 600; }
+  .sr-leave-cell.annual .sr-leave-daynum { color: #7a5500; }
+  .sr-leave-mark { font-size: 0.6rem; font-weight: 900; line-height: 1; min-height: 0.6rem; color: #7a5500; }
+  .sr-leave-cell.other .sr-leave-mark { color: #5a5457; }
+  .sr-leave-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.85rem; padding-top: 0.75rem; margin-top: 0.75rem; border-top: 1px solid var(--border); font-size: 0.7rem; font-weight: 700; color: var(--muted); }
+  .sr-leave-legend span { display: flex; align-items: center; gap: 0.35rem; }
+  .sr-leave-legend i.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .sr-leave-legend i.sw.annual { background: #fef0b0; border: 1.5px solid #f5c030; }
+  .sr-leave-legend i.sw.other { background: #ececec; border: 1.5px solid #c8c4c6; }
+  .sr-leave-legend-hint { font-weight: 600; opacity: 0.8; }
+  .sr-leave-listhdr { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 1.4rem 0 0.6rem; }
+  .sr-leave-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.35rem; border-bottom: 1px solid rgba(234,217,220,0.6); border-left: 3px solid #f5c030; padding-left: 0.7rem; }
+  .sr-leave-row:last-child { border-bottom: none; }
+  .sr-leave-row-name { flex: 1; font-size: 0.85rem; font-weight: 700; color: var(--charcoal); }
+  .sr-leave-row-when { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .sr-leave-row-days { font-size: 0.7rem; font-weight: 800; color: #7a5500; background: #fef0b0; border-radius: 20px; padding: 0.12rem 0.45rem; white-space: nowrap; }
+  .sr-leave-none { text-align: center; padding: 1.5rem 1rem; color: var(--muted); font-size: 0.82rem; font-weight: 600; }
+  .sr-leave-othernote { margin-top: 0.75rem; font-size: 0.74rem; font-weight: 600; color: var(--muted); text-align: center; line-height: 1.5; }
+
   .sr-gnow-mobile { display: none; }
   .sr-gnow-mobile-group { margin-bottom: 1.25rem; }
   .sr-gnow-mobile-role-hdr { display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.5rem; padding: 0 0.1rem; }
@@ -900,6 +940,14 @@
   .sr-gnow-mobile-row.on-now { border-color: transparent; }
   .sr-gnow-mobile-row.coming-up { opacity: 0.7; }
   .sr-gnow-mobile-row.finished { opacity: 0.4; }
+  /* Leave fades the TEXT, never the row. coming-up/finished above can safely
+     drop the whole card's opacity because their meaning is carried by position
+     in a list that is already in time order. Leave's meaning is carried by the
+     gold, and fading the card washes the gold toward the grey that means every
+     OTHER leave type — collapsing the one distinction this is drawn to make. */
+  .sr-gnow-mobile-row.on-leave .sr-gnow-mobile-name,
+  .sr-gnow-mobile-row.on-leave .sr-gnow-mobile-time { color: var(--muted); }
+  .sr-gnow-mobile-row.on-leave .sr-gnow-mobile-bar-fill { opacity: 0.45; }
   .sr-gnow-mobile-top { display: flex; align-items: center; gap: 0.75rem; }
   .sr-gnow-mobile-name { font-size: 0.9rem; font-weight: 700; color: var(--charcoal); flex: 1; }
   .sr-gnow-mobile-time { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
@@ -1550,6 +1598,15 @@
     /* ── Now view: swap Gantt for card list ── */
     .sr-gnow { display: none; }
     .sr-gnow-mobile { display: block; padding: 1rem 0.75rem; overflow-y: auto; }
+    /* 7 columns at 390px leaves roughly 48px a cell — room for a block and a
+       count, never for a name. The names live in the list underneath. */
+    .sr-leave-card { padding: 0.6rem; }
+    .sr-leave-grid { gap: 0.22rem; }
+    .sr-leave-cell { height: auto; aspect-ratio: 1; }
+    .sr-leave-daynum { font-size: 0.68rem; }
+    .sr-leave-row { padding: 0.6rem 0.35rem 0.6rem 0.7rem; gap: 0.5rem; }
+    .sr-leave-row-name { font-size: 0.82rem; }
+    .sr-leave-row-when { font-size: 0.72rem; }
     #view-staff-roster.sr-now-mode { height: auto; overflow: visible; }
     #view-staff-roster.sr-now-mode .sr-content { overflow: visible; min-height: 0; }
 
@@ -1904,6 +1961,10 @@
           <span class="sr-lp-radio" id="sr-lp-radio-person"></span>
           <span class="sr-lp-label">Person</span>
         </div>
+        <div class="sr-lp-row" onclick="srPickLayout('leave')">
+          <span class="sr-lp-radio" id="sr-lp-radio-leave"></span>
+          <span class="sr-lp-label">Leave</span>
+        </div>
       </div>
     </div>
     <div id="sr-header-title" onclick="showView('kiosk')">Who's On</div>
@@ -1928,6 +1989,7 @@
       <button class="sr-layout-btn" id="sr-btn-fortnight" onclick="srSetLayout('fortnight')">Fortnight</button>
       <button class="sr-layout-btn active" id="sr-btn-day" onclick="srSetLayout('day')">Day</button>
       <button class="sr-layout-btn" id="sr-btn-person" onclick="srSetLayout('person')">Person</button>
+      <button class="sr-layout-btn" id="sr-btn-leave" onclick="srSetLayout('leave')">Leave</button>
     </div>
     <div class="sr-header-spacer"></div>
     <button class="admin-kiosk-btn" id="sr-kiosk-btn" onclick="showView('kiosk')" style="flex-shrink:0;">← Return to Kiosk</button>
@@ -7676,9 +7738,55 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
   }catch(err){showToast('Could not save leave');console.error(err);}
 }
 
+/* The leave entry covering a rostered BLOCK, or null.
+
+   Matched by shift_id first, then the legacy employee+date fallback for rows
+   written before leave carried one. Day-wide matching was tolerable while the
+   answer was a boolean — "on leave at some point today" and "on leave for this
+   block" agree on every ordinary day. It stops being tolerable now that the
+   TYPE is displayed: a split shift can carry leave on one block and work on the
+   other (Sue Mckellar, 18 May and 15 Jun 2026), and a day-wide lookup would
+   label the worked block with the other block's leave type.
+
+   A row belonging to a DIFFERENT block is deliberately not matched, which is
+   what makes that case come out right. */
+function leaveEntryFor(empId, date, shiftId){
+  const es=_entries||[];
+  const mine=e=>String(e.employeeId)===String(empId)&&e.date===date&&e.leaveType&&!e.deleted;
+  if(shiftId!=null&&shiftId!==''){
+    return es.find(e=>String(e.shiftId)===String(shiftId)&&mine(e))
+        || es.find(e=>!e.shiftId&&mine(e))
+        || null;
+  }
+  return es.find(mine)||null;
+}
+
 function isOnLeave(empId, date){
-  if(_entries.length) return _entries.some(e=>e.employeeId===empId&&e.date===date&&e.leaveType&&!e.deleted);
+  if(_entries.length) return !!leaveEntryFor(empId,date,null);
   return _rosterShifts.some(s=>s.employee_id===empId&&s.date===date&&s.on_leave);
+}
+
+/* How leave is drawn, everywhere staff can see it. One object per treatment so
+   the five Who's On surfaces cannot drift apart again — which is exactly what
+   happened when leave was retrofitted on 8 Apr 2026 and the mobile card list
+   inside srByDayGantt was missed, leaving people on leave badged "On now" on
+   every phone for five months.
+
+   ANNUAL leave is named; every other type is not. Staff need to see planned
+   absence to plan around it, and annual leave is the only type reqSubmitLeave
+   blocks on. They do not need to know who is on personal or compassionate
+   leave, and the Who's On PIN is shared across the clinic.
+
+   The gold is #f5c030 — the same gold .rb-shift-bar.annual-leave already uses
+   in the roster builder, so the admin board and the staff board cannot mean
+   different things by the same colour. */
+const SR_LEAVE_ANNUAL={bar:'#f5c030', barText:'#3d2600', pill:'#fef0b0', pillText:'#7a5500', tag:'Annual Leave', tagBg:'#f5c030', tagText:'#3d2600'};
+const SR_LEAVE_OTHER ={bar:'#c8c4c6', barText:'var(--muted)', pill:'rgba(180,180,180,0.13)', pillText:'#8d8589', tag:'On Leave', tagBg:'#c8c4c6', tagText:'#413b3d'};
+
+function srLeaveLook(empId, date, shiftId){
+  const ent=leaveEntryFor(empId,date,shiftId);
+  if(!ent) return null;
+  return ent.leaveType==='annual_leave'?SR_LEAVE_ANNUAL:SR_LEAVE_OTHER;
 }
 
 /* ═══════════════════════════════════════════
@@ -8293,6 +8401,7 @@ function testScanReq(){
    STAFF ROSTER VIEW (public)
 ═══════════════════════════════════════════ */
 let srOffset=0, srRoles=new Set(['Receptionist','Nurse','Manager']), srLayout='day', _srDnMap={};
+let srLeaveMonth=null; // 'YYYY-MM' — the Leave layout's period, set on first open
 let srDayDate='';
 let teamRoles=new Set(['Receptionist','Nurse','Manager','Doctor']);
 function teamToggleRole(role,btn){
@@ -8493,15 +8602,21 @@ async function showStaffRoster(){
   clearInterval(_srRefreshInterval); _srRefreshInterval=null;
   srOffset=0;
   try{
-    const [emps,shifts,fortnights,config,entries]=await Promise.all([
+    /* `requests` joins the load for the Leave layout. It is the only source of
+       leave approved for a fortnight nobody has built yet — that leave has no
+       entry anywhere, and it is exactly what a colleague picking dates needs to
+       see. Failure is tolerated: the rest of Who's On predates this and must
+       still render without it. */
+    const [emps,shifts,fortnights,config,entries,reqs]=await Promise.all([
       _emps.length?Promise.resolve(_emps):db.get('employees'),
       db.get('roster_shifts'),
       _rosterFortnights.length?Promise.resolve(_rosterFortnights):db.get('roster_fortnights'),
       _rosterConfig?Promise.resolve(_rosterConfig):db.get('roster_config').then(r=>r[0]||null),
-      db.get('entries')
+      db.get('entries'),
+      db.get('requests').catch(()=>[])
     ]);
     _emps=emps.filter(e=>e.active!==false); _rosterShifts=shifts; _rosterFortnights=fortnights; _rosterConfig=config;
-    _entries=entries.map(normaliseEntry);
+    _entries=entries.map(normaliseEntry); _requests=(reqs||[]).map(normaliseRequest);
   }catch(e){ console.error('Could not load roster data',e); }
   // Reset filters to defaults every time the page is opened
   srRoles=new Set(['Receptionist','Nurse','Manager']);
@@ -8525,8 +8640,8 @@ async function showStaffRoster(){
   requestAnimationFrame(srSyncRightWidth);
   _srRefreshInterval=setInterval(async()=>{
     try{
-      const [emps,shifts,fortnights,phs,entries]=await Promise.all([db.get('employees'),db.get('roster_shifts'),db.get('roster_fortnights'),db.get('public_holidays').catch(()=>[]),db.get('entries')]);
-      _emps=emps.filter(e=>e.active!==false); _rosterShifts=shifts; _rosterFortnights=fortnights; _publicHolidays=new Set((phs||[]).map(r=>r.date)); _entries=entries.map(normaliseEntry);
+      const [emps,shifts,fortnights,phs,entries,reqs]=await Promise.all([db.get('employees'),db.get('roster_shifts'),db.get('roster_fortnights'),db.get('public_holidays').catch(()=>[]),db.get('entries'),db.get('requests').catch(()=>[])]);
+      _emps=emps.filter(e=>e.active!==false); _rosterShifts=shifts; _rosterFortnights=fortnights; _publicHolidays=new Set((phs||[]).map(r=>r.date)); _entries=entries.map(normaliseEntry); _requests=(reqs||[]).map(normaliseRequest);
     }catch(e){}
     renderStaffRoster();
   },SR_REFRESH_MS);
@@ -8536,11 +8651,17 @@ function srNav(dir){
   if(srLayout==='day'){
     const d=new Date(srDayDate+'T12:00:00'); d.setDate(d.getDate()+dir);
     srDayDate=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  } else if(srLayout==='leave'){
+    // Mobile hides Prev/Next and the date picker entirely, so on a phone this
+    // is reached only by the swipe gesture — which is the whole reason the
+    // Leave layout is a vertical month rather than a scrolling timeline.
+    srLeaveMonth=srMonthShift(srLeaveMonth||srMonthKey(new Date()),dir);
   } else { srOffset+=dir; }
   renderStaffRoster();
 }
 function srGoToday(){
   const t=new Date();
+  if(srLayout==='leave'){ srLeaveMonth=srMonthKey(t); renderStaffRoster(); return; }
   srDayDate=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   srOffset=0; renderStaffRoster();
 }
@@ -8751,11 +8872,12 @@ function srSetLayout(layout){
   const SR_LAYOUT_ICONS={
     fortnight:`<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 7h14" stroke="currentColor" stroke-width="1.5"/><path d="M6 2v2M12 2v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><text x="9" y="13.5" text-anchor="middle" font-size="6" font-weight="700" fill="currentColor" font-family="sans-serif">14</text></svg>`,
     day:`<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M9 5.5V9l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    person:`<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6.5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M3 15.5c0-3.314 2.686-5 6-5s6 1.686 6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`
+    person:`<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="6.5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M3 15.5c0-3.314 2.686-5 6-5s6 1.686 6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+    leave:`<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 7h14" stroke="currentColor" stroke-width="1.5"/><path d="M6 2v2M12 2v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6.5" cy="11" r="1.3" fill="currentColor"/><circle cx="11.5" cy="11" r="1.3" fill="currentColor"/></svg>`
   };
   const pillIcon=document.getElementById('sr-layout-pill-icon');
   if(pillIcon) pillIcon.innerHTML=SR_LAYOUT_ICONS[layout]||SR_LAYOUT_ICONS.day;
-  ['fortnight','day','person'].forEach(l=>document.getElementById('sr-lp-radio-'+l)?.classList.toggle('active',l===layout));
+  ['fortnight','day','person','leave'].forEach(l=>document.getElementById('sr-lp-radio-'+l)?.classList.toggle('active',l===layout));
 
   const _tnNow=new Date();
   const todayStr=`${_tnNow.getFullYear()}-${String(_tnNow.getMonth()+1).padStart(2,'0')}-${String(_tnNow.getDate()).padStart(2,'0')}`;
@@ -8768,11 +8890,14 @@ function srSetLayout(layout){
     }
     srDayDate=todayStr; // switching to day view always lands on today
   }
+  // Entering Leave always lands on the current month, the way Day lands on today.
+  if(layout==='leave'&&srLayout!=='leave') srLeaveMonth=srMonthKey(_tnNow);
   srLayout=layout;
   clearInterval(_srNowLineInterval); _srNowLineInterval=null;
   document.getElementById('sr-btn-fortnight').classList.toggle('active',layout==='fortnight');
   document.getElementById('sr-btn-day').classList.toggle('active',layout==='day');
   document.getElementById('sr-btn-person').classList.toggle('active',layout==='person');
+  document.getElementById('sr-btn-leave')?.classList.toggle('active',layout==='leave');
   document.getElementById('sr-filters-group').style.display=layout==='person'?'none':'';
   // Mobile filter btn: switch mode based on layout
   const mfWrap=document.getElementById('sr-filter-wrap');
@@ -8822,6 +8947,14 @@ function renderStaffRoster(){
         if(badge) badge.textContent=isPast?'Closed':'Not open';
       });
     }
+    return;
+  }
+  if(srLayout==='leave'){
+    if(!srLeaveMonth) srLeaveMonth=srMonthKey(_tn);
+    const label=srMonthLabel(srLeaveMonth);
+    document.getElementById('sr-period-label').textContent=label;
+    document.getElementById('sr-layout-pill-period').textContent=label;
+    document.getElementById('sr-content').innerHTML=srByLeave(srLeaveMonth,today);
     return;
   }
   const fn1Start=getFortnightStart(srOffset);
@@ -8877,7 +9010,9 @@ function srRenderFortnight(startStr, days, emps, published, today){
 
 function srShiftForEmp(empId,date){
   const shift=_rosterShifts.find(s=>s.employee_id===empId&&s.date===date);
-  if(shift){if(shift.is_day_off)return'off';if(shift.start_time&&shift.end_time)return{start:shift.start_time,end:shift.end_time,lane:shift.lane||null};}
+  // `id` is carried so srLeaveLook can match leave to THIS block rather than to
+  // the day. Every caller spreads or reads named fields, so it is additive.
+  if(shift){if(shift.is_day_off)return'off';if(shift.start_time&&shift.end_time)return{id:shift.id,start:shift.start_time,end:shift.end_time,lane:shift.lane||null};}
   return null;
 }
 
@@ -8928,14 +9063,15 @@ function teamPresenceHtml(today, inNow, doneNow){
     const pills=roleShifts.map(({emp,shift})=>{
       const isIn=inNow.has(emp.id);
       const isDone=doneNow.has(emp.id);
-      const onLeave=isOnLeave(emp.id,today);
+      const look=srLeaveLook(emp.id,today,shift.id);
+      const onLeave=!!look;
       const _roleP=SR_ROLE_PILL[role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'};
-      const p=onLeave?{bg:_roleP.bg,color:'#b0a8ac'}:_roleP;
+      const p=onLeave?{bg:look.pill,color:look.pillText}:_roleP;
       const sMin=gnowToMin(shift.start);
       const eMin=gnowToMin(shift.end);
       const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
       const wPct=((eMin-sMin)/TL_RANGE*100).toFixed(1);
-      const tooltip=onLeave?`On leave (${shift.start.slice(0,5)}–${shift.end.slice(0,5)})`:`${shift.start.slice(0,5)}–${shift.end.slice(0,5)}`;
+      const tooltip=onLeave?`${look.tag} (${shift.start.slice(0,5)}–${shift.end.slice(0,5)})`:`${shift.start.slice(0,5)}–${shift.end.slice(0,5)}`;
       const name=dnMap[emp.id]||empFirstName(emp);
       const dot=`<span class="tp-dot ${isIn?'tp-dot-in':'tp-dot-out'}"></span>`;
       const bar=`<div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div>`;
@@ -8947,6 +9083,16 @@ function teamPresenceHtml(today, inNow, doneNow){
   return groups.join('');
 }
 
+/* RENDERS THE SAME PEOPLE TWICE. A desktop Gantt (.sr-gnow) and a mobile card
+   list (.sr-gnow-mobile), both returned every call, with CSS picking one at
+   960px. It does not look like two renderers — it is one function — which is
+   why leave handling was added to the desktop rows on 8 Apr 2026 and not to the
+   cards forty lines below, and why every phone badged staff on approved leave
+   as "On now" until 20 Sep 2026.
+
+   Any per-person state added here belongs in BOTH loops. Prefer computing it
+   once above them, the way srLeaveLook is called in each — if the two ever need
+   to disagree, that should be a visible decision rather than an oversight. */
 function srByDayGantt(dateStr, today){
   const ROLE_ORDER=['Receptionist','Nurse','Manager'];
   const ROLE_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
@@ -8968,27 +9114,30 @@ function srByDayGantt(dateStr, today){
       .filter(x=>x.shift&&x.shift!=='off')
       .sort((a,b)=>a.shift.start.localeCompare(b.shift.start));
     const rows=roleShifts.map(({emp,shift})=>{
-      const onLeave=isOnLeave(emp.id,dateStr);
+      const look=srLeaveLook(emp.id,dateStr,shift.id);
+      const onLeave=!!look;
       const startMin=gnowToMin(shift.start);
       const endMin=gnowToMin(shift.end);
       const left=gnowPct(startMin);
       const width=gnowPct(endMin)-left;
       const name=_srDnMap[emp.id]||empFirstName(emp);
       const isSecondaryLane=!onLeave&&(shift.lane==='75plus'||shift.lane==='admin');
-      const laneTag=shift.lane==='75plus'?' · clinic':shift.lane==='admin'?' · admin':'';
+      const laneTag=onLeave?'':(shift.lane==='75plus'?' · clinic':shift.lane==='admin'?' · admin':'');
       const isPlaceholder=!!emp.is_placeholder;
-      const barBg=isPlaceholder?'#e67e22':onLeave?'#c8c4c6':roleBar.bg;
-      const barText=isPlaceholder?'#fff':onLeave?'var(--muted)':roleBar.text;
+      const barBg=isPlaceholder?'#e67e22':onLeave?look.bar:roleBar.bg;
+      const barText=isPlaceholder?'#fff':onLeave?look.barText:roleBar.text;
       const barFilter=isSecondaryLane?'filter:brightness(0.78);':'';
       const nameStyle=onLeave?'color:var(--muted);':'';
-      const tooltip=`${name}: ${shift.start}–${shift.end}${laneTag}`;
+      // Said on the bar, not only in the tooltip: a touch device never hovers,
+      // and colour alone has to survive being looked at by somebody colour-blind.
+      const tooltip=`${name}: ${shift.start}–${shift.end}${laneTag}${onLeave?' · '+look.tag:''}`;
       const rowPill=SR_ROLE_PILL[role]||{bg:'transparent'};
       return`<div class="sr-gnow-row" style="background:${rowPill.bg}">
         <div class="sr-gnow-row-name" style="${nameStyle}">${name}</div>
         <div class="sr-gnow-track">
           <div class="sr-gnow-bar" style="left:${left.toFixed(2)}%;width:${Math.max(0,width).toFixed(2)}%;background:${barBg};color:${barText};${barFilter}" data-tooltip="${tooltip}">
             <span class="sr-gnow-bar-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}${laneTag}</span>
-            <span class="sr-gnow-bar-name">${name}</span>
+            <span class="sr-gnow-bar-name${onLeave?' leave-tag':''}">${onLeave?look.tag.toUpperCase():name}</span>
           </div>
         </div>
       </div>`;
@@ -9014,17 +9163,26 @@ function srByDayGantt(dateStr, today){
       const startMin=gnowToMin(shift.start);
       const endMin=gnowToMin(shift.end);
       const name=_srDnMap[emp.id]||empFirstName(emp);
-      const onNow=isToday&&nowMin>=startMin&&nowMin<endMin;
-      const finished=isToday&&nowMin>=endMin;
+      /* Leave wins over the clock. This block is a second, independent render
+         of the same people as the desktop rows above — see the note on
+         srByDayGantt — and it is the half that had no leave handling, so
+         somebody on approved leave was drawn in full role colour and badged
+         "On now", which is the one thing it could say that was flatly untrue. */
+      const look=srLeaveLook(emp.id,dateStr,shift.id);
+      const onLeave=!!look;
+      const onNow=!onLeave&&isToday&&nowMin>=startMin&&nowMin<endMin;
+      const finished=!onLeave&&isToday&&nowMin>=endMin;
       const isMobPlaceholder=!!emp.is_placeholder;
-      const statusClass=onNow?'on-now':finished?'finished':'coming-up';
+      const statusClass=onLeave?'on-leave':onNow?'on-now':finished?'finished':'coming-up';
       const badge=isMobPlaceholder
         ?`<span class="sr-gnow-mobile-badge" style="background:#fdebd0;color:#e67e22;">Cover needed</span>`
+        :onLeave?`<span class="sr-gnow-mobile-badge" style="background:${look.tagBg};color:${look.tagText};">${look.tag}</span>`
         :onNow?`<span class="sr-gnow-mobile-badge" style="background:${roleBar.bg};color:${roleBar.text};">On now</span>`:'';
       const rowStyle=isMobPlaceholder
         ?`style="border-left:3px solid #e67e22;border-color:#e67e2266;"`
+        :onLeave?`style="background:${look.pill};border-color:${look.bar}88;"`
         :onNow?`style="background:${roleBar.bg}33;border-color:${roleBar.bg}88;"`:'';
-      const barFill=isMobPlaceholder?'#e67e22':roleBar.bg;
+      const barFill=isMobPlaceholder?'#e67e22':onLeave?look.bar:roleBar.bg;
       const barLeft=gnowPct(startMin).toFixed(1);
       const barWidth=(gnowPct(endMin)-gnowPct(startMin)).toFixed(1);
       return`<div class="sr-gnow-mobile-row ${statusClass}" ${rowStyle}>
@@ -9072,13 +9230,13 @@ function srByDay(days,emps,today){
     shifts.sort((a,b)=>(SR_ROLE_ORDER[a.emp.role]??9)-(SR_ROLE_ORDER[b.emp.role]??9)||a.shift.start.localeCompare(b.shift.start));
     const items=shifts.length
       ?shifts.map(({emp,shift})=>{
-        const onLeave=isOnLeave(emp.id,date);
-        const p=emp.is_placeholder?{bg:'rgba(230,126,34,0.15)',color:'#c0622a'}:onLeave?{bg:'rgba(180,180,180,0.13)',color:'#b0a8ac'}:(SR_ROLE_PILL[emp.role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
+        const look=srLeaveLook(emp.id,date,shift.id);
+        const p=emp.is_placeholder?{bg:'rgba(230,126,34,0.15)',color:'#c0622a'}:look?{bg:look.pill,color:look.pillText}:(SR_ROLE_PILL[emp.role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
         const sMin=timeStrToMin(shift.start)||TL_START;
         const eMin=timeStrToMin(shift.end)||TL_END;
         const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
         const wPct=((eMin-sMin)/TL_RANGE*100).toFixed(1);
-        const tooltip=`${shift.start}–${shift.end}`;
+        const tooltip=`${shift.start}–${shift.end}${look?' · '+look.tag:''}`;
         return`<div class="sr-shift-pill" style="background:${p.bg};color:${p.color}" data-tooltip="${tooltip}"><span class="sr-shift-pill-name">${_srDnMap[emp.id]||empFirstName(emp)}</span><div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div></div>`;
       }).join('')
       :`<div class="sr-no-staff">No staff scheduled</div>`;
@@ -9102,14 +9260,178 @@ function srByPerson(days,emps,today){
       const d=new Date(date+'T12:00:00');
       const isToday=date===today;
       const shift=srShiftForEmp(emp.id,date);
-      const onLeave=shift&&shift!=='off'&&isOnLeave(emp.id,date);
+      const look=(shift&&shift!=='off')?srLeaveLook(emp.id,date,shift.id):null;
       const laneLabel=shift&&shift!=='off'?(shift.lane==='75plus'?' (clinic)':shift.lane==='admin'?' (admin)':''):'';
-      const timeCell=!shift?`<span class="sr-person-day-off">—</span>`:shift==='off'?`<span class="sr-person-day-off">Day off</span>`:onLeave?`<span class="sr-person-day-time" style="color:#b0a8ac;">${shift.start} – ${shift.end} · Not in</span>`:`<span class="sr-person-day-time">${shift.start} – ${shift.end}${laneLabel}</span>`;
+      // "Not in" said nothing about why. The leave tag replaces it: named for
+      // annual leave, deliberately unnamed for every other type.
+      const timeCell=!shift?`<span class="sr-person-day-off">—</span>`:shift==='off'?`<span class="sr-person-day-off">Day off</span>`:look?`<span class="sr-person-day-time" style="color:${look.pillText};">${shift.start} – ${shift.end} · ${look.tag}</span>`:`<span class="sr-person-day-time">${shift.start} – ${shift.end}${laneLabel}</span>`;
       return`<div class="sr-person-day${isToday?' today-row':''}"><div class="sr-person-day-label"><div class="sr-person-day-name">${SR_DAYS[d.getDay()].slice(0,3)}${isToday?' ·':''}</div><div class="sr-person-day-date">${d.getDate()} ${SR_MONTHS[d.getMonth()].slice(0,3)}</div></div>${timeCell}</div>`;
     }).join('');
     return`<div class="sr-person-card"><div class="sr-person-header"><div class="sr-person-avatar ${roleClass}">${initials}</div><div><div class="sr-person-name">${emp.name}</div><div class="sr-person-role">${emp.role}</div></div></div><div class="sr-person-days">${dayRows}</div></div>`;
   }).join('');
   return`<div class="sr-person-list">${cards}</div>`;
+}
+
+/* ═══════════════════════════════════════════
+   WHO'S ON — LEAVE
+
+   Built because the only thing that ever told staff their dates were taken was
+   reqSubmitLeave refusing the request. The conflict check there is a hard block
+   scoped to the role group (nurses pooled across Registered and Enrolled), so
+   somebody could pick dates, write a reason, tick the confirmation and only
+   then discover a colleague had the week — with still no way to see which weeks
+   were free. This is that view.
+═══════════════════════════════════════════ */
+
+function srMonthKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function srMonthLabel(mk){
+  const [Y,M]=mk.split('-').map(Number);
+  return new Date(Y,M-1,1).toLocaleDateString('en-AU',{month:'long',year:'numeric'});
+}
+function srMonthShift(mk,delta){
+  const [Y,M]=mk.split('-').map(Number);
+  return srMonthKey(new Date(Y,M-1+delta,1));
+}
+
+/* Every span of leave overlapping a window, from BOTH sources — and it has to
+   be both.
+
+   Approved REQUESTS are the forward-looking half: leave approved for a
+   fortnight nobody has built yet has no entry anywhere, and that is precisely
+   the leave a colleague choosing dates needs to see. ENTRIES are the other
+   half: leave marked by hand from the roster dropdown never had a request at
+   all. A view built on either alone is silently missing real leave, and would
+   show as free a week that reqSubmitLeave then refuses.
+
+   Where both describe a day, the entry wins — it is what the roster and the
+   payroll actually did, rather than what was asked for.
+
+   Public holidays are excluded. They are a LEAVE_TYPES member and get marked
+   across everybody at once, so including them would paint the whole clinic gold
+   on Christmas Day and say nothing about who is available. */
+function srLeaveSpans(fromKey,toKey){
+  const byPerson=new Map();
+  const put=(empId,date,type)=>{
+    if(!type||type==='public_holiday') return;
+    if(date<fromKey||date>toKey) return;
+    let m=byPerson.get(String(empId));
+    if(!m){ m=new Map(); byPerson.set(String(empId),m); }
+    if(!m.has(date)) m.set(date,type);
+  };
+  (_entries||[]).forEach(e=>{ if(e.leaveType&&!e.deleted) put(e.employeeId,e.date,e.leaveType); });
+  (_requests||[]).forEach(r=>{
+    if(r.type!=='leave'||r.status!=='approved'||!r.leaveStartDate||!r.leaveEndDate) return;
+    const cur=new Date(r.leaveStartDate+'T12:00:00'), end=new Date(r.leaveEndDate+'T12:00:00');
+    let guard=0;
+    while(cur<=end&&guard++<400){ put(r.initiatorId,rbDateKey(cur),r.leaveType); cur.setDate(cur.getDate()+1); }
+  });
+  /* Contiguity by calendar arithmetic, never by subtracting two timestamps.
+     Melbourne changes clocks in October and April — both inside the window this
+     view is most used for — and across those days a noon-to-noon difference is
+     23 or 25 hours, so an === 86400000 test would split one leave range in two
+     on exactly the dates staff are looking at. */
+  const nextKey=k=>{ const d=new Date(k+'T12:00:00'); d.setDate(d.getDate()+1); return rbDateKey(d); };
+  const spans=[];
+  byPerson.forEach((m,empId)=>{
+    const emp=(_emps||[]).find(e=>String(e.id)===empId);
+    if(!emp||emp.is_placeholder) return;
+    let run=null;
+    [...m.keys()].sort().forEach(d=>{
+      const type=m.get(d);
+      if(run&&run.type===type&&nextKey(run.end)===d){ run.end=d; run.days++; return; }
+      if(run) spans.push(run);
+      run={empId,name:emp.name,role:emp.role,type,start:d,end:d,days:1,annual:type==='annual_leave'};
+    });
+    if(run) spans.push(run);
+  });
+  return spans.sort((a,b)=>a.start.localeCompare(b.start)||a.name.localeCompare(b.name));
+}
+
+function srByLeave(monthKey, today){
+  const [Y,M]=monthKey.split('-').map(Number);
+  const first=new Date(Y,M-1,1), last=new Date(Y,M,0);
+  const fromKey=rbDateKey(first), toKey=rbDateKey(last);
+  /* Fetched a month wider each way, then filtered to what overlaps. A range
+     running 28 Sep – 4 Oct is one span, and clipping it at the month boundary
+     would report it as two shorter ones in two different months. */
+  const spans=srLeaveSpans(rbDateKey(new Date(Y,M-2,1)), rbDateKey(new Date(Y,M+1,0)))
+    .filter(s=>srRoles.has(s.role)&&s.start<=toKey&&s.end>=fromKey);
+
+  // date -> {annual:[names], other:n}
+  const byDate=new Map();
+  spans.forEach(s=>{
+    const cur=new Date(s.start+'T12:00:00'), end=new Date(s.end+'T12:00:00');
+    let guard=0;
+    while(cur<=end&&guard++<400){
+      const k=rbDateKey(cur);
+      if(k>=fromKey&&k<=toKey){
+        let c=byDate.get(k); if(!c){ c={annual:[],other:0}; byDate.set(k,c); }
+        if(s.annual) c.annual.push(s.name); else c.other++;
+      }
+      cur.setDate(cur.getDate()+1);
+    }
+  });
+
+  const dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+    .map(d=>`<div class="sr-leave-dow">${d}</div>`).join('');
+  const startCol=first.getDay()===0?7:first.getDay();
+  const blanks=Array.from({length:startCol-1},()=>`<div class="sr-leave-cell blank"></div>`).join('');
+  const cells=[];
+  for(let day=1;day<=last.getDate();day++){
+    const key=rbDateKey(new Date(Y,M-1,day));
+    const c=byDate.get(key);
+    const total=c?c.annual.length+c.other:0;
+    const isToday=key===today;
+    const isPast=key<today;
+    const kind=!c?'free':c.annual.length?'annual':'other';
+    // Named only for annual, and only in the tooltip — the grid itself never
+    // prints a name, so it stays readable at 48px on a phone.
+    const tip=!c?'Nobody on leave'
+      :[c.annual.length?c.annual.join(', '):'', c.other?`${c.other} on leave`:'']
+        .filter(Boolean).join(' · ');
+    cells.push(`<div class="sr-leave-cell ${kind}${isToday?' today':''}${isPast?' past':''}" data-tooltip="${escHtml(tip)}">
+      <span class="sr-leave-daynum">${day}</span>
+      <span class="sr-leave-mark">${total>1?total:''}</span>
+    </div>`);
+  }
+
+  const annualSpans=spans.filter(s=>s.annual);
+  const otherDays=[...byDate.values()].reduce((n,c)=>n+(c.other?1:0),0);
+  /* The heading above the list already names the month and year, and repeating
+     "2026" on every row crowds the name off a 390px screen. Dropped only when it
+     matches the month on show — a span running into another year keeps it, which
+     is exactly where it carries information. */
+  const yr=' '+Y;
+  const trim=k=>{ const t=reqFmtDate(k); return t.endsWith(yr)?t.slice(0,-yr.length):t; };
+  const fmt=s=>s.start===s.end?trim(s.start):`${trim(s.start)} – ${trim(s.end)}`;
+  const list=annualSpans.length
+    ? annualSpans.map(s=>`<div class="sr-leave-row">
+        <span class="sr-leave-row-name">${escHtml(s.name)}</span>
+        <span class="sr-leave-row-when">${fmt(s)}</span>
+        <span class="sr-leave-row-days">${s.days}d</span>
+      </div>`).join('')
+    : `<div class="sr-leave-none">No annual leave booked this month.</div>`;
+  /* Other leave types are counted, never named or typed. Staff need to know a
+     day is covered thinner than it looks; they do not need to know who is
+     unwell. Annual leave is the only type reqSubmitLeave blocks on, so it is
+     also the only type that changes whether a request will be accepted. */
+  const otherNote=otherDays
+    ? `<div class="sr-leave-othernote">Other leave booked on ${otherDays} day${otherDays===1?'':'s'} — names and type not shown.</div>`
+    : '';
+
+  return `<div class="sr-leave">
+    <div class="sr-leave-card">
+      <div class="sr-leave-grid">${dow}${blanks}${cells.join('')}</div>
+      <div class="sr-leave-legend">
+        <span><i class="sw annual"></i>Annual leave</span>
+        <span><i class="sw other"></i>Other leave</span>
+        <span class="sr-leave-legend-hint">Number = people off that day</span>
+      </div>
+    </div>
+    <div class="sr-leave-listhdr">Annual leave in ${srMonthLabel(monthKey)}</div>
+    <div class="sr-leave-card">${list}</div>
+    ${otherNote}
+  </div>`;
 }
 
 function srCoverShiftsList(emp, today){
@@ -12666,6 +12988,9 @@ function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').re
       const d=new Date(srDayDate+'T12:00:00'); d.setDate(d.getDate()+dir);
       const adjDate=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       return srByDayGantt(adjDate, today);
+    }
+    if(srLayout==='leave'){
+      return srByLeave(srMonthShift(srLeaveMonth||srMonthKey(tn),dir), today);
     }
     const adjOffset=srOffset+dir;
     const adjStart=getFortnightStart(adjOffset);
