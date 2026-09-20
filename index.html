@@ -911,6 +911,13 @@
   .sr-leave-cell.annual { background: #fef0b0; border-color: #f5c030; }
   .sr-leave-cell.other { background: #ececec; border-color: #c8c4c6; }
   .sr-leave-cell.past { opacity: 0.6; }
+  /* A rostered shift with approved leave against it. Outlined, not recoloured:
+     the roster still has them on it, and painting it gold would assert a
+     resolution nobody has made. */
+  .sr-gnow-bar.leave-clash { box-shadow: inset 0 0 0 2px var(--burgundy); }
+  .sr-gnow-bar.leave-clash .sr-gnow-bar-name.leave-tag { color: var(--burgundy); }
+  .sr-gnow-mobile-row.leave-clash .sr-gnow-mobile-bar-fill { opacity: 0.4; }
+  .sr-shift-pill.leave-clash-pill { box-shadow: inset 0 0 0 1.5px rgba(139,37,53,0.55); }
   .sr-leave-cell.today { outline: 2px solid var(--burgundy); outline-offset: 1px; }
   .sr-leave-daynum { font-size: 0.72rem; font-weight: 700; color: var(--charcoal); line-height: 1; }
   .sr-leave-cell.free .sr-leave-daynum { color: var(--muted); font-weight: 600; }
@@ -7783,6 +7790,28 @@ function isOnLeave(empId, date){
 const SR_LEAVE_ANNUAL={bar:'#f5c030', barText:'#3d2600', pill:'#fef0b0', pillText:'#7a5500', tag:'Annual Leave', tagBg:'#f5c030', tagText:'#3d2600'};
 const SR_LEAVE_OTHER ={bar:'#c8c4c6', barText:'var(--muted)', pill:'rgba(180,180,180,0.13)', pillText:'#8d8589', tag:'On Leave', tagBg:'#c8c4c6', tagText:'#413b3d'};
 
+/* Approved leave the roster does not reflect — this person is still rostered to
+   work the day they were approved off.
+
+   Not a new contradiction: it has existed since the approval, because saying
+   yes to leave does not rub anybody off a roster, and often the roster for
+   those dates had not been built yet. What is new is that it is now VISIBLE
+   from two directions at once — the Leave layout reads the approval and says
+   they are off, while Day/Fortnight/Person read the roster and say they are
+   working. A staff member looking at both has no way to know which to believe,
+   so the shift itself has to say that it is unsettled.
+
+   The shift keeps its role colour on purpose. It is NOT leave — the roster
+   genuinely still has them on it, and drawing it gold would claim a resolution
+   nobody has made. It is a rostered shift with a question against it.
+
+   rbLeaveGapFor already draws this distinction for the roster builder; this is
+   the same call, reaching the staff-facing board for the first time. */
+function srLeaveClash(empId, date){
+  const gap=rbLeaveGapFor(empId,date);
+  return (gap&&gap.kind==='rostered')?gap:null;
+}
+
 function srLeaveLook(empId, date, shiftId){
   const ent=leaveEntryFor(empId,date,shiftId);
   if(!ent) return null;
@@ -8617,6 +8646,7 @@ async function showStaffRoster(){
     ]);
     _emps=emps.filter(e=>e.active!==false); _rosterShifts=shifts; _rosterFortnights=fortnights; _rosterConfig=config;
     _entries=entries.map(normaliseEntry); _requests=(reqs||[]).map(normaliseRequest);
+    rbInvalidateLeaveGaps();
   }catch(e){ console.error('Could not load roster data',e); }
   // Reset filters to defaults every time the page is opened
   srRoles=new Set(['Receptionist','Nurse','Manager']);
@@ -8642,6 +8672,7 @@ async function showStaffRoster(){
     try{
       const [emps,shifts,fortnights,phs,entries,reqs]=await Promise.all([db.get('employees'),db.get('roster_shifts'),db.get('roster_fortnights'),db.get('public_holidays').catch(()=>[]),db.get('entries'),db.get('requests').catch(()=>[])]);
       _emps=emps.filter(e=>e.active!==false); _rosterShifts=shifts; _rosterFortnights=fortnights; _publicHolidays=new Set((phs||[]).map(r=>r.date)); _entries=entries.map(normaliseEntry); _requests=(reqs||[]).map(normaliseRequest);
+      rbInvalidateLeaveGaps();
     }catch(e){}
     renderStaffRoster();
   },SR_REFRESH_MS);
@@ -9116,6 +9147,8 @@ function srByDayGantt(dateStr, today){
     const rows=roleShifts.map(({emp,shift})=>{
       const look=srLeaveLook(emp.id,dateStr,shift.id);
       const onLeave=!!look;
+      // Only when leave has NOT been applied — once it has, there is no clash.
+      const clash=!onLeave&&srLeaveClash(emp.id,dateStr);
       const startMin=gnowToMin(shift.start);
       const endMin=gnowToMin(shift.end);
       const left=gnowPct(startMin);
@@ -9130,14 +9163,14 @@ function srByDayGantt(dateStr, today){
       const nameStyle=onLeave?'color:var(--muted);':'';
       // Said on the bar, not only in the tooltip: a touch device never hovers,
       // and colour alone has to survive being looked at by somebody colour-blind.
-      const tooltip=`${name}: ${shift.start}–${shift.end}${laneTag}${onLeave?' · '+look.tag:''}`;
+      const tooltip=`${name}: ${shift.start}–${shift.end}${laneTag}${onLeave?' · '+look.tag:''}${clash?' · Approved leave — the roster has not been updated':''}`;
       const rowPill=SR_ROLE_PILL[role]||{bg:'transparent'};
       return`<div class="sr-gnow-row" style="background:${rowPill.bg}">
         <div class="sr-gnow-row-name" style="${nameStyle}">${name}</div>
         <div class="sr-gnow-track">
-          <div class="sr-gnow-bar" style="left:${left.toFixed(2)}%;width:${Math.max(0,width).toFixed(2)}%;background:${barBg};color:${barText};${barFilter}" data-tooltip="${tooltip}">
+          <div class="sr-gnow-bar${clash?' leave-clash':''}" style="left:${left.toFixed(2)}%;width:${Math.max(0,width).toFixed(2)}%;background:${barBg};color:${barText};${barFilter}" data-tooltip="${tooltip}">
             <span class="sr-gnow-bar-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}${laneTag}</span>
-            <span class="sr-gnow-bar-name${onLeave?' leave-tag':''}">${onLeave?look.tag.toUpperCase():name}</span>
+            <span class="sr-gnow-bar-name${onLeave||clash?' leave-tag':''}">${onLeave?look.tag.toUpperCase():clash?'LEAVE APPROVED':name}</span>
           </div>
         </div>
       </div>`;
@@ -9170,17 +9203,23 @@ function srByDayGantt(dateStr, today){
          "On now", which is the one thing it could say that was flatly untrue. */
       const look=srLeaveLook(emp.id,dateStr,shift.id);
       const onLeave=!!look;
-      const onNow=!onLeave&&isToday&&nowMin>=startMin&&nowMin<endMin;
-      const finished=!onLeave&&isToday&&nowMin>=endMin;
+      const clash=!onLeave&&srLeaveClash(emp.id,dateStr);
+      /* "On now" is a guess from the clock. With approved leave unreconciled
+         nobody knows whether they turned up, so the warning takes the slot
+         rather than sitting beside a claim it contradicts. */
+      const onNow=!onLeave&&!clash&&isToday&&nowMin>=startMin&&nowMin<endMin;
+      const finished=!onLeave&&!clash&&isToday&&nowMin>=endMin;
       const isMobPlaceholder=!!emp.is_placeholder;
-      const statusClass=onLeave?'on-leave':onNow?'on-now':finished?'finished':'coming-up';
+      const statusClass=onLeave?'on-leave':clash?'leave-clash':onNow?'on-now':finished?'finished':'coming-up';
       const badge=isMobPlaceholder
         ?`<span class="sr-gnow-mobile-badge" style="background:#fdebd0;color:#e67e22;">Cover needed</span>`
         :onLeave?`<span class="sr-gnow-mobile-badge" style="background:${look.tagBg};color:${look.tagText};">${look.tag}</span>`
+        :clash?`<span class="sr-gnow-mobile-badge" style="background:var(--burgundy);color:#fff;">Leave approved</span>`
         :onNow?`<span class="sr-gnow-mobile-badge" style="background:${roleBar.bg};color:${roleBar.text};">On now</span>`:'';
       const rowStyle=isMobPlaceholder
         ?`style="border-left:3px solid #e67e22;border-color:#e67e2266;"`
         :onLeave?`style="background:${look.pill};border-color:${look.bar}88;"`
+        :clash?`style="background:rgba(139,37,53,0.06);border-color:rgba(139,37,53,0.45);"`
         :onNow?`style="background:${roleBar.bg}33;border-color:${roleBar.bg}88;"`:'';
       const barFill=isMobPlaceholder?'#e67e22':onLeave?look.bar:roleBar.bg;
       const barLeft=gnowPct(startMin).toFixed(1);
@@ -9231,13 +9270,14 @@ function srByDay(days,emps,today){
     const items=shifts.length
       ?shifts.map(({emp,shift})=>{
         const look=srLeaveLook(emp.id,date,shift.id);
+        const clash=!look&&srLeaveClash(emp.id,date);
         const p=emp.is_placeholder?{bg:'rgba(230,126,34,0.15)',color:'#c0622a'}:look?{bg:look.pill,color:look.pillText}:(SR_ROLE_PILL[emp.role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
         const sMin=timeStrToMin(shift.start)||TL_START;
         const eMin=timeStrToMin(shift.end)||TL_END;
         const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
         const wPct=((eMin-sMin)/TL_RANGE*100).toFixed(1);
-        const tooltip=`${shift.start}–${shift.end}${look?' · '+look.tag:''}`;
-        return`<div class="sr-shift-pill" style="background:${p.bg};color:${p.color}" data-tooltip="${tooltip}"><span class="sr-shift-pill-name">${_srDnMap[emp.id]||empFirstName(emp)}</span><div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div></div>`;
+        const tooltip=`${shift.start}–${shift.end}${look?' · '+look.tag:''}${clash?' · Approved leave — the roster has not been updated':''}`;
+        return`<div class="sr-shift-pill${clash?' leave-clash-pill':''}" style="background:${p.bg};color:${p.color}" data-tooltip="${tooltip}"><span class="sr-shift-pill-name">${_srDnMap[emp.id]||empFirstName(emp)}</span><div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div></div>`;
       }).join('')
       :`<div class="sr-no-staff">No staff scheduled</div>`;
     const isPast=date<today;
@@ -9261,10 +9301,11 @@ function srByPerson(days,emps,today){
       const isToday=date===today;
       const shift=srShiftForEmp(emp.id,date);
       const look=(shift&&shift!=='off')?srLeaveLook(emp.id,date,shift.id):null;
+      const clash=(shift&&shift!=='off'&&!look)?srLeaveClash(emp.id,date):null;
       const laneLabel=shift&&shift!=='off'?(shift.lane==='75plus'?' (clinic)':shift.lane==='admin'?' (admin)':''):'';
       // "Not in" said nothing about why. The leave tag replaces it: named for
       // annual leave, deliberately unnamed for every other type.
-      const timeCell=!shift?`<span class="sr-person-day-off">—</span>`:shift==='off'?`<span class="sr-person-day-off">Day off</span>`:look?`<span class="sr-person-day-time" style="color:${look.pillText};">${shift.start} – ${shift.end} · ${look.tag}</span>`:`<span class="sr-person-day-time">${shift.start} – ${shift.end}${laneLabel}</span>`;
+      const timeCell=!shift?`<span class="sr-person-day-off">—</span>`:shift==='off'?`<span class="sr-person-day-off">Day off</span>`:look?`<span class="sr-person-day-time" style="color:${look.pillText};">${shift.start} – ${shift.end} · ${look.tag}</span>`:clash?`<span class="sr-person-day-time" title="Approved leave — the roster has not been updated">${shift.start} – ${shift.end} · <span style="color:var(--burgundy);font-weight:800;">Leave approved</span></span>`:`<span class="sr-person-day-time">${shift.start} – ${shift.end}${laneLabel}</span>`;
       return`<div class="sr-person-day${isToday?' today-row':''}"><div class="sr-person-day-label"><div class="sr-person-day-name">${SR_DAYS[d.getDay()].slice(0,3)}${isToday?' ·':''}</div><div class="sr-person-day-date">${d.getDate()} ${SR_MONTHS[d.getMonth()].slice(0,3)}</div></div>${timeCell}</div>`;
     }).join('');
     return`<div class="sr-person-card"><div class="sr-person-header"><div class="sr-person-avatar ${roleClass}">${initials}</div><div><div class="sr-person-name">${emp.name}</div><div class="sr-person-role">${emp.role}</div></div></div><div class="sr-person-days">${dayRows}</div></div>`;
