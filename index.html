@@ -12998,6 +12998,47 @@ function reqFmtDate(dateStr){
 function escHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 /* ═══════════════════════════════════════════
+   DATE INPUTS — dismiss the picker on choose
+
+   Picking a date from a native <input type="date"> calendar leaves the popup
+   sitting open, so every date filter in the app costs a second click somewhere
+   harmless just to shut it. Blurring the input dismisses it.
+
+   One delegated listener rather than fourteen inline handlers: there are two
+   date inputs in Who's On and the leave request form, ten across the five audit
+   filters, and two on the roster export, and any new one should get this for
+   free instead of being remembered.
+
+   TYPED dates are left alone. Chrome fires `change` on a date input as soon as
+   all three segments are complete, which for someone typing 2/1/2026 happens
+   the instant the year lands — moving focus there would eject them from the
+   field mid-correction. No picker was open in that case anyway, so there is
+   nothing to dismiss. A keystroke inside the field within the last 1.5s is the
+   signal that this was typing.
+
+   NOTE el.blur() DOES NOT WORK HERE and the obvious one-liner is a no-op.
+   Chrome renders a date input as a shadow DOM composite and the real focus sits
+   on an inner dd/mm/yyyy segment, which blur() on the host does not release —
+   checked against a bare, freshly created <input type="date"> with nothing
+   attached, where a plain text input in the same test blurred normally. So it
+   is the control, not this app. Moving focus elsewhere does work, and body has
+   to be made focusable for the one call because it is not by default.       */
+let _dateKeyedAt=0;
+document.addEventListener('keydown', e=>{
+  const el=e.target;
+  if(el instanceof HTMLInputElement && el.type==='date') _dateKeyedAt=Date.now();
+}, true);
+document.addEventListener('change', e=>{
+  const el=e.target;
+  if(!(el instanceof HTMLInputElement) || el.type!=='date') return;
+  if(Date.now()-_dateKeyedAt < 1500) return;
+  const b=document.body, had=b.hasAttribute('tabindex');
+  b.tabIndex=-1;
+  b.focus({preventScroll:true});
+  if(!had) b.removeAttribute('tabindex');
+});
+
+/* ═══════════════════════════════════════════
    SWIPE NAVIGATION (mobile) — drag-across
 ═══════════════════════════════════════════ */
 (function(){
