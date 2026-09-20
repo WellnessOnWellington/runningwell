@@ -1723,7 +1723,7 @@
       <button class="nav-btn" onclick="showView('login')" style="flex:1;">⚙️ Manager Login</button>
     </div>
   </div>
-  <div id="kiosk-build-credit" class="kiosk-build-credit">Built by Dr Joel Jaya · v1.9</div>
+  <div id="kiosk-build-credit" class="kiosk-build-credit">Built by Dr Joel Jaya · v3.0</div>
 </div>
 
 <!-- REQUESTS VIEW -->
@@ -4179,8 +4179,13 @@ function showLoading(on) {
   el.style.animationPlayState = on ? 'running' : 'paused';
 }
 
-const APP_VERSION='2.7';
-const APP_VERSION_DATE='August 2026';
+// These two are what the app actually displays: the DOMContentLoaded handler at the
+// bottom of this file overwrites BOTH the kiosk build credit and the About line from
+// them. The static text in the markup is only what shows before that handler runs, so
+// editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
+// v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
+const APP_VERSION='3.0';
+const APP_VERSION_DATE='September 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
 // beyond it, a gap decision is required before the shift can be locked or exported.
