@@ -139,7 +139,23 @@ else pushes normally.
   table of its own, because that is the only config the kiosk loads (on open and
   every 60s), so the clock-out break prompt and payroll agree; a separate table
   would repeat the `GRACE_BY_ROLE` bug and need its own policies, journal trigger
-  and backup entry.
+  and backup entry. The column holds `{rules:[...], log:[...]}` — the log is the
+  history of every rule ever set, kept beside the rules because a figure that
+  changes pay has to be answerable later, and there are single figures of them a
+  year. It renders in Analytics beside the other audit views.
+  **A rule in force cannot be deleted, only superseded** by a later one (30 min
+  ends it). Deleting a live rule would re-rate every day since it started — the
+  backdating fault pointed the other way — and would erase the reason the pay was
+  what it was. Both rules stay on file, each governing its own window, so past pay
+  stays reproducible. A rule that has not started has priced nothing and can go.
+
+- **`_isPartner()` is the only access tier, and Break Exceptions is the first
+  thing outside Manager Logins to use it.** `managers.role` is `'manager'` or
+  `'partner'`; the scaffolding predates this and already gates account management
+  in ~17 places. Break rules are partner-only: managers SEE the rules (a figure on
+  a timesheet should be explicable) but not the form, and `bxAdd`/`bxRemove`/`bxSave`
+  each re-check rather than trusting a hidden button. Note Eddie Lam is a
+  `manager`, so he cannot set his own break exception.
 
 - **Marking a public holiday is payroll data, not decoration.** It pays everyone
   who WORKED that day at the Public Holiday category instead of their weekday or

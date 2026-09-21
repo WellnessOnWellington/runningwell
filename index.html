@@ -2540,6 +2540,24 @@
         </div>
       </div>
 
+      <div class="settings-section" id="ss-bxlog">
+        <div class="settings-section-header" onclick="toggleSettingsSection('bxlog')">
+          <div class="settings-section-chevron" id="ss-chevron-bxlog">&#9658;</div>
+          <div style="flex:1;">
+            <div class="settings-section-title">Break Exception Log</div>
+            <div class="settings-section-hint">Every break rule ever set, changed or withdrawn, and by whom.</div>
+          </div>
+        </div>
+        <div class="settings-section-body" id="ss-body-bxlog" style="display:none;">
+          <div class="table-wrap">
+            <table class="timesheet-table">
+              <thead><tr><th>Logged</th><th>Action</th><th>Staff member</th><th>Break</th><th>Applies from</th><th>Reason</th><th>By</th></tr></thead>
+              <tbody id="bx-log-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <div id="tab-notes" class="tab-panel">
@@ -2653,7 +2671,10 @@
             </div>
             <div id="bx-list"></div>
           </div>
-          <div class="roster-section">
+          <div id="bx-gate" style="display:none;padding:0.85rem 1rem;background:var(--warm-white);border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:0.8rem;color:var(--muted);font-weight:600;line-height:1.5;">
+            Only partners can add or change break exceptions. The rules above are shown so the figures on a timesheet can be explained.
+          </div>
+          <div class="roster-section" id="bx-add-wrap">
             <div class="roster-section-title">Add an exception</div>
             <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;margin-top:0.5rem;">
               <div style="flex:2;min-width:180px;">
@@ -3710,11 +3731,16 @@ function applyRosterConfig(cfg){
      it here, and Object.assign onto the old array would leave it in force until
      the next full reload. Unparseable or absent means no exceptions, which is
      the standard 30 for everybody. */
-  BREAK_EXCEPTIONS=[];
+  BREAK_EXCEPTIONS=[]; BREAK_EXCEPTION_LOG=[];
   if(_rosterConfig?.break_exceptions){
     try{
       const parsed=JSON.parse(_rosterConfig.break_exceptions);
-      if(Array.isArray(parsed)) BREAK_EXCEPTIONS=parsed.filter(x=>x&&x.employeeId&&x.effectiveFrom&&x.unpaidBreakMins!=null);
+      // A bare array is the rules alone — tolerated so a hand-edited or older
+      // value still loads rather than silently leaving everyone on 30.
+      const rules=Array.isArray(parsed)?parsed:(parsed&&parsed.rules)||[];
+      const log=(!Array.isArray(parsed)&&parsed&&parsed.log)||[];
+      BREAK_EXCEPTIONS=rules.filter(x=>x&&x.employeeId&&x.effectiveFrom&&x.unpaidBreakMins!=null);
+      BREAK_EXCEPTION_LOG=Array.isArray(log)?log:[];
     }catch(e){ console.error('break_exceptions unparseable — ignoring',e); }
   }
 }
@@ -4310,6 +4336,11 @@ function normaliseNotif(r) {
    about 30 while payroll paid 24 — the same shape as the GRACE_BY_ROLE bug.
    It also needs no new RLS policies, journal trigger or backup entry.         */
 let BREAK_EXCEPTIONS=[];
+/* The history of every rule ever added or superseded, in the same column.
+   A break exception changes pay, so how it came to be in force has to be
+   answerable later — and the rules themselves are few enough (single figures
+   per year) that a table of their own would be more machinery than record. */
+let BREAK_EXCEPTION_LOG=[];
 
 /* The rule in force for this person on this date, or null.
    Later effectiveFrom wins when two overlap, so a rule can be superseded by
@@ -5471,6 +5502,7 @@ function switchTab(name,btn){
   if(name==='requests'){  renderRequests(); reqExpirySweep(); }
   if(name==='analytics'){ }
   if(name==='settings'){  renderManagersTab(); wosInitPinBoxes(); renderAnchorDate(); renderRequestSettings(); renderBreakExceptions(); }
+  if(name==='analytics'){ renderBreakExceptionLog(); }
 }
 
 /* ═══════════════════════════════════════════
@@ -11106,6 +11138,14 @@ function bxPaidFor(spanHours, mins){ return (spanHours-mins/60).toFixed(2); }
 function renderBreakExceptions(){
   const list=document.getElementById('bx-list');
   if(!list) return;
+  /* Partner-only. Managers can SEE the rules — a figure that changes pay should
+     not be invisible to the person reading a timesheet — but the form that
+     changes them is not rendered for them at all. bxSave checks again. */
+  const partner=_isPartner();
+  const addWrap=document.getElementById('bx-add-wrap');
+  if(addWrap) addWrap.style.display=partner?'':'none';
+  const gate=document.getElementById('bx-gate');
+  if(gate) gate.style.display=partner?'none':'';
   const sel=document.getElementById('bx-emp');
   if(sel&&sel.options.length<=1){
     [..._emps].filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name))
@@ -11133,9 +11173,40 @@ function renderBreakExceptions(){
           ${pending?'Starts':'In force since'} ${bxFmtDate(x.effectiveFrom)}
         </div>
         <div style="font-size:0.68rem;color:var(--muted);white-space:nowrap;">${escHtml(x.createdBy||'')}</div>
-        <button class="btn-ghost" style="padding:0.3rem 0.8rem;font-size:0.74rem;flex:0 0 auto;width:auto;min-width:0;" onclick="bxRemove('${escHtml(x.id)}')">Remove</button>
+        ${partner?`<button class="btn-ghost" style="padding:0.3rem 0.8rem;font-size:0.74rem;flex:0 0 auto;width:auto;min-width:0;" onclick="${pending?`bxRemove('${escHtml(x.id)}')`:`bxSupersede('${escHtml(x.id)}')`}" title="${pending?'Not started yet — can be removed':'In force — can only be superseded by a new rule from a later date'}">${pending?'Remove':'Supersede'}</button>`:''}
       </div>`;
     }).join('');
+}
+
+const BX_LOG_LABELS={added:'Added', superseded:'Superseded', removed_before_start:'Removed before it started'};
+
+/* Read straight from BREAK_EXCEPTION_LOG rather than fetched: it rides in
+   roster_config, which is already loaded everywhere this renders. Newest first,
+   the way every other audit view here reads. */
+function renderBreakExceptionLog(){
+  const body=document.getElementById('bx-log-body');
+  if(!body) return;
+  if(!BREAK_EXCEPTION_LOG.length){
+    body.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-msg">No break exceptions have ever been set.</div></div></td></tr>`;
+    return;
+  }
+  body.innerHTML=[...BREAK_EXCEPTION_LOG].sort((a,b)=>String(b.at||'').localeCompare(String(a.at||''))).map(r=>{
+    const when=r.at?new Date(r.at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+    const label=BX_LOG_LABELS[r.action]||r.action||'—';
+    const colour=r.action==='removed_before_start'?'var(--muted)':r.action==='superseded'?'#8a6000':'var(--success)';
+    // What it replaced matters more than what it is, for a superseding rule.
+    const detail=r.action==='superseded'&&r.supersedesMins!=null
+      ? `<div style="font-size:0.7rem;color:var(--muted);">was ${Number(r.supersedesMins)} min from ${bxFmtDate(r.supersedesFrom)}</div>` : '';
+    return `<tr>
+      <td style="font-size:0.78rem;color:var(--muted);white-space:nowrap;">${when}</td>
+      <td style="font-size:0.78rem;font-weight:700;color:${colour};">${label}</td>
+      <td><strong>${escHtml(r.employeeName||r.employeeId||'')}</strong></td>
+      <td style="white-space:nowrap;"><span class="mono">${Number(r.unpaidBreakMins)} min</span>${detail}</td>
+      <td style="font-size:0.78rem;white-space:nowrap;">${bxFmtDate(r.effectiveFrom)}</td>
+      <td style="font-size:0.78rem;color:var(--muted);">${escHtml(r.note||'—')}</td>
+      <td style="font-size:0.78rem;color:var(--muted);white-space:nowrap;">${escHtml(r.by||'')}</td>
+    </tr>`;
+  }).join('');
 }
 
 function bxPreview(){
@@ -11157,16 +11228,20 @@ function bxPreview(){
 /* Writes the whole array back. roster_config is a single row, so this is a
    read-modify-write; BREAK_EXCEPTIONS is the read, because applyRosterConfig
    keeps it in step with what was last saved. */
-async function bxSave(next, successMsg){
+async function bxSave(nextRules, nextLog, successMsg){
   if(!rwDbGuard())return false;
-  const patch={break_exceptions:JSON.stringify(next)};
+  /* Checked again here, not only in the UI. Hiding a button is a convenience;
+     this is the line that decides whether the write happens. */
+  if(!_isPartner()){ showToast('Only partners can change break exceptions'); return false; }
+  const patch={break_exceptions:JSON.stringify({rules:nextRules, log:nextLog.slice(-300)})};
   try{
     if(_rosterConfig) await db.update('roster_config','default',patch);
     else await db.insert('roster_config',{id:'default',...patch});
     if(!_rosterConfig) _rosterConfig={id:'default'};
     _rosterConfig.break_exceptions=patch.break_exceptions;
-    BREAK_EXCEPTIONS=next;
+    BREAK_EXCEPTIONS=nextRules; BREAK_EXCEPTION_LOG=nextLog;
     renderBreakExceptions();
+    renderBreakExceptionLog();
     renderTimesheets();
     showToast(successMsg);
     return true;
@@ -11180,7 +11255,18 @@ async function bxSave(next, successMsg){
   }
 }
 
+function bxLogEntry(action, rule, extra){
+  return Object.assign({
+    id:'BXL'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+    action, employeeId:rule.employeeId, employeeName:rule.employeeName,
+    unpaidBreakMins:rule.unpaidBreakMins, effectiveFrom:rule.effectiveFrom,
+    note:rule.note||null,
+    by:currentManager?.name||'Manager', at:new Date().toISOString(),
+  }, extra||{});
+}
+
 async function bxAdd(){
+  if(!_isPartner()){ showToast('Only partners can change break exceptions'); return; }
   const empId=document.getElementById('bx-emp')?.value;
   const mins=parseInt(document.getElementById('bx-mins')?.value,10);
   const from=document.getElementById('bx-from')?.value;
@@ -11218,7 +11304,11 @@ async function bxAdd(){
     unpaidBreakMins:mins, effectiveFrom:from, note:note||null,
     createdBy:currentManager?.name||'Manager', createdAt:new Date().toISOString(),
   };
-  const ok=await bxSave([...BREAK_EXCEPTIONS,row], `Break exception added for ${emp.name}`);
+  const today2=rbDateKey(new Date());
+  const supersedes=existing.filter(x=>x.effectiveFrom<=from).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]||null;
+  const log=[...BREAK_EXCEPTION_LOG, bxLogEntry(supersedes?'superseded':'added', row,
+    supersedes?{supersedesId:supersedes.id, supersedesMins:supersedes.unpaidBreakMins, supersedesFrom:supersedes.effectiveFrom}:null)];
+  const ok=await bxSave([...BREAK_EXCEPTIONS,row], log, `Break exception added for ${emp.name}`);
   if(ok){
     document.getElementById('bx-emp').value='';
     document.getElementById('bx-note').value='';
@@ -11228,21 +11318,49 @@ async function bxAdd(){
   }
 }
 
+/* A LIVE RULE CANNOT BE REMOVED — only superseded.
+
+   Deleting one that has already taken effect would silently re-rate every day
+   since it started, which is the same fault as backdating a rule, just pointed
+   the other way. It is also unrecoverable as a record: the pay was calculated
+   under that rule, and removing it leaves nothing saying why.
+
+   Ending a rule is therefore done by starting another — typically 30 minutes,
+   the standard — from the date it should stop. Both stay on file, the earlier
+   one still governing the dates it governed, which is what makes historical pay
+   reproducible.
+
+   A rule that has NOT started has priced nothing, so it can simply go. */
 async function bxRemove(id){
+  if(!_isPartner()){ showToast('Only partners can change break exceptions'); return; }
   const x=BREAK_EXCEPTIONS.find(r=>String(r.id)===String(id));
   if(!x){ showToast('Rule not found'); return; }
   const today=rbDateKey(new Date());
-  /* Removing a rule that is already in force un-rates the days since it started,
-     which is the mirror of the backdating problem — so it has to be said out
-     loud rather than treated as an undo. */
-  const live=x.effectiveFrom<=today;
+  if(x.effectiveFrom<=today){
+    showToast('A rule in force cannot be removed — supersede it instead');
+    bxSupersede(id);
+    return;
+  }
   if(!confirm(
     `Remove the ${Number(x.unpaidBreakMins)}-minute break exception for ${x.employeeName}?\n\n`+
-    (live
-      ? `It has been in force since ${bxFmtDate(x.effectiveFrom)}. Removing it returns them to the standard 30 minutes for EVERY date, including days since then that have not yet been exported — an 8h shift would go back to paying ${bxPaidFor(8,30)}h.\n\nIf you only want it to stop applying from now on, add a new rule of 30 minutes starting today instead.`
-      : `It has not started yet (${bxFmtDate(x.effectiveFrom)}), so no pay changes.`)+
-    `\n\nContinue?`)) return;
-  await bxSave(BREAK_EXCEPTIONS.filter(r=>String(r.id)!==String(id)), 'Break exception removed');
+    `It starts ${bxFmtDate(x.effectiveFrom)} and has not taken effect, so no pay changes.\n\nContinue?`)) return;
+  const log=[...BREAK_EXCEPTION_LOG, bxLogEntry('removed_before_start', x)];
+  await bxSave(BREAK_EXCEPTIONS.filter(r=>String(r.id)!==String(id)), log, 'Break exception removed');
+}
+
+/* Prefills the add form to end or change a live rule. Defaults to 30 — the
+   standard — because "stop treating them differently" is the common case, and
+   the manager can type another figure if they mean to change it instead. */
+function bxSupersede(id){
+  const x=BREAK_EXCEPTIONS.find(r=>String(r.id)===String(id));
+  if(!x) return;
+  const sel=document.getElementById('bx-emp'); if(sel) sel.value=x.employeeId;
+  const mins=document.getElementById('bx-mins'); if(mins) mins.value='30';
+  const from=document.getElementById('bx-from'); if(from) from.value=bxDefaultFrom();
+  const note=document.getElementById('bx-note');
+  if(note) note.value=`Supersedes the ${Number(x.unpaidBreakMins)}-minute rule from ${bxFmtDate(x.effectiveFrom)}`;
+  bxPreview();
+  document.getElementById('bx-emp')?.scrollIntoView({block:'center',behavior:'smooth'});
 }
 
 async function saveRosterTemplate(){
