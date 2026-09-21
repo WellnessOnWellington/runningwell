@@ -2525,6 +2525,9 @@
               <option value="manual_entry">Manual entry</option>
               <option value="adjustment">Adjustment</option>
               <option value="delete">Delete</option>
+              <option value="delete_roster_shift">Delete roster shift</option>
+              <option value="restore">Restore</option>
+              <option value="restore_roster_shift">Restore roster shift</option>
               <option value="lock">Lock</option>
             </select>
           </div>
@@ -6768,21 +6771,56 @@ async function tsDeleteRow(entryId, shiftId, empId, empName, date, e){
   }catch(err){showToast('Could not delete');console.error(err);}
 }
 
+/* Undo writes a RESTORE row; it does not erase the delete row.
+
+   It used to call db.delete('timesheet_audit', …), which has never removed
+   anything. That table grants the published key SELECT and INSERT only, so RLS
+   filters the row away, PostgREST deletes the zero rows it can see and returns
+   204, and the call reported success — the silent shape described in CLAUDE.md.
+
+   The policy is right and the call was wrong. An audit log that a manager can
+   edit by pressing Ctrl+Z is not an audit log, and this is the Fair Work record
+   of who changed whose hours. But the consequence was a trail that ONLY ever
+   said "deleted": an entry deleted and immediately restored left a delete row
+   with nothing recording the restore, so reading the log gave you the wrong
+   answer about what the timesheet now holds.
+
+   A compensating row is the standard fix for an append-only log, and it is
+   strictly more informative than the erasure ever was — it preserves the fact
+   that the delete happened, which a mistaken deletion of a paid shift is
+   exactly the thing you would want to see.
+
+   The delete row's id goes in the reason text rather than a column: there is no
+   related_id on timesheet_audit, and adding one would pull in the whole
+   four-step schema checklist for a cross-reference that reads fine as prose. */
 async function tsUndoDelete(){
   const item=_tsDeleteStack.pop();
   if(!item){showToast('Nothing to undo.');return;}
+  const mgr=currentManager?.name||'Manager';
+  const ref=id=>id?` (undoes audit ${id})`:'';
   try{
     if(item.entryId){
       await db.update('entries',item.entryId,{deleted:false});
       const cached=_entries.find(en=>String(en.id)===item.entryId);
       if(cached) cached.deleted=false;
       else if(item.entrySnapshot){item.entrySnapshot.deleted=false;_entries.push(item.entrySnapshot);}
-      if(item.entryAuditId) await db.delete('timesheet_audit',item.entryAuditId);
+      const en=cached||item.entrySnapshot||null;
+      // After the restore, so a failure here cannot roll back work that succeeded.
+      // tsSaveAudit swallows its own errors for the same reason.
+      await tsSaveAudit({entry_id:item.entryId,employee_id:en?.employeeId||null,
+        employee_name:en?.employeeName||null,
+        clocked_start:en?.clockIn||null,clocked_end:en?.clockOut||null,
+        final_start:en?.finalStart||en?.clockIn||null,final_end:en?.finalEnd||en?.clockOut||null,
+        action:'restore',reason:`Clock record restored by ${mgr}${ref(item.entryAuditId)}`,manager_name:mgr});
     }
     if(item.shiftId&&item.shiftSnapshot){
       await db.insert('roster_shifts',item.shiftSnapshot);
       _rosterShifts.push(item.shiftSnapshot);
-      if(item.shiftAuditId) await db.delete('timesheet_audit',item.shiftAuditId);
+      const sh=item.shiftSnapshot;
+      await tsSaveAudit({entry_id:item.entryId||null,employee_id:sh.employee_id||null,
+        employee_name:item.entrySnapshot?.employeeName||null,
+        rostered_start:sh.start_time||null,rostered_end:sh.end_time||null,
+        action:'restore_roster_shift',reason:`Roster shift restored by ${mgr}${ref(item.shiftAuditId)}`,manager_name:mgr});
     }
     renderTimesheets();
     showToast('Delete undone.');
@@ -8191,7 +8229,11 @@ async function renderTimesheetAudit(resetPage=false){
     const dateF=a.date?new Date(a.date+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):
       new Date(a.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
     const loggedAt=new Date(a.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    const actionLabel={manual_entry:'Manual entry',adjustment:'Adjustment',delete:'Delete',lock:'Lock',unlock:'Unlock'}[a.action]||a.action||'—';
+    // delete_roster_shift has been written since the delete feature shipped and
+    // never had a label, so it rendered as its raw action string.
+    const actionLabel={manual_entry:'Manual entry',adjustment:'Adjustment',delete:'Delete',
+      delete_roster_shift:'Delete roster shift',restore:'Restore',
+      restore_roster_shift:'Restore roster shift',lock:'Lock',unlock:'Unlock'}[a.action]||a.action||'—';
     const rost=a.rostered_start&&a.rostered_end?`${a.rostered_start}–${a.rostered_end}`:'—';
     const clocked=a.clocked_start&&a.clocked_end?`${a.clocked_start}–${a.clocked_end}`:'—';
     const final=a.final_start&&a.final_end?`${a.final_start}–${a.final_end}`:'—';

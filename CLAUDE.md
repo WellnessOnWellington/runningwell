@@ -103,11 +103,27 @@ else pushes normally.
   that window was 22 Apr, so King's Birthday on 8 Jun was never flagged and the
   nine people who worked it exported on ordinary categories instead of Public
   Holiday. Write policies added 20 Sep 2026.
+  The same shape applies to UPDATE: an update RLS filters out returns `200` with
+  an empty array, not an error. Verified on `public_holidays`, which grants no
+  UPDATE.
   `db.deleteWhere` now sends `Prefer: return=representation` and returns the
   rows it actually deleted. **A caller that knows a row should exist must check
   that something came back** — see `rbTogglePH`. Deleting zero rows is still
   legitimate elsewhere (`rwSaveTemplates` clears templates for staff who have
   none), so the choke point reports rather than throws.
+
+- **`timesheet_audit` and `leave_log` are append-only — do not try to delete
+  from them.** `tsUndoDelete` called `db.delete('timesheet_audit', …)` to tidy
+  away the row recording a deletion it was undoing. That never removed anything
+  (see the silent-delete note above), so the trail only ever said "deleted": an
+  entry deleted and immediately restored left a delete row and nothing else.
+  Undo now writes a compensating `restore` / `restore_roster_shift` row instead,
+  which is the right shape for an append-only log and keeps the fact that the
+  delete happened. The audit actions in use are `manual_entry`, `adjustment`,
+  `delete`, `delete_roster_shift`, `restore`, `restore_roster_shift`, `lock`,
+  `unlock` — add new ones to BOTH the `actionLabel` map and the
+  `tsa-filter-action` dropdown, or they render as a raw string and cannot be
+  filtered.
 
 - **Marking a public holiday is payroll data, not decoration.** It pays everyone
   who WORKED that day at the Public Holiday category instead of their weekday or
