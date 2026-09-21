@@ -125,6 +125,22 @@ else pushes normally.
   `tsa-filter-action` dropdown, or they render as a raw string and cannot be
   filtered.
 
+- **Break exceptions are DATE-EFFECTIVE, and that is load-bearing.** The unpaid
+  break is 30 min on any span >= 6h for everyone; `roster_config.break_exceptions`
+  (JSON array) overrides the MINUTES for one person, from an `effectiveFrom` date
+  FORWARD only. Paid hours are never stored — they are recomputed from times on
+  every render and export — so a rule without a date would silently re-rate every
+  shift that person has ever worked, including finalised periods already pushed to
+  MYOB. `entries.hours` would not catch it; that column is written seven ways and
+  is never break-deducted. `breakExceptionFor(empId, date)` returns null for dates
+  before the rule starts, and `expectedUnpaidBreakMins(hours, empId, date)` falls
+  back to 30 when either is missing — failing toward the standard, never away from
+  it. The UI refuses a start date in the past. Stored in `roster_config`, not a
+  table of its own, because that is the only config the kiosk loads (on open and
+  every 60s), so the clock-out break prompt and payroll agree; a separate table
+  would repeat the `GRACE_BY_ROLE` bug and need its own policies, journal trigger
+  and backup entry.
+
 - **Marking a public holiday is payroll data, not decoration.** It pays everyone
   who WORKED that day at the Public Holiday category instead of their weekday or
   evening rate (2.5x in MYOB), and drives the hours cell, the fortnight totals,

@@ -2637,6 +2637,48 @@
       </div>
 
       <!-- Request Settings -->
+      <div class="settings-section" id="ss-breakexceptions">
+        <div class="settings-section-header" onclick="toggleSettingsSection('breakexceptions')">
+          <div class="settings-section-chevron" id="ss-chevron-breakexceptions">&#9658;</div>
+          <div style="flex:1;">
+            <div class="settings-section-title">Break Exceptions</div>
+            <div class="settings-section-hint">Give one person a different unpaid break. Applies from a chosen date forward &mdash; never to pay that has already been worked out.</div>
+          </div>
+        </div>
+        <div class="settings-section-body" id="ss-body-breakexceptions" style="display:none;">
+          <div class="roster-section" style="margin-bottom:1.25rem;">
+            <div class="roster-section-title">Current exceptions</div>
+            <div style="font-size:0.78rem;color:var(--muted);font-weight:500;line-height:1.5;margin-bottom:0.75rem;">
+              Everyone gets <strong>30 minutes</strong> unpaid on a shift of 6 hours or more. A rule here changes that figure for one person only. Shifts shorter than 6 hours never have a break deducted, with or without a rule.
+            </div>
+            <div id="bx-list"></div>
+          </div>
+          <div class="roster-section">
+            <div class="roster-section-title">Add an exception</div>
+            <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;margin-top:0.5rem;">
+              <div style="flex:2;min-width:180px;">
+                <label class="form-label">Staff member</label>
+                <select class="form-select" id="bx-emp" onchange="bxPreview()"><option value="">&mdash; Select &mdash;</option></select>
+              </div>
+              <div style="flex:1;min-width:110px;">
+                <label class="form-label">Unpaid break</label>
+                <input class="form-input" type="number" id="bx-mins" min="0" max="120" step="1" value="24" oninput="bxPreview()">
+              </div>
+              <div style="flex:1.4;min-width:150px;">
+                <label class="form-label">Applies from</label>
+                <input class="form-input" type="date" id="bx-from" onchange="bxPreview()">
+              </div>
+            </div>
+            <div style="margin-top:0.75rem;">
+              <label class="form-label">Reason (recorded with the rule)</label>
+              <input class="form-input" type="text" id="bx-note" placeholder="e.g. Contracted 7.6h per day on an 8h shift" oninput="bxPreview()">
+            </div>
+            <div id="bx-preview" style="margin-top:0.9rem;"></div>
+            <button class="add-emp-btn" id="bx-add-btn" style="margin-top:0.9rem;" onclick="bxAdd()">Add exception</button>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-section" id="ss-requests">
         <div class="settings-section-header" onclick="toggleSettingsSection('requests')">
           <div class="settings-section-chevron" id="ss-chevron-requests">&#9658;</div>
@@ -3664,6 +3706,17 @@ function applyRosterConfig(cfg){
       ['Receptionist','Nurse','Manager'].forEach(r=>{ if(parsed[r]) COVERAGE_THRESHOLDS[r]=parsed[r]; });
     }catch(e){}
   }
+  /* Reassigned, never merged: removing a rule in Settings has to actually remove
+     it here, and Object.assign onto the old array would leave it in force until
+     the next full reload. Unparseable or absent means no exceptions, which is
+     the standard 30 for everybody. */
+  BREAK_EXCEPTIONS=[];
+  if(_rosterConfig?.break_exceptions){
+    try{
+      const parsed=JSON.parse(_rosterConfig.break_exceptions);
+      if(Array.isArray(parsed)) BREAK_EXCEPTIONS=parsed.filter(x=>x&&x.employeeId&&x.effectiveFrom&&x.unpaidBreakMins!=null);
+    }catch(e){ console.error('break_exceptions unparseable — ignoring',e); }
+  }
 }
 
 async function loadAll() {
@@ -4227,19 +4280,74 @@ function normaliseNotif(r) {
 /* ═══════════════════════════════════════════
    BREAK HELPERS
 ═══════════════════════════════════════════ */
-function expectedUnpaidBreakMins(shiftHours){ return shiftHours>=6?30:0; }
+/* ═══════════════════════════════════════════
+   BREAK EXCEPTIONS
+
+   The unpaid break is 30 minutes on any span of 6 hours or more, for everyone.
+   An exception overrides the MINUTES for one person — it never changes the 6h
+   threshold, and it never applies to anyone else.
+
+   ── THIS IS DATE-EFFECTIVE, AND THAT IS THE POINT ──────────────────────────
+   Every rule carries an `effectiveFrom` date and applies ONLY to entries on or
+   after it. Pay for earlier dates is computed exactly as it was before the rule
+   existed.
+
+   Without that, switching on a 24-minute rule for Eddie Lam would silently
+   re-rate every shift he has ever worked: paid hours are not stored, they are
+   recomputed from times on every render and every export, so a finalised and
+   pushed pay period would quietly start reporting different figures from the
+   ones MYOB was given. `entries.hours` would not save us — that column is
+   written seven different ways and is never break-deducted.
+
+   So `breakExceptionFor` takes a DATE and returns nothing for dates before the
+   rule starts. Any call that cannot supply a date gets the standard 30, which
+   is the safe direction to fail in.
+
+   Stored in roster_config rather than a table of its own, deliberately: that is
+   the one config row the kiosk loads (on open, and again every 60s), so the
+   break prompt at clock-out and the payroll calculation read the same rule. A
+   separate table would not be on that path, and the kiosk would keep asking
+   about 30 while payroll paid 24 — the same shape as the GRACE_BY_ROLE bug.
+   It also needs no new RLS policies, journal trigger or backup entry.         */
+let BREAK_EXCEPTIONS=[];
+
+/* The rule in force for this person on this date, or null.
+   Later effectiveFrom wins when two overlap, so a rule can be superseded by
+   adding another rather than by editing history. */
+function breakExceptionFor(empId, date){
+  if(empId==null||!date||!BREAK_EXCEPTIONS.length) return null;
+  let best=null;
+  BREAK_EXCEPTIONS.forEach(x=>{
+    if(String(x.employeeId)!==String(empId)) return;
+    if(!x.effectiveFrom||date<x.effectiveFrom) return;   // ← future-only guard
+    if(!best||x.effectiveFrom>best.effectiveFrom) best=x;
+  });
+  return best;
+}
+
+/* empId and date are optional. Called without them — from a path that has no
+   employee in scope — this returns the standard 30 and behaves exactly as it
+   did before exceptions existed. */
+function expectedUnpaidBreakMins(shiftHours, empId, date){
+  if(!(shiftHours>=6)) return 0;
+  const ex=breakExceptionFor(empId,date);
+  return ex?Math.max(0,Number(ex.unpaidBreakMins)||0):30;
+}
 function expectedPaidBreakMins(shiftHours){ return shiftHours>=4?10:0; }
 // Single source of truth for what unpaid break minutes actually get deducted from pay.
 // The raw reported value (entry.unpaidBreakMins) is preserved untouched for audit/analytics —
 // only the PAID figure changes, and only when a manager has explicitly chosen 'standard'.
-function effectiveUnpaidBreakMins(entry, shiftHours){
-  const expected=expectedUnpaidBreakMins(shiftHours);
+/* empId/date default to the entry's own, so every existing caller picks the
+   exception up without being changed — and a caller passing an entry from a
+   date before the rule starts still gets 30. */
+function effectiveUnpaidBreakMins(entry, shiftHours, empId, date){
+  const expected=expectedUnpaidBreakMins(shiftHours, empId??entry?.employeeId, date??entry?.date);
   const reported=entry?.unpaidBreakMins!=null?entry.unpaidBreakMins:expected;
   return entry?.breakGapDecision==='standard'?expected:reported;
 }
-function isBreakGapUnresolved(entry, shiftHours){
+function isBreakGapUnresolved(entry, shiftHours, empId, date){
   if(!entry||entry.unpaidBreakMins==null) return false;
-  const expected=expectedUnpaidBreakMins(shiftHours);
+  const expected=expectedUnpaidBreakMins(shiftHours, empId??entry?.employeeId, date??entry?.date);
   return expected>0&&entry.unpaidBreakMins<expected&&!entry.breakGapDecision;
 }
 
@@ -4753,7 +4861,7 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       const[oh,om]=sheetTimeStr.split(':').map(Number);
       const hrs=((oh*60+om)-(ih*60+im))/60;
       const hoursStr=hrs>0?hrs.toFixed(2):'0.00';
-      const unpaidExpected=expectedUnpaidBreakMins(hrs);
+      const unpaidExpected=expectedUnpaidBreakMins(hrs,emp.id,todayKey);
       const breakFlagged=unpaidBreakMins!==null&&unpaidBreakMins<unpaidExpected;
       const patch = {
         clock_out:sheetTimeStr, clock_out_iso:isoNow,
@@ -4861,7 +4969,7 @@ async function maybeBreakConfirm(emp,action,timeStr,sheetTimeStr,isoNow,open,tod
   const[ih,im]=open.clockIn.split(':').map(Number);
   const[oh,om]=sheetTimeStr.split(':').map(Number);
   const shiftHours=((oh*60+om)-(ih*60+im))/60;
-  const unpaidExpected=expectedUnpaidBreakMins(shiftHours);
+  const unpaidExpected=expectedUnpaidBreakMins(shiftHours,emp.id,todayKey);
   const paidExpected=expectedPaidBreakMins(shiftHours);
   // Clinic override: replace standard break overlay with combined clinic overlay for can_travel staff on clinic lane
   const rShift=srShiftForEmp(emp.id,todayKey);
@@ -5362,7 +5470,7 @@ function switchTab(name,btn){
   if(name==='roster')     renderRoster();
   if(name==='requests'){  renderRequests(); reqExpirySweep(); }
   if(name==='analytics'){ }
-  if(name==='settings'){  renderManagersTab(); wosInitPinBoxes(); renderAnchorDate(); renderRequestSettings(); }
+  if(name==='settings'){  renderManagersTab(); wosInitPinBoxes(); renderAnchorDate(); renderRequestSettings(); renderBreakExceptions(); }
 }
 
 /* ═══════════════════════════════════════════
@@ -5866,6 +5974,13 @@ function tsBuildRow(emp, date, shift, entry, splitSegment=false){
   // that agreed with neither the MYOB preview beside it nor the export.
   const billableMins=paidMinsFor(entry,shift,emp,_publicHolidays?.has(date)||false);
   const hoursText=billableMins>0?`${(billableMins/60).toFixed(1)}h`:'';
+  /* An exception makes the paid figure disagree with the obvious arithmetic —
+     8h span showing 7.6h rather than 7.5h — so the row says why on hover
+     rather than leaving the reader to find Settings. */
+  const _bxRow=breakExceptionFor(emp?.id,date);
+  const hoursTitle=_bxRow
+    ? `Break exception: ${Number(_bxRow.unpaidBreakMins)} min unpaid instead of 30${_bxRow.note?' — '+_bxRow.note:''}`
+    : '';
 
   const PAYROLL_TYPES=[['','Worked'],['annual_leave','Annual Leave'],['personal_leave','Personal Leave'],['public_holiday','Public Holiday'],['compassionate_leave','Compassionate Leave'],['long_service_leave','Long Service Leave'],['unpaid_leave','Unpaid Leave']];
   const fmtH=h=>h===Math.round(h)?h+'h':h.toFixed(1)+'h';
@@ -5888,7 +6003,7 @@ function tsBuildRow(emp, date, shift, entry, splitSegment=false){
     </div>
     <div class="ts-row-right">
       <div class="ts-payroll-wrap">${payrollInner}</div>
-      <span class="ts-row-hours">${hoursText}</span>
+      <span class="ts-row-hours"${hoursTitle?` title="${escHtml(hoursTitle)}"`:''}>${hoursText}${_bxRow?'<span style="font-size:0.62rem;font-weight:800;color:#8a6000;margin-left:0.15rem;vertical-align:super;">BX</span>':''}</span>
       <div class="ts-row-flag-dot" style="background:${flagColor}"></div><div class="ts-travel-icon">${entry?.travelKm?`<span title="${entry.travelKm} km travel">🚗</span>`:''}</div><span class="ts-adjusted-pencil" title="Acknowledged by manager" style="${locked&&manuallyAdjusted?'':'visibility:hidden'}">✎</span><span class="ts-flag-icon" title="Flagged for follow-up" style="${flag==='flagged'?'':'visibility:hidden'}">⚑</span>
       <span class="ts-locked-label" style="${locked||effectiveAutoApproved?'':'visibility:hidden'}">${locked?'Locked'+(lockedBy?' · '+lockedBy:''):'Auto-approved'}</span>
       <div class="ts-myob-preview">${myobPreviewText}</div>
@@ -5910,7 +6025,7 @@ function tsBuildRow(emp, date, shift, entry, splitSegment=false){
 
   // Break row calculations
   const breakShiftHours=finalMins/60;
-  const unpaidExpected=expectedUnpaidBreakMins(breakShiftHours);
+  const unpaidExpected=expectedUnpaidBreakMins(breakShiftHours,emp?.id,date);
   const paidExpected=expectedPaidBreakMins(breakShiftHours);
   const unpaidActual=entry?.unpaidBreakMins!=null?entry.unpaidBreakMins:unpaidExpected;
   const paidActual=entry?.paidBreakMins??null;
@@ -7090,6 +7205,9 @@ function _calcMYOBRowsBase(entry, emp, isPH=false, shift=null){
   const endMins=timeToMin(end);
   if(endMins<=startMins) return [];
   const rawHours=(endMins-startMins)/60;
+  // empId/date come from the entry itself here — see effectiveUnpaidBreakMins.
+  // This is the export path, so an entry dated before a break exception starts
+  // is deducted the standard 30, which is what the finalised period was paid.
   const unpaidBreakMins=effectiveUnpaidBreakMins(entry,rawHours);
   const totalHours=Math.max(0,rawHours-unpaidBreakMins/60);
   if(totalHours<=0) return [];
@@ -7629,8 +7747,8 @@ function dlTsGeneratePDF(emp,fnDays,fnLabel,jsPDF,logo,shiftsSrc=_rosterShifts,e
     let displayUnpaid=0;
     if(finalIn&&finalOut){
       const rawM=Math.max(0,timeToMin(finalOut)-timeToMin(finalIn));
-      expBreakMins=expectedUnpaidBreakMins(rawM/60);
-      displayUnpaid=effectiveUnpaidBreakMins(entry,rawM/60);
+      expBreakMins=expectedUnpaidBreakMins(rawM/60,entry.employeeId,entry.date);
+      displayUnpaid=effectiveUnpaidBreakMins(entry,rawM/60,entry.employeeId,entry.date);
       hrs=Math.max(0,rawM-displayUnpaid)/60;
     }
     if(hrs!=null&&hrs>0) totalWorked+=hrs;
@@ -8038,7 +8156,7 @@ function renderApprovals(){
     const bFs=entry?.finalStart||entry?.clockIn||null;
     const bFe=entry?.finalEnd||entry?.clockOut||null;
     const bHours=(bFs&&bFe)?Math.max(0,timeToMin(bFe)-timeToMin(bFs))/60:0;
-    const breakExpected=expectedUnpaidBreakMins(bHours);
+    const breakExpected=expectedUnpaidBreakMins(bHours,entry?.employeeId,entry?.date);
     const breakActual=entry?.unpaidBreakMins!=null?entry.unpaidBreakMins:breakExpected;
     const breakShortfall=isBreakNote&&breakExpected>0&&breakActual<breakExpected;
     const existingGapType=isDeparture?(entry?.leaveTypeGap||''):isArrival?(entry?.leaveTypeGapStart||''):(entry?.breakGapDecision||'');
@@ -10953,6 +11071,178 @@ async function saveCoverageByRole(){
     showToast('Coverage thresholds saved ✓');
     renderRoster();
   }catch(e){showToast('Could not save — check connection');console.error(e);}
+}
+
+/* ═══════════════════════════════════════════
+   BREAK EXCEPTIONS — SETTINGS
+
+   Adding a rule changes what somebody is paid, so the confirmation states the
+   effect in hours rather than the setting in minutes: "an 8h shift pays 7.60h
+   instead of 7.50h" is checkable by the person clicking it; "24 instead of 30"
+   is not.
+
+   Every rule starts on a date and applies only from that date forward. The
+   default offered is the start of the NEXT pay period, because a rule that
+   began mid-period would change half of a fortnight that is already part
+   worked. Dates before today are refused outright — see bxAdd.
+═══════════════════════════════════════════ */
+
+function bxDefaultFrom(){
+  // Next pay period start. getPayPeriodStart(1) is the Tuesday-anchored grid,
+  // NOT the roster's Monday-anchored one — pay is what a break affects.
+  try{ return getPayPeriodStart(1); }catch(e){ return rbDateKey(new Date()); }
+}
+
+function bxFmtDate(d){
+  try{ return new Date(d+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}); }
+  catch(e){ return d; }
+}
+
+/* What an 8-hour shift pays under a given break. The worked example is the
+   point of the preview, so it uses the span this rule was almost certainly
+   created for rather than an abstraction. */
+function bxPaidFor(spanHours, mins){ return (spanHours-mins/60).toFixed(2); }
+
+function renderBreakExceptions(){
+  const list=document.getElementById('bx-list');
+  if(!list) return;
+  const sel=document.getElementById('bx-emp');
+  if(sel&&sel.options.length<=1){
+    [..._emps].filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name))
+      .forEach(e=>{ const o=document.createElement('option'); o.value=e.id; o.textContent=e.name+' · '+e.role; sel.appendChild(o); });
+  }
+  const from=document.getElementById('bx-from');
+  if(from&&!from.value) from.value=bxDefaultFrom();
+
+  if(!BREAK_EXCEPTIONS.length){
+    list.innerHTML=`<div style="padding:1rem;text-align:center;color:var(--muted);font-size:0.82rem;font-weight:600;background:var(--warm-white);border-radius:var(--radius-sm);">No exceptions &mdash; everyone gets the standard 30 minutes.</div>`;
+    return;
+  }
+  const today=rbDateKey(new Date());
+  list.innerHTML=[...BREAK_EXCEPTIONS]
+    .sort((a,b)=>(a.employeeName||'').localeCompare(b.employeeName||'')||a.effectiveFrom.localeCompare(b.effectiveFrom))
+    .map(x=>{
+      const pending=x.effectiveFrom>today;
+      return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border:1.5px solid var(--border);border-left:3px solid ${pending?'#e6a817':'var(--success)'};border-radius:var(--radius-sm);margin-bottom:0.5rem;background:var(--white);flex-wrap:wrap;">
+        <div style="flex:1;min-width:150px;">
+          <div style="font-size:0.88rem;font-weight:700;color:var(--charcoal);">${escHtml(x.employeeName||x.employeeId)}</div>
+          <div style="font-size:0.74rem;color:var(--muted);font-weight:600;">${Number(x.unpaidBreakMins)} min unpaid break &middot; an 8h shift pays ${bxPaidFor(8,Number(x.unpaidBreakMins))}h</div>
+          ${x.note?`<div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem;">${escHtml(x.note)}</div>`:''}
+        </div>
+        <div style="font-size:0.74rem;font-weight:700;color:${pending?'#8a6000':'var(--success)'};white-space:nowrap;">
+          ${pending?'Starts':'In force since'} ${bxFmtDate(x.effectiveFrom)}
+        </div>
+        <div style="font-size:0.68rem;color:var(--muted);white-space:nowrap;">${escHtml(x.createdBy||'')}</div>
+        <button class="btn-ghost" style="padding:0.3rem 0.8rem;font-size:0.74rem;flex:0 0 auto;width:auto;min-width:0;" onclick="bxRemove('${escHtml(x.id)}')">Remove</button>
+      </div>`;
+    }).join('');
+}
+
+function bxPreview(){
+  const el=document.getElementById('bx-preview');
+  if(!el) return;
+  const empId=document.getElementById('bx-emp')?.value;
+  const mins=parseInt(document.getElementById('bx-mins')?.value,10);
+  const from=document.getElementById('bx-from')?.value;
+  if(!empId||isNaN(mins)||!from){ el.innerHTML=''; return; }
+  const emp=_emps.find(e=>String(e.id)===String(empId));
+  const std=bxPaidFor(8,30), now=bxPaidFor(8,mins);
+  el.innerHTML=`<div style="background:var(--blush-lt);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0.7rem 0.85rem;font-size:0.8rem;color:var(--charcoal);line-height:1.6;">
+    <strong>${escHtml(emp?emp.name:'')}</strong> would have <strong>${mins} minutes</strong> deducted instead of 30 on any shift of 6 hours or more.<br>
+    An 8h shift would pay <strong>${now}h</strong> instead of ${std}h.<br>
+    <span style="color:var(--muted);">Applies to shifts on or after <strong>${bxFmtDate(from)}</strong>. Nothing before that date changes.</span>
+  </div>`;
+}
+
+/* Writes the whole array back. roster_config is a single row, so this is a
+   read-modify-write; BREAK_EXCEPTIONS is the read, because applyRosterConfig
+   keeps it in step with what was last saved. */
+async function bxSave(next, successMsg){
+  if(!rwDbGuard())return false;
+  const patch={break_exceptions:JSON.stringify(next)};
+  try{
+    if(_rosterConfig) await db.update('roster_config','default',patch);
+    else await db.insert('roster_config',{id:'default',...patch});
+    if(!_rosterConfig) _rosterConfig={id:'default'};
+    _rosterConfig.break_exceptions=patch.break_exceptions;
+    BREAK_EXCEPTIONS=next;
+    renderBreakExceptions();
+    renderTimesheets();
+    showToast(successMsg);
+    return true;
+  }catch(e){
+    // The column is added by hand — see the schema checklist in CLAUDE.md.
+    const msg=String(e?.message||e);
+    showToast(/break_exceptions/.test(msg)
+      ? 'Could not save — the break_exceptions column is missing from roster_config'
+      : 'Could not save — check connection');
+    console.error(e); return false;
+  }
+}
+
+async function bxAdd(){
+  const empId=document.getElementById('bx-emp')?.value;
+  const mins=parseInt(document.getElementById('bx-mins')?.value,10);
+  const from=document.getElementById('bx-from')?.value;
+  const note=(document.getElementById('bx-note')?.value||'').trim();
+  if(!empId){ showToast('Select a staff member'); return; }
+  if(isNaN(mins)||mins<0||mins>120){ showToast('Break must be between 0 and 120 minutes'); return; }
+  if(!from){ showToast('Choose the date this applies from'); return; }
+  /* Backdating is refused, not warned about. A rule starting before today would
+     re-rate shifts already worked, and if it reached a finalised period the app
+     would start reporting figures MYOB was never given. Pay that has happened is
+     corrected in Timesheets, on the entry, where it is audited. */
+  const today=rbDateKey(new Date());
+  if(from<today){ showToast('A break exception cannot start in the past — it would change pay already worked'); return; }
+  const emp=_emps.find(e=>String(e.id)===String(empId));
+  if(!emp){ showToast('Staff member not found'); return; }
+
+  const dup=BREAK_EXCEPTIONS.find(x=>String(x.employeeId)===String(empId)&&x.effectiveFrom===from);
+  if(dup){ showToast('That person already has a rule starting on that date'); return; }
+
+  const std=bxPaidFor(8,30), now=bxPaidFor(8,mins);
+  const existing=BREAK_EXCEPTIONS.filter(x=>String(x.employeeId)===String(empId));
+  const supersede=existing.length
+    ? `\n\nThis supersedes their current rule from ${bxFmtDate(from)}. The earlier rule stays in force for dates before that, so past pay is unchanged.`
+    : '';
+  if(!confirm(
+    `Give ${emp.name} a ${mins}-minute unpaid break instead of 30?\n\n`+
+    `From ${bxFmtDate(from)} onward, any shift of 6 hours or more will deduct ${mins} minutes.\n`+
+    `An 8-hour shift will pay ${now}h instead of ${std}h.\n\n`+
+    `Shifts BEFORE ${bxFmtDate(from)} are not affected — pay already worked out stays as it is.${supersede}\n\n`+
+    `This changes what ${emp.name.split(' ')[0]} is paid. Continue?`)) return;
+
+  const row={
+    id:'BX'+Date.now(),
+    employeeId:String(empId), employeeName:emp.name,
+    unpaidBreakMins:mins, effectiveFrom:from, note:note||null,
+    createdBy:currentManager?.name||'Manager', createdAt:new Date().toISOString(),
+  };
+  const ok=await bxSave([...BREAK_EXCEPTIONS,row], `Break exception added for ${emp.name}`);
+  if(ok){
+    document.getElementById('bx-emp').value='';
+    document.getElementById('bx-note').value='';
+    document.getElementById('bx-mins').value='24';
+    document.getElementById('bx-from').value=bxDefaultFrom();
+    bxPreview();
+  }
+}
+
+async function bxRemove(id){
+  const x=BREAK_EXCEPTIONS.find(r=>String(r.id)===String(id));
+  if(!x){ showToast('Rule not found'); return; }
+  const today=rbDateKey(new Date());
+  /* Removing a rule that is already in force un-rates the days since it started,
+     which is the mirror of the backdating problem — so it has to be said out
+     loud rather than treated as an undo. */
+  const live=x.effectiveFrom<=today;
+  if(!confirm(
+    `Remove the ${Number(x.unpaidBreakMins)}-minute break exception for ${x.employeeName}?\n\n`+
+    (live
+      ? `It has been in force since ${bxFmtDate(x.effectiveFrom)}. Removing it returns them to the standard 30 minutes for EVERY date, including days since then that have not yet been exported — an 8h shift would go back to paying ${bxPaidFor(8,30)}h.\n\nIf you only want it to stop applying from now on, add a new rule of 30 minutes starting today instead.`
+      : `It has not started yet (${bxFmtDate(x.effectiveFrom)}), so no pay changes.`)+
+    `\n\nContinue?`)) return;
+  await bxSave(BREAK_EXCEPTIONS.filter(r=>String(r.id)!==String(id)), 'Break exception removed');
 }
 
 async function saveRosterTemplate(){
