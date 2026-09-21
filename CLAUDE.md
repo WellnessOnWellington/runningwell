@@ -82,8 +82,10 @@ else pushes normally.
   The mechanism is **permissive policies, not absent RLS** — this note used to
   say otherwise and it cost an afternoon. RLS is ENABLED on every table; most
   carry `for all ... using (true) with check (true)`, which is what grants the
-  key everything. Two do not: `timesheet_audit` and `leave_log` grant only
-  SELECT and INSERT, so the published key cannot rewrite or erase them.
+  key everything. Three do not: `timesheet_audit` and `leave_log` grant only
+  SELECT and INSERT, so the published key cannot rewrite or erase them, and
+  `public_holidays` grants SELECT, INSERT and DELETE (no UPDATE — the app never
+  updates a holiday row, it adds or removes one).
   **A new table therefore needs its policies written explicitly.** Created
   without them it has RLS on and no policy, which does not error — the anon key
   just sees an empty table and every write fails. `leave_log` shipped that way
@@ -91,6 +93,29 @@ else pushes normally.
   `timesheet_audit`, not on `entries`.
   These policies exist only in the live database: `capture_schema.sql` does not
   read them, so `schema.sql` cannot rebuild them. See the vault README.
+- **A DELETE blocked by RLS is not an error — it reports success.** The policy
+  filters the rows away first, so PostgREST deletes the zero rows it can see and
+  returns `204`, which is indistinguishable from deleting a row that was not
+  there. `public_holidays` shipped with a SELECT policy and no write policies,
+  so marking a day failed loudly with `42501` while UNMARKING one announced
+  "Public holiday removed" and changed nothing — the row came back on the next
+  load. Live from at least 29 Mar to 20 Sep 2026; the last holiday recorded in
+  that window was 22 Apr, so King's Birthday on 8 Jun was never flagged and the
+  nine people who worked it exported on ordinary categories instead of Public
+  Holiday. Write policies added 20 Sep 2026.
+  `db.deleteWhere` now sends `Prefer: return=representation` and returns the
+  rows it actually deleted. **A caller that knows a row should exist must check
+  that something came back** — see `rbTogglePH`. Deleting zero rows is still
+  legitimate elsewhere (`rwSaveTemplates` clears templates for staff who have
+  none), so the choke point reports rather than throws.
+
+- **Marking a public holiday is payroll data, not decoration.** It pays everyone
+  who WORKED that day at the Public Holiday category instead of their weekday or
+  evening rate (2.5x in MYOB), and drives the hours cell, the fortnight totals,
+  the MYOB preview and the Timesheets badge. It is read from `_publicHolidays`
+  at export time, so flagging a day AFTER its period is pushed changes nothing
+  that has already been paid.
+
 - **Two `ON DELETE CASCADE` chains**: `employees → entries` and
   `entries → notes`. Deleting one employee row removes **every timesheet they
   ever had**. The app soft-deletes (`active:false`) so it never fires normally —

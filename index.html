@@ -3560,12 +3560,31 @@ const db = {
     });
     if (!r.ok) throw new Error(await r.text());
   },
+  /* Returns the rows actually deleted, which is the only way to tell a delete
+     that did nothing from one that did something.
+
+     A DELETE blocked by RLS is NOT an error. The policy filters the rows away
+     first, so PostgREST deletes the zero rows it can see and returns 204 —
+     indistinguishable from a successful delete of a row that was not there.
+     `public_holidays` sat in exactly that state until 20 Sep 2026: SELECT was
+     policed, INSERT and DELETE were not, so adding a holiday failed loudly with
+     42501 while removing one reported success and changed nothing.
+
+     Three tables are SELECT-restricted today (public_holidays got its write
+     policies on 20 Sep; timesheet_audit and leave_log are deliberately
+     append-only), so any of them would behave this way. return=representation
+     makes it answerable.
+
+     Deleting zero rows is still not an error here — rwSaveTemplates clears
+     templates for staff who may have none. The CALLER knows whether it expected
+     to remove something, so the caller checks. */
   async deleteWhere(table, field, value) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${field}=eq.${encodeURIComponent(value)}`, {
       method: 'DELETE',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, Prefer: 'return=representation' }
     });
     if (!r.ok) throw new Error(await r.text());
+    try { return await r.json(); } catch(e) { return []; }
   },
   async bulkInsert(table, rows) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
@@ -10089,12 +10108,39 @@ function rbCloseAllDays(){
   renderRoster();
 }
 
+/* This flag is payroll data, not decoration. A day marked here pays everyone who
+   WORKED it at the Public Holiday category instead of their weekday or evening
+   rate (_calcMYOBRowsBase), which is 2.5x in MYOB, and it drives the hours cell,
+   the fortnight totals, the MYOB preview and the badge on the Timesheets row.
+   So the local Set and the database have to agree, and where they cannot, this
+   has to say so rather than appear to work.
+
+   Both failure paths were live until 20 Sep 2026, when public_holidays had a
+   SELECT policy and no write policies:
+     adding    failed loudly — 42501, caught below, "Could not update".
+     removing  failed SILENTLY — RLS filters the row away, zero rows are
+               deleted, PostgREST returns 204, and this deleted the date from
+               the Set and announced "Public holiday removed" while the row sat
+               untouched in the database and returned on the next load.
+   The policies now exist, but a delete that removes nothing must never again be
+   read as success — the same shape would return with any future policy change,
+   and it is silent by construction. */
 async function rbTogglePH(dateKey, e){
   e.stopPropagation();
   if(dateKey<rbDateKey(new Date())) return;
+  const wasMarked=_publicHolidays.has(dateKey);
   try{
-    if(_publicHolidays.has(dateKey)){
-      await db.deleteWhere('public_holidays','date',dateKey);
+    if(wasMarked){
+      const removed=await db.deleteWhere('public_holidays','date',dateKey);
+      // Deleting nothing is the silent-failure shape. The row was in the Set, so
+      // it was expected to be there; if nothing came back, do NOT touch local
+      // state — leaving the date marked keeps the screen honest about the database.
+      if(!removed||!removed.length){
+        showToast('Could not remove — the database rejected it');
+        console.error('public_holidays delete removed no rows for',dateKey,
+                      '— check the delete policy on public_holidays');
+        return;
+      }
       _publicHolidays.delete(dateKey);
     } else {
       await db.insert('public_holidays',{id:'PH'+Date.now(),date:dateKey});
@@ -10102,8 +10148,25 @@ async function rbTogglePH(dateKey, e){
     }
     RB_ROLES.forEach(r=>renderFnGridForRole(r));
     renderRoster(); // refreshes day label PH button if in day view
-    showToast(_publicHolidays.has(dateKey)?'Marked as public holiday':'Public holiday removed');
-  }catch(err){showToast('Could not update public holiday');console.error(err);}
+    showToast(wasMarked?'Public holiday removed':'Marked as public holiday');
+  }catch(err){
+    const msg=String(err?.message||err);
+    /* Already in the database but not in this tab's Set — another manager marked
+       it, or this tab has been open since before it was added. The date IS a
+       public holiday, so adopt it rather than reporting a failure for a state
+       that is already correct. */
+    if(msg.includes('23505')||msg.includes('duplicate key')){
+      _publicHolidays.add(dateKey);
+      RB_ROLES.forEach(r=>renderFnGridForRole(r));
+      renderRoster();
+      showToast('Already marked as a public holiday');
+      return;
+    }
+    showToast(msg.includes('42501')
+      ? 'Could not save — the database rejected it'
+      : 'Could not update public holiday');
+    console.error(err);
+  }
 }
 
 function rbGoToday(){
