@@ -6621,6 +6621,64 @@ async function tsLockRow(entryId, empId, date, e){
   }catch(err){showToast('Could not lock entry');console.error(err);}
 }
 
+/* ONE GESTURE USED TO CREATE TWO ENTRIES.
+
+   A row with no clock record carries entryId="" in its markup, and TWO handlers
+   branch on that to INSERT: tsUpdateFinal when the manager types the times, and
+   tsMgrAutoLock when they click Lock. Clicking the button blurs the time input,
+   and tsHMBlur fires tsUpdateFinal on a 120ms timer — so one click runs both,
+   each still reading the entryId="" that was rendered before either had written
+   anything. Neither re-checked whether an entry had appeared in between.
+
+   Live in the 8-21 Sep 2026 period twice: Fiona Bridson 17 Sep (236ms apart) and
+   Mayana Sioli 12 Sep (199ms). Each pair is one typed row and one locked
+   roster-times row, same manager, same second. The MYOB export deduplicates on
+   the rostered block and kept the locked one, so nobody was paid twice — but the
+   two rows disagreed: Mayana's typed row said 08:45, the auto-locked one said
+   09:00.
+
+   Keyed on the rostered BLOCK, not employee+date: on a split day two rows are on
+   screen at once, and merging a create for one block into a create for the other
+   would be worse than the duplicate. Both handlers read data-shift-id off the
+   row they were actually fired from. An unknown key degrades to today's
+   behaviour rather than to a wrong merge. */
+const _tsRowCreate=new Map();
+
+function tsRowKey(empId,date,shiftId){ return String(empId)+'|'+date+'|'+(shiftId||''); }
+
+// The row a handler fired from, read from the event or the input, never guessed
+// from employee+date — that is ambiguous exactly where it matters.
+function tsRowShiftId(el){
+  const row=el&&el.closest?el.closest('.ts-shift-row'):null;
+  return row?(row.dataset.shiftId||''):'';
+}
+
+/* Returns the id of an entry another handler is creating for this same row, once
+   its insert lands. null when there is nothing in flight, which is the ordinary
+   case — the caller then creates the entry itself and registers it here. */
+async function tsAwaitRowCreate(key){
+  const inflight=_tsRowCreate.get(key);
+  if(!inflight) return null;
+  try{ return await inflight; }catch(e){ return null; }
+}
+
+/* Held for 3s rather than cleared on resolve: the window this closes is the one
+   where the DOM still says entryId="", which lasts until the next
+   renderTimesheets, not until the insert returns.
+
+   The expiry deletes the entry only if the map STILL HOLDS THIS PROMISE. Deleting
+   by key alone lets a timer from an earlier create on the same row evict a newer
+   one that is still in flight — which reopens the exact double-insert window this
+   is here to close, and only when the same row is touched twice inside 3s, so it
+   would have looked intermittent. */
+function tsRegisterRowCreate(key,promise){
+  _tsRowCreate.set(key,promise);
+  promise.catch(()=>{}).then(()=>setTimeout(()=>{
+    if(_tsRowCreate.get(key)===promise) _tsRowCreate.delete(key);
+  },3000));
+  return promise;
+}
+
 async function tsMgrAutoLock(empId, empName, role, date, rostStart, rostEnd, entryId, e){
   e.stopPropagation();
   if(!rostStart||!rostEnd){showToast('No roster times to use');return;}
@@ -6629,20 +6687,37 @@ async function tsMgrAutoLock(empId, empName, role, date, rostStart, rostEnd, ent
   const startMins=timeToMin(rostStart), endMins=timeToMin(rostEnd);
   if(endMins<=startMins){showToast('Invalid roster times');return;}
   const hours=((endMins-startMins)/60).toFixed(2);
+  const _rowKey=tsRowKey(empId,date,tsRowShiftId(e&&e.target));
   try{
+    /* If the same gesture already started creating this row's entry — the manager
+       typed the times and the blur timer beat the click — adopt it instead of
+       inserting a second. Locking what they typed is also the better outcome:
+       they entered 08:45 deliberately, and the roster's 09:00 would overwrite it. */
+    if(!entryId){
+      const adopted=await tsAwaitRowCreate(_rowKey);
+      if(adopted) entryId=adopted;
+    }
     if(entryId){
       // Stub entry exists (e.g. leave type was set) — write roster times as finals and lock
       const entry=_entries.find(en=>String(en.id)===String(entryId));
+      /* Only supply roster times where the entry has none. A row that already
+         carries finals was filled in by hand, and this button's job then is to
+         lock what is there — overwriting it with the roster is how Mayana's
+         08:45 became 09:00. */
+      const keepFinals=!!(entry&&entry.finalStart&&entry.finalEnd);
+      const fs=keepFinals?entry.finalStart:rostStart, fe=keepFinals?entry.finalEnd:rostEnd;
+      const hrs=keepFinals?((timeToMin(fe)-timeToMin(fs))/60).toFixed(2):hours;
       await Promise.all([
         tsAnimateLockClose(entryId),
-        db.update('entries',entryId,{final_start:rostStart,final_end:rostEnd,hours,
+        db.update('entries',entryId,{final_start:fs,final_end:fe,hours:hrs,
           locked:true,locked_by:mgr,locked_at:new Date().toISOString()})
       ]);
-      if(entry){entry.finalStart=rostStart;entry.finalEnd=rostEnd;entry.locked=true;entry.lockedBy=mgr;}
+      if(entry){entry.finalStart=fs;entry.finalEnd=fe;entry.locked=true;entry.lockedBy=mgr;}
       await tsSaveAudit({entry_id:entryId,employee_id:empId,employee_name:empName,date,
         rostered_start:rostStart,rostered_end:rostEnd,clocked_start:null,clocked_end:null,
-        final_start:rostStart,final_end:rostEnd,
-        action:'lock',reason:'No-clock auto-lock: roster hours used as finals',manager_name:mgr});
+        final_start:fs,final_end:fe,
+        action:'lock',reason:keepFinals?'Locked the times already recorded on this row'
+                                       :'No-clock auto-lock: roster hours used as finals',manager_name:mgr});
     } else {
       // No entry yet — animate the row using emp+date query before creating entry
       const animRow=document.querySelector(`.ts-shift-row[data-emp-id="${empId}"][data-date="${date}"]`);
@@ -6654,7 +6729,11 @@ async function tsMgrAutoLock(empId, empName, role, date, rostStart, rostEnd, ent
         final_start:rostStart,final_end:rostEnd,
         manually_adjusted:false,
         locked:true,locked_by:mgr,locked_at:new Date().toISOString()};
-      await db.insert('entries',newEntry);
+      // Registered BEFORE the await, so a blur timer landing mid-insert finds it.
+      await tsRegisterRowCreate(_rowKey,(async()=>{
+        await db.insert('entries',newEntry);
+        return newId;
+      })());
       _entries.push(normaliseEntry({...newEntry,id:newId}));
       await tsSaveAudit({entry_id:newId,employee_id:empId,employee_name:empName,date,
         rostered_start:rostStart,rostered_end:rostEnd,clocked_start:null,clocked_end:null,
@@ -6881,6 +6960,16 @@ async function tsUpdateFinal(entryId, empId, empName, date, field, value, inputE
   const mgr=currentManager?.name||'Manager';
 
   if(!entryId){
+    /* The other half of the double-insert guard above tsMgrAutoLock. Either
+       handler can reach the row first — the blur timer usually wins, but the
+       click can — so both look before inserting and both register what they
+       insert. Found here, fall through to the update path below and adjust the
+       entry that now exists. */
+    const adopted=await tsAwaitRowCreate(tsRowKey(empId,date,tsRowShiftId(inputEl)));
+    if(adopted){ entryId=adopted; }
+  }
+
+  if(!entryId){
     // No entry yet — create one when both start and end pairs are complete
     const subFinal=inputEl?.closest('.ts-sub-final');
     const pairs=subFinal?subFinal.querySelectorAll('.ts-time-pair'):[];
@@ -6898,7 +6987,11 @@ async function tsUpdateFinal(entryId, empId, empName, date, field, value, inputE
         final_start:startVal,final_end:endVal,
         manually_adjusted:true,adjusted_by:mgr,adjustment_reason:'Manual entry by manager',
         adjusted_at:new Date().toISOString()};
-      await db.insert('entries',newEntry);
+      // Registered BEFORE the await, so a Lock click landing mid-insert finds it.
+      await tsRegisterRowCreate(tsRowKey(empId,date,tsRowShiftId(inputEl)),(async()=>{
+        await db.insert('entries',newEntry);
+        return newId;
+      })());
       _entries.push(normaliseEntry({...newEntry,id:newId}));
       await tsSaveAudit({entry_id:newId,employee_id:empId,employee_name:empName,date,
         rostered_start:null,rostered_end:null,clocked_start:null,clocked_end:null,
