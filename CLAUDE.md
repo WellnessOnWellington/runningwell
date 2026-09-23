@@ -125,6 +125,25 @@ else pushes normally.
   `tsa-filter-action` dropdown, or they render as a raw string and cannot be
   filtered.
 
+- **A leave entry stores a COPY of its shift's span, not rostered times.**
+  `entries` has no `rostered_start`/`rostered_end` — rostered comes from
+  `roster_shifts`, live. What `rbMarkLeaveApply` writes into `clock_in`/`clock_out`
+  is the shift's span at the moment leave was marked, and it is not a clock
+  record (`clock_in_iso` is null on every leave row). That copy is what PAYS:
+  `resolveFinalTimes` falls back to it whenever the entry has no finals, so a
+  shift resized underneath its leave entry kept paying the old span. Sue McKellar
+  15 Jun and 23 Jul 2026 each paid half an hour short against their own roster,
+  both locked inside finalised periods, before this was found on 21 Sep.
+  `rbSaveShiftTimes` and `rbSplitShift` now call `rbSyncLeaveEntryToShift`.
+  **It writes `clock_in`/`clock_out`/`hours` and never `final_start`/`final_end`** —
+  finals exist only where a manager set them by hand, must outrank the roster, and
+  `resolveFinalTimes` prefers them anyway. A LOCKED entry is skipped on resize
+  (with a toast) and blocks a split outright, matching `rbCleanupLinkedEntryOnShiftDelete`.
+  Splitting MIRRORS the leave onto both halves — splitting says how a day is
+  structured, not whether someone is off, and the common use is dividing a day
+  into paid and unpaid leave, so both halves arrive the same type and one gets
+  changed from the dropdown.
+
 - **Break exceptions are DATE-EFFECTIVE, and that is load-bearing.** The unpaid
   break is 30 min on any span >= 6h for everyone; `roster_config.break_exceptions`
   (JSON array) overrides the MINUTES for one person, from an `effectiveFrom` date

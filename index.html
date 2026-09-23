@@ -10684,6 +10684,19 @@ async function rbSplitShift(shiftId,role){
     const splitTime=minToTimeStr(Math.round((sMin+eMin)/2/TL_SNAP)*TL_SNAP);
     const originalEnd=shift.end_time;
     const prevEnd=shift.end_time;
+    /* A locked leave entry is payroll that has been signed off. Splitting would
+       have to rewrite it and create a second one, so it is refused outright —
+       same rule as deleting a shift that carries one. */
+    if(rbShiftHasLockedLeaveEntry(shiftId)){
+      showToast('This shift has a locked leave entry — change it in Timesheets first');
+      return;
+    }
+    const linkedLeave=rbLinkedLeaveEntry(shiftId);
+    // Declared out here so the catch can put a half-done split back. The order
+    // below is shrink-then-mirror, so a failure between the two would otherwise
+    // leave the original entry short and nothing covering the new half — the
+    // silent halving this whole change exists to prevent.
+    let leaveSnap=null, mirroredId=null;
     shift.end_time=splitTime;
     const newRow={id:'SH'+Date.now(),employee_id:shift.employee_id,date:shift.date,start_time:splitTime,end_time:originalEnd,is_day_off:false,lane:shift.lane||null};
     _rosterShifts.push(newRow);
@@ -10698,21 +10711,110 @@ async function rbSplitShift(shiftId,role){
       }
       const savedNewId=(saved?.id&&saved.id!==newRow.id)?saved.id:newRow.id;
       const splitRole=role||rbRoleForEmp(shift.employee_id);
+
+      /* LEAVE FOLLOWS BOTH HALVES.
+
+         Splitting a block says how the day is structured, not whether the person
+         is off — so the leave is mirrored onto the new half and the original's
+         entry is shrunk to match. Leaving the new half unclaimed would silently
+         halve their leave pay, with nothing on screen saying so.
+
+         It is also the workflow this is mostly used for: split a day into paid
+         leave and unpaid leave when someone has run out. Both halves come out as
+         the same type, and the manager changes one from the roster dropdown. */
+      if(linkedLeave){
+        leaveSnap=await rbSyncLeaveEntryToShift(shiftId,shift.start_time,splitTime);
+        const emp2=_emps.find(x=>String(x.id)===String(shift.employee_id));
+        const mRow={id:'L'+Date.now()+'_'+savedNewId, employee_id:shift.employee_id,
+          employee_name:linkedLeave.employeeName||emp2?.name||'', role:linkedLeave.role||emp2?.role||'',
+          date:shift.date, clock_in:splitTime.slice(0,5), clock_out:originalEnd.slice(0,5),
+          hours:((timeStrToMin(originalEnd)-timeStrToMin(splitTime))/60).toFixed(2),
+          leave_type:linkedLeave.leaveType, shift_id:savedNewId, status:'normal',
+          approved_by:currentManager?.name||'Manager', approved_at:new Date().toISOString()};
+        const mSaved=await db.insert('entries',mRow);
+        const mOne=Array.isArray(mSaved)?mSaved[0]:mSaved;
+        mirroredId=mOne?.id||mRow.id;
+        _entries.push(normaliseEntry({...mRow,id:mirroredId}));
+        renderTimesheets();
+      }
+
       rbPushUndo('shift split',async()=>{
+        if(mirroredId){ await db.delete('entries',mirroredId); _entries=_entries.filter(e=>String(e.id)!==String(mirroredId)); }
+        await rbRestoreLeaveEntrySpan(leaveSnap);
         await db.delete('roster_shifts',savedNewId);
         _rosterShifts=_rosterShifts.filter(s=>s.id!==savedNewId);
         shift.end_time=prevEnd;
         await db.update('roster_shifts',shiftId,{end_time:prevEnd});
         renderDayTimelineForRole(splitRole);
+        renderTimesheets();
       });
-      showToast('Shift split ✓');
+      showToast(linkedLeave
+        ? `Shift split ✓ — ${formatLeaveType(linkedLeave.leaveType)} applied to both halves`
+        : 'Shift split ✓');
     }catch(e){
       shift.end_time=prevEnd;
       _rosterShifts=_rosterShifts.filter(s=>s.id!==newRow.id);
+      // Best-effort unwind, in the reverse order it was done. Each step is
+      // guarded on its own: the connection that just failed may still be down,
+      // and a throw here would lose the toast that says the split did not work.
+      try{
+        if(mirroredId){ await db.delete('entries',mirroredId); _entries=_entries.filter(x=>String(x.id)!==String(mirroredId)); }
+      }catch(_){}
+      try{ await rbRestoreLeaveEntrySpan(leaveSnap); }catch(_){}
       renderDayTimelineForRole(role||rbRoleForEmp(shift.employee_id));
+      if(leaveSnap||mirroredId) renderTimesheets();
       showToast('Could not split shift');console.error(e);
     }
   });
+}
+
+/* ═══════════════════════════════════════════
+   KEEPING A LINKED LEAVE ENTRY IN STEP WITH ITS SHIFT
+
+   A leave entry does NOT store rostered times — `entries` has no rostered_start
+   or rostered_end. What rbMarkLeaveApply writes into clock_in/clock_out is a
+   COPY of the shift's span, taken at the moment leave was marked. It is not a
+   clock record: clock_in_iso is null on every leave row.
+
+   That copy is what pays. resolveFinalTimes falls back to it whenever the entry
+   carries no finals of its own, so a shift resized underneath its leave entry
+   keeps paying the OLD span — silently, because nothing compares the two.
+   Live on 21 Sep 2026: Sue McKellar 15 Jun and 23 Jul each paid half an hour
+   short against their own roster, both locked inside finalised periods.
+
+   final_start/final_end are deliberately NOT touched. Those exist only when a
+   manager set them by hand, and a manual adjustment must outrank the roster —
+   resolveFinalTimes prefers them anyway, so writing them here would be both
+   wrong and pointless.                                                        */
+function rbLinkedLeaveEntry(shiftId){
+  return (_entries||[]).find(e=>String(e.shiftId)===String(shiftId)&&e.leaveType&&!e.deleted)||null;
+}
+
+/* Rewrites the copied span to match the shift. Returns a snapshot of what it
+   changed so the caller's undo can put it back, or null if there was nothing to
+   do. A LOCKED entry is payroll that has been signed off and is left alone —
+   the caller says so rather than failing, because refusing would stop a manager
+   fixing a roster for a reason that has nothing to do with the old entry. */
+async function rbSyncLeaveEntryToShift(shiftId, startTime, endTime){
+  const linked=rbLinkedLeaveEntry(shiftId);
+  if(!linked) return null;
+  if(linked.locked) return {locked:true};
+  const clockIn=(startTime||'').slice(0,5), clockOut=(endTime||'').slice(0,5);
+  const hrs=((timeStrToMin(endTime)-timeStrToMin(startTime))/60).toFixed(2);
+  const before={id:linked.id, clockIn:linked.clockIn, clockOut:linked.clockOut, hours:linked.hours};
+  if(before.clockIn===clockIn&&before.clockOut===clockOut) return null;  // already in step
+  await db.update('entries',linked.id,{clock_in:clockIn,clock_out:clockOut,hours:hrs});
+  linked.clockIn=clockIn; linked.clockOut=clockOut; linked.hours=hrs;
+  return {before, after:{clockIn,clockOut,hours:hrs}};
+}
+
+// Puts a snapshot from rbSyncLeaveEntryToShift back, for undo.
+async function rbRestoreLeaveEntrySpan(snap){
+  if(!snap||!snap.before) return;
+  const e=(_entries||[]).find(x=>String(x.id)===String(snap.before.id));
+  await db.update('entries',snap.before.id,
+    {clock_in:snap.before.clockIn,clock_out:snap.before.clockOut,hours:snap.before.hours});
+  if(e){ e.clockIn=snap.before.clockIn; e.clockOut=snap.before.clockOut; e.hours=snap.before.hours; }
 }
 
 // Pure check, no side effects — use this to pre-check every shift involved in a
@@ -10794,15 +10896,27 @@ async function rbSaveShiftTimes(shiftId,startTime,endTime){
   const prevStart=shift.start_time, prevEnd=shift.end_time;
   shift.start_time=startTime; shift.end_time=endTime;
   const role=rbRoleForEmp(shift.employee_id);
+  // Captured by the undo closure below, once the sync has run.
+  let leaveSnap=null;
   const undoEntry={label:'shift times changed',fn:async()=>{
     shift.start_time=prevStart; shift.end_time=prevEnd;
     await db.update('roster_shifts',shiftId,{start_time:prevStart,end_time:prevEnd});
+    await rbRestoreLeaveEntrySpan(leaveSnap);
     if(role) renderDayTimelineForRole(role);
+    renderTimesheets();
   }};
   _rbUndoStack.push(undoEntry);
   try{
     await db.update('roster_shifts',shiftId,{start_time:startTime,end_time:endTime});
+    /* The leave entry follows the shift. Without this the entry keeps paying the
+       span it was created with — see rbSyncLeaveEntryToShift. */
+    leaveSnap=await rbSyncLeaveEntryToShift(shiftId,startTime,endTime);
     if(role) renderDayTimelineForRole(role);
+    if(leaveSnap?.locked){
+      showToast('Shift moved — the linked leave entry is locked and was left as it is');
+    } else if(leaveSnap){
+      renderTimesheets();
+    }
   }catch(e){
     const idx=_rbUndoStack.indexOf(undoEntry); if(idx!==-1) _rbUndoStack.splice(idx,1);
     showToast('Could not save shift'); console.error(e);
