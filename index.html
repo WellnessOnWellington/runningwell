@@ -5833,29 +5833,93 @@ function tsUnfinalisedForPeriod(selectedIds, fnDays, opts={}){
   // Grouped per day so a secondary raw entry on the same date can't raise a false warning;
   // this is the same canonical row the UI locks.
   const canonical=groupEntriesByDay(all);
-  const byDate=new Set(canonical.map(e=>String(e.employeeId)+'|'+e.date));
   const notReady=canonical
     .filter(e=>!tsIsEntryReady(e)&&(!requireTimes||((e.finalStart||e.clockIn)&&(e.finalEnd||e.clockOut))))
     .sort((a,b)=>(a.employeeName||'').localeCompare(b.employeeName||'')||a.date.localeCompare(b.date));
-  const missing=[];
+  /* PER BLOCK, NOT PER DAY.
+
+     This used to key on employeeId|date and skip any date holding ANY entry, so
+     a split day with one block covered and the other empty was invisible: the
+     day was not "missing", it just was not finished. Josephina TUT on 10 Sep
+     2026 was rostered 08:30-11:00 and 11:00-17:30, had an entry on the first
+     only, and exported 2.5h of a 9h day with nothing warning at the push confirm.
+
+     An empty block is now reported on its own, and sorted into two kinds,
+     because they want opposite responses:
+
+       missing — the block stands on its own or runs end-to-start with another.
+                 Real rostered time with no entry. Somebody was either not paid
+                 or not recorded.
+       debris  — the block OVERLAPS another block that day, which nobody can
+                 work, so it is a leftover roster row from a rebuild rather than
+                 unworked time. Identical duplicates are the same case: they
+                 overlap completely.
+
+     The split is provable rather than heuristic, which is what makes a warning
+     on `missing` quiet enough to be worth reading: across the whole database,
+     34 of 35 empty blocks predate the app becoming the sole record of hours on
+     11 Aug 2026, and exactly one falls after it. Each caller is scoped to one
+     pay period anyway, so only that fortnight's blocks are ever counted.        */
+  const missing=[], debris=[];
   if(includeMissing){
-    // One row per employee-day, not per shift: a split-shift day with no clock-in has two
-    // rostered blocks and would otherwise report the same person and date twice.
-    const seen=new Set();
+    /* COMPLETED DAYS ONLY. A pay period runs to a fortnight's end, so most of the
+       current one is in the future — those blocks have no entry because the day has
+       not happened, not because anybody was missed. Counting them turned this into
+       93 rows and 652 hours on 24 Sep 2026, which is a dialog nobody reads.
+
+       Strictly BEFORE today, not on or before: a day in progress has people mid-shift
+       with no clock-out yet. Same rule and the same reason as tsAutoLockSweep. */
+    const _today=rbDateKey(new Date());
+    const byEmpDate=new Map();
     shiftsSrc.forEach(sh=>{
-      if(sh.is_day_off||!fnDays.includes(sh.date)) return;
-      const eid=String(sh.employee_id), key=eid+'|'+sh.date;
-      if(!sel.has(eid)||byDate.has(key)||seen.has(key)) return;
-      seen.add(key);
-      const emp=empsSrc.find(em=>String(em.id)===eid);
-      missing.push({employeeId:eid, employeeName:emp?emp.name:'Unknown', date:sh.date});
+      if(sh.is_day_off||!sh.start_time||!sh.end_time||!fnDays.includes(sh.date)) return;
+      if(sh.date>=_today) return;
+      const eid=String(sh.employee_id);
+      if(!sel.has(eid)) return;
+      const k=eid+'|'+sh.date;
+      if(!byEmpDate.has(k)) byEmpDate.set(k,[]);
+      byEmpDate.get(k).push(sh);
     });
-    missing.sort((a,b)=>a.employeeName.localeCompare(b.employeeName)||a.date.localeCompare(b.date));
+    byEmpDate.forEach((blocks,k)=>{
+      const eid=k.slice(0,k.lastIndexOf('|')), date=k.slice(k.lastIndexOf('|')+1);
+      const segs=blocks.slice().sort((a,b)=>a.start_time.localeCompare(b.start_time));
+      /* Coverage is judged from EVERY entry that day, not the canonical one —
+         groupEntriesByDay collapses a day to a single row, which would report a
+         covered second block as empty. Same matching the timesheet grid uses:
+         leave by its own shift_id, worked time by largest overlap. */
+      const dayEntries=all.filter(e=>String(e.employeeId)===eid&&e.date===date);
+      const covered=new Set();
+      dayEntries.forEach(e=>{
+        const b=(e.leaveType&&e.shiftId)
+          ? segs.find(x=>String(x.id)===String(e.shiftId))
+          : tsBlockForEntry(e,segs);
+        if(b) covered.add(String(b.id));
+      });
+      const emp=empsSrc.find(em=>String(em.id)===eid);
+      segs.forEach(b=>{
+        if(covered.has(String(b.id))) return;
+        const bs=timeToMin(b.start_time), be=timeToMin(b.end_time);
+        const overlapsAnother=segs.some(o=>o.id!==b.id&&
+          Math.min(be,timeToMin(o.end_time))-Math.max(bs,timeToMin(o.start_time))>0);
+        (overlapsAnother?debris:missing).push({
+          employeeId:eid, employeeName:emp?emp.name:'Unknown', date, shiftId:b.id,
+          start:b.start_time.slice(0,5), end:b.end_time.slice(0,5),
+          hours:Math.max(0,(be-bs)/60),
+        });
+      });
+    });
+    const bySort=(a,b)=>a.employeeName.localeCompare(b.employeeName)||a.date.localeCompare(b.date)||a.start.localeCompare(b.start);
+    missing.sort(bySort); debris.sort(bySort);
   }
   const bullet=r=>`• ${r.employeeName||'Unknown'} — ${r.date}`;
-  return {all, canonical, notReady, missing,
+  // Times are stated because the whole point is WHICH block, and hours because
+  // that is the number a manager needs to judge whether it matters.
+  const blockBullet=r=>`• ${r.employeeName||'Unknown'} — ${r.date}, ${r.start}–${r.end} (${r.hours.toFixed(2)}h)`;
+  const missingHours=missing.reduce((a,r)=>a+r.hours,0);
+  return {all, canonical, notReady, missing, debris, missingHours,
           detail:notReady.map(bullet).join('\n'),
-          missingDetail:missing.map(bullet).join('\n')};
+          missingDetail:missing.map(blockBullet).join('\n'),
+          debrisDetail:debris.map(blockBullet).join('\n')};
 }
 // Single source of truth for a shift's effective start/end time — snaps each side to
 // the roster independently based on that side's own grace-period proximity. Shared by
@@ -6447,7 +6511,7 @@ async function tsToggleFinalize(cb){
     // since finalizing publishes the whole period to all staff at once.
     const activeEmps=_emps.filter(e=>!e.is_placeholder);
     const activeEmpIds=new Set(activeEmps.map(e=>String(e.id)));
-    const {canonical:canonicalEntries, notReady, missing}=
+    const {canonical:canonicalEntries, notReady, missing, missingHours, debris}=
       tsUnfinalisedForPeriod(activeEmpIds, fnDays, {includeMissing:true});
     // Unactioned swaps/give-aways/leave in this period mean the roster may not describe
     // what actually happened — pushing publishes that to staff as a final record.
@@ -6469,7 +6533,10 @@ async function tsToggleFinalize(cb){
       }
       if(missing.length){
         const names=[...new Set(missing.map(m=>m.employeeName))];
-        issues.push(`${missing.length} rostered day${missing.length===1?'':'s'} with no clock-in yet (${names.slice(0,5).join(', ')}${names.length>5?`, +${names.length-5} more`:''}) — will show as "Not yet finalised" on their PDF.`);
+        issues.push(`${missing.length} rostered block${missing.length===1?'':'s'} (${missingHours.toFixed(2)}h) with no timesheet entry (${names.slice(0,5).join(', ')}${names.length>5?`, +${names.length-5} more`:''}) — will show as "Not yet finalised" on their PDF.`);
+      }
+      if(debris.length){
+        issues.push(`${debris.length} rostered block${debris.length===1?'':'s'} overlap another on the same day — almost certainly leftover roster rows rather than unworked time. Roster tab → Remove Duplicates.`);
       }
       if(openReqs.size){
         const reqs=[...openReqs.values()];
@@ -7339,6 +7406,22 @@ function exportMYOBSelected(){
   if(notReady.length){
     if(!confirm(`${notReady.length} entr${notReady.length===1?'y':'ies'} for selected staff are not yet locked and will not be included:\n\n${detail}\n\nExport ${ready.length} ready entr${ready.length===1?'y':'ies'} anyway?`)) return;
   }
+  /* Asked separately from the not-locked question above, and after it: these are hours
+     that will be absent from the file entirely, which is a different and worse thing
+     than an entry being dropped from it. Overlapping blocks are excluded — nobody
+     worked them, and counting them here would pad the figure with hours nobody is owed. */
+  if(missing.length){
+    if(!confirm(
+      `${missing.length} rostered block${missing.length===1?'':'s'} in this period ` +
+      `(${missingHours.toFixed(2)} hours) ${missing.length===1?'has':'have'} no timesheet entry, ` +
+      `so ${missing.length===1?'it':'they'} will NOT be paid:\n\n${missingDetail}\n\n` +
+      `If any of that time was worked, add the times in Timesheets before exporting.\n\n` +
+      `Export anyway?`)) return;
+  }
+  if(debris.length){
+    // Not worth a dialog — nobody worked them — but worth a trace if a figure is queried.
+    console.warn(`MYOB export: ${debris.length} overlapping rostered block(s) ignored as roster debris`, debris);
+  }
 
   const _fmtD=d=>{const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0'),yy=String(d.getFullYear()).slice(-2);return dd+mm+yy;};
   const fnStartDate=new Date(fnStart+'T12:00:00');
@@ -7513,11 +7596,12 @@ async function downloadTimesheetsPDFs(){
   // These PDFs are the fortnightly Fair Work record, and an archive is only as good as
   // the state it captures — a warning that stayed silent about blank days would file an
   // incomplete record without saying so.
-  const {notReady, missing, detail, missingDetail}=tsUnfinalisedForPeriod(selectedIds, fnDays, {includeMissing:true});
+  const {notReady, missing, missingHours, missingDetail, detail, debris}=tsUnfinalisedForPeriod(selectedIds, fnDays, {includeMissing:true});
   if(notReady.length||missing.length){
     const parts=[];
     if(notReady.length) parts.push(`${notReady.length} entr${notReady.length===1?'y is':'ies are'} not yet locked and will be marked “(Provisional)”:\n\n${detail}`);
-    if(missing.length) parts.push(`${missing.length} rostered day${missing.length===1?'':'s'} ${missing.length===1?'has':'have'} no clock-in and will print “Not yet finalised”:\n\n${missingDetail}`);
+    if(missing.length) parts.push(`${missing.length} rostered block${missing.length===1?'':'s'} (${missingHours.toFixed(2)}h) ${missing.length===1?'has':'have'} no timesheet entry and will print “Not yet finalised” on the archive:\n\n${missingDetail}`);
+    if(debris.length) parts.push(`${debris.length} rostered block${debris.length===1?'':'s'} overlap another the same day \u2014 leftover roster rows rather than unworked time, and not counted above.`);
     if(!confirm(`${parts.join('\n\n')}\n\nDownload ${selectedIds.size} timesheet${selectedIds.size===1?'':'s'} anyway?`)) return;
   }
 

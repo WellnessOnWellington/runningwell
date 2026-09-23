@@ -125,6 +125,24 @@ else pushes normally.
   `tsa-filter-action` dropdown, or they render as a raw string and cannot be
   filtered.
 
+- **`tsUnfinalisedForPeriod` counts empty blocks PER BLOCK and only for COMPLETED
+  days.** It used to key `missing` on `employeeId|date` and skip any date holding
+  any entry, so a split day with one block covered and the other empty was
+  invisible — Josephina TUT, 10 Sep 2026, exported 2.5h of a 9h day with nothing
+  warning. Two rules make the per-block version quiet enough to read:
+  an empty block that OVERLAPS another the same day is returned as `debris`, not
+  `missing` — nobody works two blocks at once, so it is a leftover roster row, and
+  it gets its own line pointing at Remove Duplicates; and only dates strictly
+  BEFORE today are considered, because a pay period runs to a fortnight's end and
+  most of the current one has not happened yet. Without that date rule the check
+  reported 93 blocks and 652 hours on 24 Sep 2026. Same `d < today` rule, and the
+  same reason, as `tsAutoLockSweep`.
+  All three callers share it — the finalize confirm, the PDF archive and, new, the
+  MYOB export, which previously had no missing check at all on the argument that
+  "a row with no times has nothing to pay". True of a row, false of a file: the
+  export is where money is committed and an absent block is the one thing you
+  cannot see by reading it.
+
 - **A leave entry stores a COPY of its shift's span, not rostered times.**
   `entries` has no `rostered_start`/`rostered_end` — rostered comes from
   `roster_shifts`, live. What `rbMarkLeaveApply` writes into `clock_in`/`clock_out`
