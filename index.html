@@ -908,7 +908,7 @@
   .sr-leave-cell { position: relative; height: 58px; border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; border: 1.5px solid transparent; background: var(--warm-white); }
   .sr-leave-cell.blank { background: transparent; }
   .sr-leave-cell.free { background: var(--warm-white); }
-  .sr-leave-cell.annual { background: #fef0b0; border-color: #f5c030; }
+  .sr-leave-cell.annual { background: #fdf3d3; border-color: #f7dd8f; }
   .sr-leave-cell.other { background: #ececec; border-color: #c8c4c6; }
   .sr-leave-cell.past { opacity: 0.6; }
   /* A rostered shift with approved leave against it. Outlined, not recoloured:
@@ -927,15 +927,15 @@
   .sr-leave-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.85rem; padding-top: 0.75rem; margin-top: 0.75rem; border-top: 1px solid var(--border); font-size: 0.7rem; font-weight: 700; color: var(--muted); }
   .sr-leave-legend span { display: flex; align-items: center; gap: 0.35rem; }
   .sr-leave-legend i.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-  .sr-leave-legend i.sw.annual { background: #fef0b0; border: 1.5px solid #f5c030; }
+  .sr-leave-legend i.sw.annual { background: #fdf3d3; border: 1.5px solid #f7dd8f; }
   .sr-leave-legend i.sw.other { background: #ececec; border: 1.5px solid #c8c4c6; }
   .sr-leave-legend-hint { font-weight: 600; opacity: 0.8; }
   .sr-leave-listhdr { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 1.4rem 0 0.6rem; }
-  .sr-leave-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.35rem; border-bottom: 1px solid rgba(234,217,220,0.6); border-left: 3px solid #f5c030; padding-left: 0.7rem; }
+  .sr-leave-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.35rem; border-bottom: 1px solid rgba(234,217,220,0.6); border-left: 3px solid #f7dd8f; padding-left: 0.7rem; }
   .sr-leave-row:last-child { border-bottom: none; }
   .sr-leave-row-name { flex: 1; font-size: 0.85rem; font-weight: 700; color: var(--charcoal); }
   .sr-leave-row-when { font-size: 0.78rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
-  .sr-leave-row-days { font-size: 0.7rem; font-weight: 800; color: #7a5500; background: #fef0b0; border-radius: 20px; padding: 0.12rem 0.45rem; white-space: nowrap; }
+  .sr-leave-row-days { font-size: 0.7rem; font-weight: 800; color: #7a5500; background: #fdf3d3; border-radius: 20px; padding: 0.12rem 0.45rem; white-space: nowrap; }
   .sr-leave-none { text-align: center; padding: 1.5rem 1rem; color: var(--muted); font-size: 0.82rem; font-weight: 600; }
   .sr-leave-othernote { margin-top: 0.75rem; font-size: 0.74rem; font-weight: 600; color: var(--muted); text-align: center; line-height: 1.5; }
 
@@ -8168,10 +8168,12 @@ function isOnLeave(empId, date){
    blocks on. They do not need to know who is on personal or compassionate
    leave, and the Who's On PIN is shared across the clinic.
 
-   The gold is #f5c030 — the same gold .rb-shift-bar.annual-leave already uses
-   in the roster builder, so the admin board and the staff board cannot mean
-   different things by the same colour. */
-const SR_LEAVE_ANNUAL={bar:'#f5c030', barText:'#3d2600', pill:'#fef0b0', pillText:'#7a5500', tag:'Annual Leave', tagBg:'#f5c030', tagText:'#3d2600'};
+   The gold is a pale #f7dd8f — softened 27 Sep 2026 from the #f5c030 the roster
+   builder still uses. The two golds diverge deliberately: the roster builder is
+   an editing surface where a vivid colour helps a manager work, Who's On is a
+   calm read-only board where staff should not be shouted at. Both still say
+   "annual leave"; only the intensity differs. */
+const SR_LEAVE_ANNUAL={bar:'#f7dd8f', barText:'#5c4300', pill:'#fdf3d3', pillText:'#7a5500', tag:'Annual Leave', tagBg:'#f7dd8f', tagText:'#5c4300'};
 const SR_LEAVE_OTHER ={bar:'#c8c4c6', barText:'var(--muted)', pill:'rgba(180,180,180,0.13)', pillText:'#8d8589', tag:'On Leave', tagBg:'#c8c4c6', tagText:'#413b3d'};
 
 /* Approved leave the roster does not reflect — this person is still rostered to
