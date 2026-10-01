@@ -2752,6 +2752,26 @@
               </div>
             </div>
           </div>
+          <div class="roster-section" style="margin-bottom:0.5rem;">
+            <div class="roster-section-title">Automatic Cover for Annual Leave</div>
+            <div class="roster-anchor-bar" style="flex-direction:column;align-items:flex-start;gap:0.75rem;">
+              <span style="font-size:0.75rem;color:var(--muted);font-weight:500;line-height:1.5;">When a rostered shift is marked as <strong>annual leave</strong>, automatically create a matching Cover Required shift so staff can pick it up. Applies to future dates only, and to annual leave only &mdash; not personal or carer&rsquo;s leave. Each role needs an active &ldquo;Cover Required&rdquo; staff member before it can be switched on.</span>
+              <div style="display:flex;align-items:flex-end;gap:1rem;width:100%;">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                  <label style="display:flex;align-items:center;gap:0.6rem;font-size:0.85rem;font-weight:600;color:var(--charcoal);cursor:pointer;">
+                    <input type="checkbox" id="autocover-Receptionist" style="accent-color:var(--burgundy);width:16px;height:16px;"> Receptionists
+                  </label>
+                  <label style="display:flex;align-items:center;gap:0.6rem;font-size:0.85rem;font-weight:600;color:var(--charcoal);cursor:pointer;">
+                    <input type="checkbox" id="autocover-Nurse" style="accent-color:var(--burgundy);width:16px;height:16px;"> Nurses
+                  </label>
+                  <label style="display:flex;align-items:center;gap:0.6rem;font-size:0.85rem;font-weight:600;color:var(--charcoal);cursor:pointer;">
+                    <input type="checkbox" id="autocover-Manager" style="accent-color:var(--burgundy);width:16px;height:16px;"> Managers
+                  </label>
+                </div>
+                <button class="add-emp-btn" style="margin-left:auto;" onclick="saveAutoCoverRoles()">Save</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3721,6 +3741,10 @@ function applyRosterConfig(cfg){
     const enabled=_rosterConfig.giveaway_enabled_roles.split(',').map(s=>s.trim());
     ['Receptionist','Nurse','Manager'].forEach(r=>{ GIVEAWAY_ENABLED[r]=enabled.includes(r); });
   }
+  if(_rosterConfig?.auto_cover_roles!=null){
+    const enabled=_rosterConfig.auto_cover_roles.split(',').map(s=>s.trim());
+    ['Receptionist','Nurse','Manager'].forEach(r=>{ AUTO_COVER_ENABLED[r]=enabled.includes(r); });
+  }
   if(_rosterConfig?.coverage_thresholds){
     try{
       const parsed=JSON.parse(_rosterConfig.coverage_thresholds);
@@ -4456,6 +4480,12 @@ let _reqCoverShifts = [];
 let SWAP_EXPIRY_DAYS = 2;
 let SHOW_DECLINE_REASON = true;
 let GIVEAWAY_ENABLED = {Receptionist: true, Nurse: true, Manager: true};
+/* Auto-cover defaults all-FALSE, deliberately the opposite of GIVEAWAY_ENABLED above.
+   Both are config-derived globals read before applyRosterConfig populates them — the bug
+   shape documented at the top of applyRosterConfig. Give-away failing open only offers a
+   button; auto-cover failing open would WRITE roster rows nobody asked for. So it fails
+   toward doing nothing, which is also what every role gets until a partner turns it on. */
+let AUTO_COVER_ENABLED = {Receptionist: false, Nurse: false, Manager: false};
 let reqRole = 'Receptionist';
 const ROUND_WINDOW = 5; // minutes — clock times within this window of rostered time are rounded to roster time on timesheets
 // Clocking in EARLY was previously unbounded: any amount early snapped silently to the rostered
@@ -4871,6 +4901,14 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
         const leaveName=formatLeaveType(leaveEntry.leaveType);
         await db.update('entries',leaveEntry.id,{leave_type:null,clock_in:sheetTimeStr,clock_in_iso:isoNow,clock_out:null,clock_out_iso:null,hours:null,status:'pending',reason_in:`Clocked in — was marked as ${leaveName}`});
         Object.assign(leaveEntry,{leaveType:null,clockIn:sheetTimeStr,clockInISO:isoNow,clockOut:null,hours:null,status:'pending',reasonIn:`Clocked in — was marked as ${leaveName}`});
+        /* The person marked as leave has turned up, so the leave is gone and any cover
+           offered for it must go with it. Missing this is the double-payment path: the
+           cover shift would stay on the roster and stay pickable, and whoever took it
+           would be paid alongside the person now standing at the kiosk.
+           rbRemoveCoverForShift deletes by column, not by a _rosterShifts lookup, which
+           is what makes it safe here — the kiosk refresh never re-fetches entries and
+           _rosterShifts is only refreshed while the Who's On view is on screen. */
+        if(leaveEntry.shiftId) await rbRemoveCoverForShift(leaveEntry.shiftId);
         await addNote(emp,'Leave conflict',timeStr,`Clocked in but was marked as ${leaveName} for today — please review`,leaveEntry.id,todayKey);
         showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,_kioskFlashMsg(emp),emp);
         return;
@@ -7029,6 +7067,10 @@ async function tsDeleteRow(entryId, shiftId, empId, empName, date, e){
         action:'delete',reason:`Clock record removed from timesheets by ${mgr}`,manager_name:mgr});
       await db.update('entries',entryId,{deleted:true});
       if(entry) entry.deleted=true;
+      /* A soft-deleted leave entry is still leave that has gone away — every reader
+         filters on `deleted` — so the cover offered for it goes too. Keyed on the
+         entry's own shiftId, which for a leave row is the block it was marked on. */
+      if(entry?.leaveType&&entry.shiftId) await rbRemoveCoverForShift(entry.shiftId);
     }
 
     if(hasShift){
@@ -7098,6 +7140,11 @@ async function tsUndoDelete(){
       if(cached) cached.deleted=false;
       else if(item.entrySnapshot){item.entrySnapshot.deleted=false;_entries.push(item.entrySnapshot);}
       const en=cached||item.entrySnapshot||null;
+      // The leave is back, so the cover offered for it comes back with it.
+      if(en?.leaveType&&en.shiftId){
+        const _sh=_rosterShifts.find(s=>String(s.id)===String(en.shiftId));
+        if(_sh) await rbSpawnCoverForLeave(_sh,en.leaveType,en.role);
+      }
       // After the restore, so a failure here cannot roll back work that succeeded.
       // tsSaveAudit swallows its own errors for the same reason.
       await tsSaveAudit({entry_id:item.entryId,employee_id:en?.employeeId||null,
@@ -7988,6 +8035,108 @@ async function setLeaveType(entryId, leaveType){
   }catch(err){showToast('Could not update leave type');console.error(err);}
 }
 
+/* ── Auto-cover for annual leave ─────────────────────────────────────────
+   When a rostered block is marked as ANNUAL leave and the role has auto-cover
+   switched on, a matching "Cover Required" shift is created so staff can pick it
+   up from the Staff Portal. That is the same stored roster_shifts row a manager
+   would otherwise hand-build, so every surface that already draws cover shifts —
+   the roster builder, Who's On, the portal, the printed PDF, the CSV — draws
+   these without knowing they were automatic.
+
+   THE ROW IS STORED, NOT DERIVED, AND NOTHING RECONCILES IT.
+   A derived version was designed and rejected: approving a pick-up runs
+   rbCleanupLinkedEntryOnShiftDelete on the referenced shift, which deletes the
+   linked leave entry, so pointing a pick-up at the absent person's own block
+   would have deleted their leave record and their rostered shift — a silent
+   non-payment invisible to tsUnfinalisedForPeriod, which iterates shifts.
+
+   The cost of storing is that every path which makes leave appear or disappear
+   has to say so. There are eleven, listed at rbRemoveCoverForShift. A missed one
+   leaves a cover shift for leave that no longer exists, and if someone picks that
+   up, two people are paid for one slot. A reconciling sweep would have made a
+   missed path self-correct, and was rejected too: it writes to roster_shifts with
+   nobody at the screen, which is the "invisible bulk change" rbCopyLastFnForRole
+   already refuses to do. So the list below is load-bearing — add to it. */
+
+/* The active placeholder ("Cover Required") employee for a role, or null.
+   Checks `active` because _reqCoverShifts historically did not, so an archived
+   placeholder kept offering shifts to the portal — fixed there too. */
+function rbCoverPlaceholderFor(role){
+  return _emps.find(e=>e.is_placeholder&&e.role===role&&e.active!==false)||null;
+}
+
+/* Create the cover shift for a block just marked as annual leave. Returns the row,
+   or null when any precondition fails — every one of which is a legitimate "no
+   cover needed", not an error, so this never toasts. */
+async function rbSpawnCoverForLeave(shift, leaveType, role){
+  // Annual only for now. Personal/carer's leave is the more urgent cover case, but it
+  // is also the one marked same-day, which the future-date rule below excludes anyway.
+  if(leaveType!=='annual_leave') return null;
+  if(!shift||!shift.id||!shift.start_time||!shift.end_time||shift.is_day_off) return null;
+  const r=role||rbRoleForEmp(shift.employee_id);
+  if(!AUTO_COVER_ENABLED[r]) return null;
+  /* FUTURE BLOCKS ONLY. Both surfaces that offer cover to staff — _reqCoverShifts and
+     srCoverShiftsList — filter `date > today`, so a cover shift for today or earlier is
+     invisible to everyone who could fill it while still sitting on the roster forever. */
+  if(shift.date<=rbDateKey(new Date())) return null;
+  const ph=rbCoverPlaceholderFor(r);
+  if(!ph) return null;
+  // One cover row per block, ever. Re-marking leave (annual → personal → annual) or an
+  // undo/redo cycle must not stack them up; there is no sweep to tidy duplicates away.
+  if(_rosterShifts.some(s=>String(s.cover_for_shift_id)===String(shift.id))) return null;
+  // lane travels with the shift, not the person — dropping it silently moves a clinic
+  // (75plus) or admin shift onto the floor lane. Same rule as the swap/giveaway rows.
+  const row={id:'CV'+Date.now(),employee_id:ph.id,date:shift.date,start_time:shift.start_time,
+    end_time:shift.end_time,is_day_off:false,lane:shift.lane||null,cover_for_shift_id:shift.id};
+  try{
+    await db.insert('roster_shifts',row);
+    _rosterShifts.push(row);
+    return row;
+  }catch(e){ console.error('Could not create cover shift',e); return null; }
+}
+
+/* Remove the cover shift for a block whose leave has gone away. Returns the rows
+   actually deleted, or null on failure.
+
+   Deletes by COLUMN, not by a local lookup, so it does not depend on _rosterShifts
+   being fresh — which matters most on the kiosk, where commit() clears leave while the
+   Who's On refresh at returnOrFocusRFID never re-fetches entries.
+
+   cover_for_shift_id is only ever set on a placeholder-owned row, so this can never
+   reach a real person's shift. The pick-up branch of applyRosterWriteback deliberately
+   does NOT carry the column onto the row it builds for whoever picked the shift up.
+
+   ⚠ CALL THIS FROM EVERY PATH THAT MAKES ANNUAL LEAVE GO AWAY. Currently:
+     rbMarkLeaveApply clear branch · rbMarkLeaveApply's "leave marked" undo
+     rbCleanupLinkedEntryOnShiftDelete (covers rbDeleteShift, swap, giveaway, pickup)
+     reqRevokeLeave · rbSplitShift's two undo paths · tsDeleteRow's soft-delete
+     commit() on the kiosk — unattended, and the one that otherwise double-pays        */
+async function rbRemoveCoverForShift(shiftId){
+  if(!shiftId) return null;
+  try{
+    const removed=await db.deleteWhere('roster_shifts','cover_for_shift_id',shiftId);
+    const ids=new Set((removed||[]).map(r=>String(r.id)));
+    if(ids.size) _rosterShifts=_rosterShifts.filter(s=>!ids.has(String(s.id)));
+    return removed||[];
+  }catch(e){ console.error('Could not remove cover shift',e); return null; }
+}
+
+/* Has the cover for this block already been picked up by someone?
+
+   Matched on date and span rather than by id, because approving a pick-up deletes the
+   cover row (applyRosterWriteback, pickup branch) and takes the only id link with it.
+   Loose by construction — it drives a WARNING to a manager who can see the roster, never
+   a delete — and tight enough in practice: same date, same start, same end, same role. */
+function rbCoverPickedUpFor(shift, role){
+  if(!shift||!shift.start_time||!shift.end_time) return null;
+  const st=String(shift.start_time).slice(0,5), en=String(shift.end_time).slice(0,5);
+  return (_requests||[]).find(r=>r.type==='pickup'&&r.status==='approved'
+    &&r.initiatorShiftDate===shift.date
+    &&String(r.initiatorShiftStart||'').slice(0,5)===st
+    &&String(r.initiatorShiftEnd||'').slice(0,5)===en
+    &&(!role||r.initiatorRole===role))||null;
+}
+
 /* ── Marking leave by hand ───────────────────────────────────────────────
    The leave <select> is the one control in makeBar that stays live on a locked
    roster, and that is deliberate — someone calls in sick after the fortnight is
@@ -8008,6 +8157,13 @@ async function rbMarkLeave(empId, date, shiftId, leaveType){
   // Re-render on every refusal. The <select> has already moved to the new value on
   // screen, so leaving it there would display leave that was never written.
   const abort=msg=>{ showToast(msg); renderDayTimelineForRole(role); };
+  /* A placeholder is a slot, not a person, so it cannot be on leave. Marking one would
+     write an entries row and a leave_log row against "Cover Required", set on_leave on the
+     cover shift so the roster shows it as leave while _reqCoverShifts still offers it to
+     staff, and — if that entry were ever locked — block the pick-up approval through
+     rbCleanupLinkedEntryOnShiftDelete. The control is hidden in makeBar; this is the guard
+     that makes hiding it a convenience rather than the only thing stopping it. */
+  if(emp.is_placeholder) return abort('Cover shifts cannot be marked as leave — delete the shift to withdraw the offer');
   if(reqPeriodFinalised(date)){
     alert(`${srFortnightLabel(payPeriodStartFor(date))} has already been finalised and exported to MYOB.\n\nChanging leave now would change a pay period that has been paid. If it genuinely needs correcting, un-push that period in Timesheets first, then change it there.`);
     renderDayTimelineForRole(role);
@@ -8041,6 +8197,17 @@ async function rbMarkLeave(empId, date, shiftId, leaveType){
   const existingLeave=_entries.find(e=>e.shiftId===shiftId&&e.leaveType)
     ||_entries.find(e=>!e.shiftId&&e.employeeId===empId&&e.date===date&&e.leaveType);
   if(existingLeave?.locked) return abort('That leave entry is locked — change it in Timesheets');
+  /* Clearing leave whose cover somebody already picked up. The cover row is long gone —
+     approving a pick-up deletes it — so the person who took the shift stays rostered and
+     the day ends up double-staffed. The manager is the one who knows whether that is
+     wanted, so this states the consequence and lets them decide, rather than refusing. */
+  if(!leaveType&&existingLeave){
+    const _pu=rbCoverPickedUpFor(shift,emp.role);
+    if(_pu&&!confirm(`${_pu.initiatorName} already picked up the cover for this shift and is rostered on.\n\nClearing the leave puts ${empFirstName(emp)} back on the roster as well, so both will be rostered for ${(shift.start_time||'').slice(0,5)}–${(shift.end_time||'').slice(0,5)}.\n\nClear the leave anyway?`)){
+      renderDayTimelineForRole(role);
+      return;
+    }
+  }
   const proceed=()=>rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,existingLeave);
   const cancel=()=>renderDayTimelineForRole(role);
   if(rbIsLockedForRole(rbGetFnStart(),role)){
@@ -8072,6 +8239,8 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
     }
     await db.update('roster_shifts',shift.id,{on_leave:false});
     shift.on_leave=false;
+    // The leave is gone, so the cover offered for it has to go too.
+    if(snapLeave) await rbRemoveCoverForShift(shiftId);
     if(snapLeave){
       rbPushUndo('leave cleared',async()=>{
         const row={id:'L'+Date.now(),employee_id:empId,employee_name:emp.name,role:emp.role,date,clock_in:(shift.start_time||'').slice(0,5),clock_out:(shift.end_time||'').slice(0,5),hours:hrs2,leave_type:snapLeave.leaveType,shift_id:shiftId,status:'normal'};
@@ -8079,6 +8248,8 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
         _entries.push(normaliseEntry(row));
         await db.update('roster_shifts',shift.id,{on_leave:true});
         shift.on_leave=true;
+        // Undoing the clear puts the leave back, so it puts the cover back as well.
+        await rbSpawnCoverForLeave(shift,snapLeave.leaveType,emp.role);
         renderDayTimelineForRole(role); renderTimesheets();
       });
     }
@@ -8113,13 +8284,24 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
     shift.on_leave=true;
     const newLeaveEntry=_entries.find(e=>e.shiftId===shiftId&&e.leaveType);
     const newLeaveId=newLeaveEntry?.id;
+    /* Setting a type is also how a type gets CHANGED, and the cover was offered for annual
+       leave specifically. Switching annual → personal left the cover shift standing and
+       still pickable, offering cover for leave this feature does not cover. Spawn on
+       annual, retract on anything else — the else branch is a no-op when there was never
+       any cover, so it costs one round trip on a path a manager is already waiting on. */
+    let _cover=null;
+    if(leaveType==='annual_leave') _cover=await rbSpawnCoverForLeave(shift,leaveType,emp.role);
+    else await rbRemoveCoverForShift(shiftId);
     rbPushUndo('leave marked',async()=>{
       if(newLeaveId){ await db.delete('entries',newLeaveId); _entries=_entries.filter(e=>e.id!==newLeaveId); }
       await db.update('roster_shifts',shift.id,{on_leave:false});
       shift.on_leave=false;
+      await rbRemoveCoverForShift(shiftId);
       renderDayTimelineForRole(role); renderTimesheets();
     });
-    showToast(formatLeaveType(leaveType)+' marked');
+    // Say it plainly rather than opening a dialog to ask — the bar appears on the
+    // screen the manager is already looking at, and Undo takes it back.
+    showToast(formatLeaveType(leaveType)+' marked'+(_cover?' · cover shift created':''));
     renderDayTimelineForRole(role); renderTimesheets();
     await logLeaveEvent({
       event:'marked', employeeId:empId, employeeName:emp.name, role:emp.role,
@@ -10201,6 +10383,12 @@ function rbTogglePanel(role){
 function rbGetEmpsForRole(role){ return _emps.filter(e=>e.role===role); }
 
 function rbOverlapSegments(shifts){
+  /* A placeholder is a slot, not a person, so two of its shifts at the same time are two
+     vacancies, not a double-booking. Two people on annual leave the same day is the
+     ordinary case once auto-cover is on, and striping it red would say something false.
+     Checked here rather than at the five call sites, which all pass one person's shifts. */
+  const _first=shifts&&shifts[0];
+  if(_first&&_emps.some(e=>String(e.id)===String(_first.employee_id)&&e.is_placeholder)) return [];
   const segs=[];
   for(let i=0;i<shifts.length;i++) for(let j=i+1;j<shifts.length;j++){
     const a=shifts[i],b=shifts[j];
@@ -10254,7 +10442,10 @@ async function rbCopyLastFnForRole(role){
   const fnKey=rbDateKey(fnStart);
   const prevKey=rbDateKey(prevStart);
   const roleEmps=rbGetEmpsForRole(role).map(e=>e.id);
-  const prevShifts=_rosterShifts.filter(s=>s.date>=prevKey&&s.date<fnKey&&roleEmps.includes(s.employee_id));
+  /* Never copy a cover shift forward. It exists because of one specific person's leave on
+     one specific day; a fortnight later that leave does not exist, and the copy would be
+     a vacancy nobody has, offered to staff, repeating every fortnight. */
+  const prevShifts=_rosterShifts.filter(s=>s.date>=prevKey&&s.date<fnKey&&roleEmps.includes(s.employee_id)&&!s.cover_for_shift_id);
   if(!prevShifts.length){showToast('No shifts found in previous fortnight for '+RB_ROLE_LABELS[role]);return;}
 
   const base=Date.now();
@@ -10351,7 +10542,11 @@ function rbRemoveDuplicates(role){
   const fnStart=rbGetFnStart();
   const fnDays=getFortnight14Days(rbDateKey(fnStart));
   const roleEmpIds=new Set(rbGetEmpsForRole(role).map(e=>String(e.id)));
-  const roleShifts=_rosterShifts.filter(s=>roleEmpIds.has(String(s.employee_id))&&fnDays.includes(s.date));
+  /* Cover shifts are exempt. The key below is employee|date|start|end, and two people
+     on annual leave the same day with the same span produce two byte-identical rows on
+     the one placeholder — genuinely duplicate by that key, and genuinely two vacancies.
+     Collapsing them would silently halve the cover the clinic needs. */
+  const roleShifts=_rosterShifts.filter(s=>roleEmpIds.has(String(s.employee_id))&&fnDays.includes(s.date)&&!s.cover_for_shift_id);
   const normT=t=>t?String(t).slice(0,5):'';
   const seen=new Map();
   const toDelete=[];
@@ -10607,13 +10802,19 @@ function renderDayTimelineForRole(role){
     const currentLeave=leaveEntry?.leaveType||'';
     const drag=readOnly?'':` onmousedown="rbStartDrag(event,'${s.id}','move')"`;
     const delBtn=!readOnly?`<button class="rb-shift-del" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbDeleteShift('${s.id}','${role}')" title="Remove">&#215;</button>`:'';
-    const splitBtn=!readOnly?`<button class="rb-shift-split" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbSplitShift('${s.id}','${role}')" title="Split shift">✂</button>`:'';
+    /* A placeholder is a vacancy, not a person: it cannot take leave, and splitting it
+       would drop a row carrying no cover_for_shift_id that nothing could ever tidy up.
+       Both are refused in rbMarkLeave and rbSplitShift as well — hidden here so nobody
+       clicks a control that only answers back. Resize and delete stay: narrowing the hours
+       you need covered is useful, and deleting is how a manager declines cover. */
+    const _isSlot=!!emp.is_placeholder;
+    const splitBtn=!readOnly&&!_isSlot?`<button class="rb-shift-split" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbSplitShift('${s.id}','${role}')" title="Split shift">✂</button>`:'';
     const lHandle=!readOnly?`<div class="rb-shift-handle left" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','left')"></div>`:'';
     const rHandle=!readOnly?`<div class="rb-shift-handle right" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','right')"></div>`:'';
     const laneLabel=isNurse?(s.lane==='75plus'?'← Floor':'→ Clinic'):(s.lane==='admin'?'← Floor':'→ Admin');
     const laneBtn=!readOnly&&(isNurse||isReceptionist)?`<button class="rb-shift-lane-btn" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbToggleLane('${s.id}','${role}')" title="${laneLabel}">${laneLabel}</button>`:'';
     const leaveOpts=`<option value="">Worked Shift</option>`+Object.entries(LEAVE_TYPES).map(([v,l])=>`<option value="${v}"${currentLeave===v?' selected':''}>${l}</option>`).join('');
-    const leaveBtn=`<select class="rb-leave-select" onmousedown="event.stopPropagation()" onchange="event.stopPropagation();rbMarkLeave('${emp.id}','${selectedDay}','${s.id}',this.value)">${leaveOpts}</select>`;
+    const leaveBtn=_isSlot?'':`<select class="rb-leave-select" onmousedown="event.stopPropagation()" onchange="event.stopPropagation();rbMarkLeave('${emp.id}','${selectedDay}','${s.id}',this.value)">${leaveOpts}</select>`;
     const leaveClass=currentLeave?' on-leave '+currentLeave.replace(/_/g,'-'):'';
     const lockedClass=readOnly?' locked':'';
     const coverClass=emp.is_placeholder?' cover-required':'';
@@ -10763,6 +10964,19 @@ async function rbAddShift(empId,date,role){
 async function rbSplitShift(shiftId,role){
   const shift=_rosterShifts.find(s=>s.id==shiftId);
   if(!shift) return;
+  /* Never split a cover shift. newRow below does not carry cover_for_shift_id — and
+     deliberately should not, since the column means "this row covers that block" and a
+     second half would need its own link — so the half that fell out would be a
+     placeholder-owned row with no flag at all. Every retract path keys on that flag, as do
+     the Copy Fortnight and Remove Duplicates exemptions, so the orphan would survive the
+     leave being cleared, replicate forward a fortnight at a time, and stay pickable by
+     staff indefinitely. Resize the cover instead, or delete it and let the manager
+     hand-build what they actually want. */
+  const _shEmp=_emps.find(e=>String(e.id)===String(shift.employee_id));
+  if(_shEmp?.is_placeholder){
+    showToast('Cover shifts cannot be split — resize it, or delete it and add the cover you need');
+    return;
+  }
   rbPastFortGuard(shift.date, async()=>{
     const sMin=timeStrToMin(shift.start_time)||TL_START;
     const eMin=timeStrToMin(shift.end_time)||TL_END;
@@ -10821,11 +11035,16 @@ async function rbSplitShift(shiftId,role){
         const mOne=Array.isArray(mSaved)?mSaved[0]:mSaved;
         mirroredId=mOne?.id||mRow.id;
         _entries.push(normaliseEntry({...mRow,id:mirroredId}));
+        // The leave is mirrored onto the new half, so the cover is too. The original
+        // half's cover was already moved to the shortened span by the sync call above.
+        await rbSpawnCoverForLeave({...newRow,id:savedNewId},linkedLeave.leaveType,splitRole);
         renderTimesheets();
       }
 
       rbPushUndo('shift split',async()=>{
         if(mirroredId){ await db.delete('entries',mirroredId); _entries=_entries.filter(e=>String(e.id)!==String(mirroredId)); }
+        // Before the new half's shift row goes, take the cover that was offered for it.
+        await rbRemoveCoverForShift(savedNewId);
         await rbRestoreLeaveEntrySpan(leaveSnap);
         await db.delete('roster_shifts',savedNewId);
         _rosterShifts=_rosterShifts.filter(s=>s.id!==savedNewId);
@@ -10846,6 +11065,9 @@ async function rbSplitShift(shiftId,role){
       try{
         if(mirroredId){ await db.delete('entries',mirroredId); _entries=_entries.filter(x=>String(x.id)!==String(mirroredId)); }
       }catch(_){}
+      // newRow.id, not savedNewId — the latter is const inside the try. They hold the
+      // same value: newRow IS the row in _rosterShifts, so the id fix-up above mutates it.
+      try{ await rbRemoveCoverForShift(newRow.id); }catch(_){}
       try{ await rbRestoreLeaveEntrySpan(leaveSnap); }catch(_){}
       renderDayTimelineForRole(role||rbRoleForEmp(shift.employee_id));
       if(leaveSnap||mirroredId) renderTimesheets();
@@ -10891,6 +11113,17 @@ async function rbSyncLeaveEntryToShift(shiftId, startTime, endTime){
   if(before.clockIn===clockIn&&before.clockOut===clockOut) return null;  // already in step
   await db.update('entries',linked.id,{clock_in:clockIn,clock_out:clockOut,hours:hrs});
   linked.clockIn=clockIn; linked.clockOut=clockOut; linked.hours=hrs;
+  /* The other choke point auto-cover hangs off — the leave block moved, so the cover
+     offered for it has to move too, or staff are offered a span nobody needs covered.
+     Updated in place rather than deleted and recreated: a pick-up request already points
+     at this row by id, and rebuilding it would orphan that request. */
+  const _cv=(_rosterShifts||[]).find(s=>String(s.cover_for_shift_id)===String(shiftId));
+  if(_cv){
+    try{
+      await db.update('roster_shifts',_cv.id,{start_time:startTime,end_time:endTime});
+      _cv.start_time=startTime; _cv.end_time=endTime;
+    }catch(e){ console.error('Could not move cover shift',e); }
+  }
   return {before, after:{clockIn,clockOut,hours:hrs}};
 }
 
@@ -10901,6 +11134,18 @@ async function rbRestoreLeaveEntrySpan(snap){
   await db.update('entries',snap.before.id,
     {clock_in:snap.before.clockIn,clock_out:snap.before.clockOut,hours:snap.before.hours});
   if(e){ e.clockIn=snap.before.clockIn; e.clockOut=snap.before.clockOut; e.hours=snap.before.hours; }
+  // rbSyncLeaveEntryToShift moved the cover shift when it moved the leave, so undoing
+  // one has to undo the other. Times come from the snapshot, not from the shift, which
+  // on the split-undo path has not been put back yet.
+  if(e?.shiftId){
+    const _cv=(_rosterShifts||[]).find(s=>String(s.cover_for_shift_id)===String(e.shiftId));
+    if(_cv){
+      try{
+        await db.update('roster_shifts',_cv.id,{start_time:snap.before.clockIn,end_time:snap.before.clockOut});
+        _cv.start_time=snap.before.clockIn; _cv.end_time=snap.before.clockOut;
+      }catch(err){ console.error('Could not restore cover shift span',err); }
+    }
+  }
 }
 
 // Pure check, no side effects — use this to pre-check every shift involved in a
@@ -10926,6 +11171,11 @@ async function rbCleanupLinkedEntryOnShiftDelete(shiftId){
   const snapshot={...linked};
   await db.delete('entries',linked.id);
   _entries=_entries.filter(e=>e.id!==linked.id);
+  /* One of the two choke points auto-cover hangs off. Everything that removes a shift
+     and its leave in one go arrives here: rbDeleteShift, and the swap, give-away and
+     pick-up branches of applyRosterWriteback. Safe on a cover row itself — those carry
+     no linked leave entry, so this function has already returned above.               */
+  await rbRemoveCoverForShift(shiftId);
   return{ok:true,deletedEntry:snapshot};
 }
 
@@ -10946,6 +11196,8 @@ async function rbDeleteShift(shiftId,role){
         if(cleanup.deletedEntry){
           await db.insert('entries',denormaliseEntry(cleanup.deletedEntry));
           _entries.push(cleanup.deletedEntry);
+          // The shift and its leave are both back, so the cover offered for it is too.
+          await rbSpawnCoverForLeave(snapshot,cleanup.deletedEntry.leaveType,r);
         }
         renderDayTimelineForRole(r);
         renderTimesheets();
@@ -12495,7 +12747,9 @@ async function renderRequestForm(){
     const allShifts=await db.get('roster_shifts');
     _reqMyShifts=allShifts.filter(s=>s.employee_id===emp.id&&s.date>today).sort((a,b)=>a.date.localeCompare(b.date));
     const sixMonthsStr=rbDateKey(new Date(Date.now()+6*30.5*86400000));
-    const placeholderIds=new Set(_emps.filter(e=>e.is_placeholder&&e.role===emp.role).map(e=>e.id));
+    // `active` matters: an archived placeholder kept offering its shifts to staff, because
+    // this was the one placeholder lookup in the file that did not check it.
+    const placeholderIds=new Set(_emps.filter(e=>e.is_placeholder&&e.role===emp.role&&e.active!==false).map(e=>e.id));
     _reqCoverShifts=allShifts.filter(s=>placeholderIds.has(s.employee_id)&&s.date>today&&s.date<=sixMonthsStr&&!s.is_day_off&&s.start_time&&s.end_time).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,14);
   }catch(e){ _reqMyShifts=[]; _reqCoverShifts=[]; }
   const myShiftOptions=_reqMyShifts.length
@@ -13147,12 +13401,16 @@ async function managerApproveRequest(id){
     }
     // Say what actually happened. "Request approved" was true and useless: it read the
     // same whether the leave reached the roster or vanished into dates that have none.
+    // Cover is additive to whatever else happened — it can be created on the same
+    // approval that skipped a worked block or found days with no roster.
+    const _cv=(_wb?.coverCreated||[]).length;
+    const _cvSuffix=_cv?` · ${_cv} cover shift${_cv===1?'':'s'} created`:'';
     showToast(
       _unrostered.length
-        ? `Approved — ${_unrostered.length} day${_unrostered.length===1?'':'s'} not yet rostered, leave will need applying when that roster is built`
+        ? `Approved — ${_unrostered.length} day${_unrostered.length===1?'':'s'} not yet rostered, leave will need applying when that roster is built${_cvSuffix}`
       : _skipped.length
-        ? `Approved — leave skipped on ${_skipped.length} already-worked block${_skipped.length===1?'':'s'}`
-        : 'Request approved');
+        ? `Approved — leave skipped on ${_skipped.length} already-worked block${_skipped.length===1?'':'s'}${_cvSuffix}`
+        : 'Request approved'+_cvSuffix);
     renderRequests();
     // applyRosterWriteback has mutated _rosterShifts/_entries — refresh the views that
     // read them, and clear the pending-request markers this request was driving.
@@ -13213,6 +13471,8 @@ async function reqRevokeLeave(id){
       if(e.shiftId){
         const sh=_rosterShifts.find(x=>String(x.id)===String(e.shiftId));
         if(sh&&sh.on_leave){ try{ await db.update('roster_shifts',sh.id,{on_leave:false}); sh.on_leave=false; }catch(_){} }
+        // Withdrawn leave means the person is back on, so any cover offered goes.
+        await rbRemoveCoverForShift(e.shiftId);
       }
     }
     await db.update('requests',id,{status:'revoked',manager_id:currentManager?.id||null,manager_name:mgr,manager_decision:'revoked',manager_reason:reason||null,manager_decided_at:now});
@@ -13302,6 +13562,9 @@ function reqLeaveWorkedClashes(req){
 
 async function applyRosterWriteback(req){
   const skippedLeaveBlocks=[];
+  // Cover shifts created by this approval, counted so the toast can say so. Approving a
+  // fortnight of annual leave can create a dozen; the manager should not have to notice.
+  const coverCreated=[];
   // What the leave branch actually did, RECORDED rather than inferred afterwards.
   // `unrosteredDates` is the one the system had no way of knowing: a day this leave
   // covers where the roster does not exist yet, so nothing was written and nothing
@@ -13351,6 +13614,16 @@ async function applyRosterWriteback(req){
           _entries.push(normaliseEntry({...row,id:saved?.id||row.id}));
         }
         appliedDates.add(date);
+        // Offer the block for cover. Silently does nothing unless the leave is annual,
+        // the role has auto-cover on, the date is future and a placeholder exists.
+        // Same rule as rbMarkLeaveApply: approving non-annual leave over a block that was
+        // previously annual must retract the cover, not leave it standing.
+        if(req.leaveType==='annual_leave'){
+          const _cv=await rbSpawnCoverForLeave(rShift,req.leaveType,req.initiatorRole);
+          if(_cv) coverCreated.push(_cv);
+        } else {
+          await rbRemoveCoverForShift(rShift.id);
+        }
       }
     }
   } else if(req.type==='swap'){
@@ -13402,7 +13675,7 @@ async function applyRosterWriteback(req){
     _rosterShifts=freshShifts.filter(s=>s.id!==coverShift.id);
     _rosterShifts.push(newRow);
   }
-  return {skippedLeaveBlocks,appliedDates:[...appliedDates],unrosteredDates};
+  return {skippedLeaveBlocks,appliedDates:[...appliedDates],unrosteredDates,coverCreated};
 }
 
 /* ═══════════════════════════════════════════
@@ -13509,7 +13782,40 @@ function renderRequestSettings(){
   ['Receptionist','Nurse','Manager'].forEach(r=>{
     const el=document.getElementById('giveaway-'+r);
     if(el) el.checked=GIVEAWAY_ENABLED[r];
+    const ac=document.getElementById('autocover-'+r);
+    if(ac) ac.checked=AUTO_COVER_ENABLED[r];
   });
+}
+
+/* Auto-cover is REFUSED, not warned, for a role with no active "Cover Required" staff
+   member. Saved without one it is a silent no-op on every leave marking from then on —
+   the same shape as the public_holidays delete that reported success and changed nothing
+   for six months. Better to not save and say why. */
+async function saveAutoCoverRoles(){
+  const wanted=['Receptionist','Nurse','Manager'].filter(r=>{
+    const el=document.getElementById('autocover-'+r);
+    return el?el.checked:AUTO_COVER_ENABLED[r];
+  });
+  const missing=wanted.filter(r=>!rbCoverPlaceholderFor(r));
+  if(missing.length){
+    alert(`Automatic cover cannot be switched on for ${missing.join(' and ')} yet.\n\nThere is no active "Cover Required" staff member for ${missing.length===1?'that role':'those roles'}, so no cover shift could be created and the setting would do nothing.\n\nAdd one in Staff first: New Staff Member, give it a name like "Cover Required", set the role, and tick "Placeholder".`);
+    // Put the boxes back to what is actually saved, so the screen does not claim a
+    // setting that was refused.
+    ['Receptionist','Nurse','Manager'].forEach(r=>{
+      const el=document.getElementById('autocover-'+r);
+      if(el) el.checked=AUTO_COVER_ENABLED[r];
+    });
+    return;
+  }
+  const autoCoverRoles=wanted.join(',');
+  try{
+    const patch={auto_cover_roles:autoCoverRoles};
+    if(_rosterConfig) await db.update('roster_config','default',patch);
+    else await db.insert('roster_config',{id:'default',...patch});
+    ['Receptionist','Nurse','Manager'].forEach(r=>{ AUTO_COVER_ENABLED[r]=wanted.includes(r); });
+    if(_rosterConfig) Object.assign(_rosterConfig,patch);
+    showToast('Automatic cover saved ✓');
+  }catch(e){ showToast('Error saving'); console.error(e); }
 }
 
 async function saveSwapExpiry(){
