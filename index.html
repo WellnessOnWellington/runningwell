@@ -3054,11 +3054,18 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.0 &middot; September 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.1 &middot; October 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
             <div style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.1</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">1 October 2026 &mdash; Cover That Creates Itself</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Arranging cover for annual leave took two steps: mark the leave, then build a Cover Required shift by hand so that somebody could pick it up. The second step is now automatic. When a shift is marked as annual leave, a matching cover shift appears straight away and is offered to everyone of that role in the Staff Portal &mdash; the same orange bar on the roster, the same Pick Up tab, nothing new to learn. It is switched on per role in Settings, and it covers <strong>annual leave only</strong>: personal, carer&rsquo;s and other leave types still need cover arranged by hand. Annual leave already on the roster when this arrived has had its cover created too. Both lists of available cover &mdash; the Pick Up tab and the Cover Required page on Who&rsquo;s On &mdash; now show every shift going rather than only the first fourteen, so a shift months out can be claimed now instead of waiting for the nearer ones to be taken first. The count at the top of the list is the real number again; it used to stop at fourteen whatever the true figure was. A cover shift keeps the clinic or floor lane of the shift it stands in for, follows that shift if its times are changed or it is split, and withdraws itself if the leave is cleared, if the leave request is withdrawn, or if the person turns up and clocks in after all &mdash; so a shift is never left advertised for a day somebody is working.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.0</div>
                 <div>
@@ -4438,8 +4445,8 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.0';
-const APP_VERSION_DATE='September 2026';
+const APP_VERSION='3.1';
+const APP_VERSION_DATE='October 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
 // beyond it, a gap decision is required before the shift can be locked or exported.
