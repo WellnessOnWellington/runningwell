@@ -10049,16 +10049,18 @@ function srByLeave(monthKey, today){
 
 function srCoverShiftsList(emp, today){
   const initials=emp.name.split(' ').map(w=>w[0]).slice(0,2).join('');
+  /* Uncapped, matching the Staff Portal's Pick Up list — see the note at _reqCoverShifts.
+     This board is read-only, so a truncated list here was purely a lie about how much
+     cover the clinic needs, which is the opposite of what it exists to show. */
   const future=_rosterShifts
     .filter(s=>s.employee_id===emp.id&&s.date>today&&!s.is_day_off&&s.start_time&&s.end_time)
-    .sort((a,b)=>a.date.localeCompare(b.date))
-    .slice(0,14);
+    .sort((a,b)=>a.date.localeCompare(b.date));
   const header=`<div class="sr-person-header" style="border-bottom-color:rgba(230,126,34,0.3);">
     <div class="sr-person-avatar" style="background:#fdebd0;color:#e67e22;">${initials}</div>
     <div><div class="sr-person-name">${emp.name}</div><div class="sr-person-role">${emp.role} · Cover required</div></div>
   </div>`;
   if(!future.length){
-    return`<div class="sr-person-list"><div class="sr-person-card" style="border-color:#e67e22;">${header}<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:0.82rem;">No upcoming shifts to cover in the next 6 months.</div></div></div>`;
+    return`<div class="sr-person-list"><div class="sr-person-card" style="border-color:#e67e22;">${header}<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:0.82rem;">No upcoming shifts to cover.</div></div></div>`;
   }
   const rows=future.map(s=>{
     const d=new Date(s.date+'T12:00:00');
@@ -10076,7 +10078,7 @@ function srCoverShiftsList(emp, today){
       <span style="font-size:0.65rem;font-weight:700;color:#c0622a;margin-left:auto;opacity:0.65;">Interested? →</span>
     </div>`;
   }).join('');
-  return`<div class="sr-person-list"><div class="sr-person-card" style="border-color:#e67e22;">${header}<div class="sr-person-days">${rows}</div></div></div>`;
+  return`<div class="sr-person-list"><div class="sr-person-card" style="border-color:#e67e22;">${header}<div class="sr-person-days" style="max-height:60vh;overflow-y:auto;">${rows}</div></div></div>`;
 }
 
 /* ═══════════════════════════════════════════
@@ -12750,7 +12752,15 @@ async function renderRequestForm(){
     // `active` matters: an archived placeholder kept offering its shifts to staff, because
     // this was the one placeholder lookup in the file that did not check it.
     const placeholderIds=new Set(_emps.filter(e=>e.is_placeholder&&e.role===emp.role&&e.active!==false).map(e=>e.id));
-    _reqCoverShifts=allShifts.filter(s=>placeholderIds.has(s.employee_id)&&s.date>today&&s.date<=sixMonthsStr&&!s.is_day_off&&s.start_time&&s.end_time).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,14);
+    /* No length cap. There used to be a .slice(0,14), chosen in July 2026 when cover
+       shifts were hand-made and rare enough that the list could never reach it. Auto-cover
+       made 17 the first-day figure, and the cap then truncated SILENTLY — nothing told
+       staff more existed, so cover months out could not be claimed until thirteen nearer
+       ones had gone, while being invisible to every manager-facing check at the same time.
+       The header count was wrong too, reading "14 shifts available" when there were 17.
+       The six-month window below is the real bound and does the actual work; the list is
+       scrollable in its own right, so its length no longer costs anything. */
+    _reqCoverShifts=allShifts.filter(s=>placeholderIds.has(s.employee_id)&&s.date>today&&s.date<=sixMonthsStr&&!s.is_day_off&&s.start_time&&s.end_time).sort((a,b)=>a.date.localeCompare(b.date));
   }catch(e){ _reqMyShifts=[]; _reqCoverShifts=[]; }
   const myShiftOptions=_reqMyShifts.length
     ?_reqMyShifts.map(s=>s.on_leave?`<option value="${s.id}" disabled>${reqFmtDate(s.date)} ${s.start_time}–${s.end_time} (Not in)</option>`:`<option value="${s.id}">${reqFmtDate(s.date)} ${s.start_time}–${s.end_time}</option>`).join('')
@@ -12806,7 +12816,7 @@ async function renderRequestForm(){
           <div class="sr-person-avatar" style="background:#fdebd0;color:#e67e22;font-size:1.1rem;">📋</div>
           <div><div class="sr-person-name">Available Cover Shifts</div><div class="sr-person-role">${emp.role} · ${coverShifts.length} shift${coverShifts.length!==1?'s':''} available</div></div>
         </div>
-        <div class="sr-person-days">${coverRows}</div>
+        <div class="sr-person-days" style="max-height:50vh;overflow-y:auto;">${coverRows}</div>
       </div>`;
     }
   } else {
