@@ -7202,7 +7202,7 @@ async function tsUndoDelete(){
       // The leave is back, so the cover offered for it comes back with it.
       if(en?.leaveType&&en.shiftId){
         const _sh=_rosterShifts.find(s=>String(s.id)===String(en.shiftId));
-        if(_sh) await rbSpawnCoverForLeave(_sh,en.leaveType,en.role);
+        if(_sh) await rbSpawnCoverForLeave(_sh,en.leaveType);
       }
       // After the restore, so a failure here cannot roll back work that succeeded.
       // tsSaveAudit swallows its own errors for the same reason.
@@ -8127,12 +8127,23 @@ function rbCoverPlaceholderFor(role){
 /* Create the cover shift for a block just marked as annual leave. Returns the row,
    or null when any precondition fails — every one of which is a legitimate "no
    cover needed", not an error, so this never toasts. */
-async function rbSpawnCoverForLeave(shift, leaveType, role){
+/* ⚠ NO `role` ARGUMENT, DELIBERATELY. It used to take one and resolve
+   `role || rbRoleForEmp(...)`, so the caller's value WON and rbRoleForEmp — the only
+   thing that knows about staff groups — was merely the fallback. Four of six callers
+   passed `emp.role`, so a Manager in the nursing pool got no cover when leave was marked
+   or approved, but DID get it when a shift was split or a delete undone. Inconsistently
+   broken, and silent.
+
+   The shift already says whose it is, so the group is derivable here and a caller cannot
+   get it wrong. Every caller passes a row carrying a real employee_id, including the
+   synthetic half rbSplitShift builds. Fixing the five call sites instead would have left
+   a sixth, added later, free to make the same mistake. */
+async function rbSpawnCoverForLeave(shift, leaveType){
   // Annual only for now. Personal/carer's leave is the more urgent cover case, but it
   // is also the one marked same-day, which the future-date rule below excludes anyway.
   if(leaveType!=='annual_leave') return null;
   if(!shift||!shift.id||!shift.start_time||!shift.end_time||shift.is_day_off) return null;
-  const r=role||rbRoleForEmp(shift.employee_id);
+  const r=rbRoleForEmp(shift.employee_id);
   if(!AUTO_COVER_ENABLED[r]) return null;
   /* FUTURE BLOCKS ONLY. Both surfaces that offer cover to staff — _reqCoverShifts and
      srCoverShiftsList — filter `date > today`, so a cover shift for today or earlier is
@@ -8308,7 +8319,7 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
         await db.update('roster_shifts',shift.id,{on_leave:true});
         shift.on_leave=true;
         // Undoing the clear puts the leave back, so it puts the cover back as well.
-        await rbSpawnCoverForLeave(shift,snapLeave.leaveType,emp.role);
+        await rbSpawnCoverForLeave(shift,snapLeave.leaveType);
         renderDayTimelineForRole(role); renderTimesheets();
       });
     }
@@ -8349,7 +8360,7 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
        annual, retract on anything else — the else branch is a no-op when there was never
        any cover, so it costs one round trip on a path a manager is already waiting on. */
     let _cover=null;
-    if(leaveType==='annual_leave') _cover=await rbSpawnCoverForLeave(shift,leaveType,emp.role);
+    if(leaveType==='annual_leave') _cover=await rbSpawnCoverForLeave(shift,leaveType);
     else await rbRemoveCoverForShift(shiftId);
     rbPushUndo('leave marked',async()=>{
       if(newLeaveId){ await db.delete('entries',newLeaveId); _entries=_entries.filter(e=>e.id!==newLeaveId); }
@@ -11113,7 +11124,7 @@ async function rbSplitShift(shiftId,role){
         _entries.push(normaliseEntry({...mRow,id:mirroredId}));
         // The leave is mirrored onto the new half, so the cover is too. The original
         // half's cover was already moved to the shortened span by the sync call above.
-        await rbSpawnCoverForLeave({...newRow,id:savedNewId},linkedLeave.leaveType,splitRole);
+        await rbSpawnCoverForLeave({...newRow,id:savedNewId},linkedLeave.leaveType);
         renderTimesheets();
       }
 
@@ -11273,7 +11284,7 @@ async function rbDeleteShift(shiftId,role){
           await db.insert('entries',denormaliseEntry(cleanup.deletedEntry));
           _entries.push(cleanup.deletedEntry);
           // The shift and its leave are both back, so the cover offered for it is too.
-          await rbSpawnCoverForLeave(snapshot,cleanup.deletedEntry.leaveType,r);
+          await rbSpawnCoverForLeave(snapshot,cleanup.deletedEntry.leaveType);
         }
         renderDayTimelineForRole(r);
         renderTimesheets();
@@ -13717,7 +13728,7 @@ async function applyRosterWriteback(req){
         // Same rule as rbMarkLeaveApply: approving non-annual leave over a block that was
         // previously annual must retract the cover, not leave it standing.
         if(req.leaveType==='annual_leave'){
-          const _cv=await rbSpawnCoverForLeave(rShift,req.leaveType,req.initiatorRole);
+          const _cv=await rbSpawnCoverForLeave(rShift,req.leaveType);
           if(_cv) coverCreated.push(_cv);
         } else {
           await rbRemoveCoverForShift(rShift.id);
