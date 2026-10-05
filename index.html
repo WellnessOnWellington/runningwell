@@ -7097,6 +7097,20 @@ async function tsDeleteRow(entryId, shiftId, empId, empName, date, e){
   }else{
     confirmMsg=`Remove roster shift for ${empName} on ${date}?\n\nThis shift has no clock data and will be fully removed from timesheets. Press Ctrl+Z to undo.`;
   }
+  /* Removing a LEAVE row here puts the absent person back on the roster, exactly as
+     clearing leave from the roster dropdown does — so it needs the same warning when
+     somebody has already picked up the cover that leave created, or two people end up
+     rostered and paid for one slot with nothing said. rbMarkLeave has warned since the
+     feature shipped; this path and reqRevokeLeave did not. Resolved by GROUP, not role:
+     the pick-up request records the picker's role, so a Manager in the nursing pool has
+     to be compared as a Nurse or the guard quietly misses. */
+  const _delEntry=hasEntry?_entries.find(en=>String(en.id)===String(entryId)):null;
+  if(_delEntry&&_delEntry.leaveType&&_delEntry.shiftId){
+    const _b=_rosterShifts.find(s=>String(s.id)===String(_delEntry.shiftId));
+    const _emp=_emps.find(x=>String(x.id)===String(empId));
+    const _pu=_b?rbCoverPickedUpFor(_b,staffGroupFor(_emp)):null;
+    if(_pu) confirmMsg+=`\n\n⚠ ${_pu.initiatorName} already picked up the cover for this shift and is rostered on. Removing the leave puts ${empName} back as well, so BOTH will be rostered for ${(_b.start_time||'').slice(0,5)}–${(_b.end_time||'').slice(0,5)}, and both paid.`;
+  }
   if(!confirm(confirmMsg))return;
 
   const entry=effectiveHasEntry?_entries.find(en=>String(en.id)===String(entryId)):null;
@@ -8247,7 +8261,7 @@ async function rbMarkLeave(empId, date, shiftId, leaveType){
      the day ends up double-staffed. The manager is the one who knows whether that is
      wanted, so this states the consequence and lets them decide, rather than refusing. */
   if(!leaveType&&existingLeave){
-    const _pu=rbCoverPickedUpFor(shift,emp.role);
+    const _pu=rbCoverPickedUpFor(shift,staffGroupFor(emp));
     if(_pu&&!confirm(`${_pu.initiatorName} already picked up the cover for this shift and is rostered on.\n\nClearing the leave puts ${empFirstName(emp)} back on the roster as well, so both will be rostered for ${(shift.start_time||'').slice(0,5)}–${(shift.end_time||'').slice(0,5)}.\n\nClear the leave anyway?`)){
       renderDayTimelineForRole(role);
       return;
@@ -13517,11 +13531,31 @@ async function reqRevokeLeave(id){
     return;
   }
 
+  /* Days where somebody has ALREADY picked up the cover this leave created.
+     Putting the absent person back without saying so leaves two people rostered for one
+     slot, and both get paid. rbMarkLeave has warned about this since the feature shipped;
+     this path and tsDeleteRow did not, so the warning existed on one of the three ways to
+     cancel leave. Resolved by GROUP, not role: the pick-up request records the picker's
+     role, so a Manager in the nursing pool must be compared as a Nurse or the guard
+     silently misses. */
+  const _revokeEmp=_emps.find(e=>String(e.id)===String(r.initiatorId));
+  const _taken=[];
+  rows.forEach(e=>{
+    if(!e.shiftId) return;
+    const b=_rosterShifts.find(s=>String(s.id)===String(e.shiftId));
+    if(!b) return;
+    const pu=rbCoverPickedUpFor(b,staffGroupFor(_revokeEmp));
+    if(pu) _taken.push({date:e.date,who:pu.initiatorName,span:(b.start_time||'').slice(0,5)+'–'+(b.end_time||'').slice(0,5)});
+  });
+  const takenWarn=_taken.length
+    ? `\n\n⚠ Cover for ${_taken.length} day${_taken.length===1?'':'s'} in this range has already been picked up:\n\n${_taken.slice(0,8).map(t=>'  '+reqFmtDate(t.date)+'  '+t.span+'  — '+t.who).join('\n')}${_taken.length>8?`\n  +${_taken.length-8} more`:''}\n\nThose people stay rostered. Putting ${r.initiatorName} back means BOTH are on, and both are paid.`
+    : '';
+
   // Say exactly what is about to happen, including when the answer is "nothing".
   const what=rows.length
     ? `This will delete ${rows.length} leave row${rows.length===1?'':'s'} from the timesheet:\n\n${rows.slice(0,8).map(e=>'  '+reqFmtDate(e.date)+'  '+e.clockIn+'–'+e.clockOut+'  '+formatLeaveType(e.leaveType)).join('\n')}${rows.length>8?`\n  +${rows.length-8} more`:''}\n\nThe rostered shifts stay, and will be paid as worked time.`
     : `No leave rows were ever written for this request, so nothing will be deleted from the timesheet.`;
-  if(!confirm(`Withdraw ${r.initiatorName}'s ${formatLeaveType(r.leaveType).toLowerCase()} (${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)})?\n\n${what}\n\n${r.initiatorName} will be notified.`)) return;
+  if(!confirm(`Withdraw ${r.initiatorName}'s ${formatLeaveType(r.leaveType).toLowerCase()} (${reqFmtDate(r.leaveStartDate)} – ${reqFmtDate(r.leaveEndDate)})?\n\n${what}${takenWarn}\n\n${r.initiatorName} will be notified.`)) return;
   const reason=prompt('Reason for withdrawing (optional — leave blank to skip):');
   if(reason===null) return;
 
