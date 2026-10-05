@@ -3708,6 +3708,44 @@ const _rbHighlightDates = new Set();
 let _rbHighlightRole = null;
 const RB_ROLES=['Receptionist','Nurse','Manager'];
 const RB_ROLE_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
+
+/* ── Which group a person belongs to, as opposed to what their role is ──────────
+   `employees.role` does three jobs at once: payroll identity, permissions and
+   behaviour, and display grouping. For almost everyone those agree. For Sue
+   McKellar they do not — she is a Manager whose shifts are interchangeable with
+   the nurses', so she belongs in the nurse group for anything about WHO WORKS
+   ALONGSIDE WHOM, while remaining a Manager for everything else.
+
+   staffGroupFor() answers the grouping question only. Use it for rostering,
+   coverage, the staff-facing boards and the shift pools.
+
+   ⚠ DO NOT use it for any of these — they must keep reading `emp.role`:
+     · GRACE_BY_ROLE          Manager 11 min, Nurse 5 — her flagging must not move
+     · the `role==='Manager'` no-clock-in-expected test, in six places, which
+       lets tsAutoLockSweep create and LOCK a paid entry from the roster with
+       nobody at the screen. Changing that changes how a real person is paid.
+     · syncManagerLogin, _isPartner and anything else about access
+     · the MYOB export grouping
+   Her pay was never at risk either way: myobCategoriesFor reads `classification`
+   first and only falls back to role when there is none, and she is a Registered
+   Nurse — so she has always been billed on nurse categories.
+
+   The pool is role Nurse OR a nursing classification. That is the rule the swap
+   and give-away paths already used; it is now the only definition in the file.
+   It deliberately includes someone rostered as a Nurse whose classification is
+   not a nursing one — the printed-roster template used to disagree about exactly
+   that case and excluded them.                                                   */
+const NURSING_CLASSES=['Registered Nurse','Enrolled Nurse'];
+function inNursingPool(emp){
+  return !!emp&&(emp.role==='Nurse'||NURSING_CLASSES.includes(emp.classification));
+}
+function staffGroupFor(emp){
+  if(!emp) return null;
+  return inNursingPool(emp)?'Nurse':emp.role;
+}
+// Two people who can swap or give away a shift to each other: same group, which for
+// the nursing pool means a Manager classified as a nurse can swap with the nurses.
+function sameStaffGroup(a,b){ return !!a&&!!b&&staffGroupFor(a)===staffGroupFor(b); }
 let rbSelectedDay=null;
 let _rbMobDate=null;
 let rbState={Receptionist:{collapsed:false},Nurse:{collapsed:false},Manager:{collapsed:false}};
@@ -4607,7 +4645,7 @@ function renderKioskPresence(){
   const dnMap=buildDisplayNames(_emps);
   let html='';
   ROLE_ORDER.forEach(role=>{
-    const roleEmps=_emps.filter(e=>e.role===role&&inNow.has(e.id));
+    const roleEmps=_emps.filter(e=>staffGroupFor(e)===role&&inNow.has(e.id));
     if(!roleEmps.length) return;
     const p=SR_ROLE_PILL[role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'};
     html+=`<div class="kmp-label">${ROLE_LABELS[role]}</div>`;
@@ -9666,6 +9704,10 @@ function teamPresenceHtml(today, inNow, doneNow){
   const dnMap=buildDisplayNames(_emps);
   const groups=ROLE_ORDER.filter(r=>teamRoles.has(r)).map(role=>{
     const roleBar=SR_ROLE_BAR[role]||{bg:'var(--dusty)',text:'var(--charcoal)'};
+    /* Deliberately e.role, NOT staffGroupFor — unlike the identical line in srByDayGantt.
+       The Team tab is where staff RECORDS are managed, and the card below each row states
+       the true role ("Manager · Part Time"). Grouping the strip by staff group made the
+       top of the tab disagree with the cards underneath it. */
     const roleShifts=_emps.filter(e=>e.role===role)
       .map(emp=>({emp,shift:srShiftForEmp(emp.id,today)}))
       .filter(x=>x.shift&&x.shift!=='off')
@@ -9719,7 +9761,7 @@ function srByDayGantt(dateStr, today){
   let hasAny=false;
   const groups=ROLE_ORDER.filter(r=>srRoles.has(r)).map(role=>{
     const roleBar=SR_ROLE_BAR[role]||{bg:'var(--dusty)',text:'var(--charcoal)'};
-    const roleShifts=_emps.filter(e=>e.role===role)
+    const roleShifts=_emps.filter(e=>staffGroupFor(e)===role)
       .map(emp=>({emp,shift:srShiftForEmp(emp.id,dateStr)}))
       .filter(x=>x.shift&&x.shift!=='off')
       .sort((a,b)=>a.shift.start.localeCompare(b.shift.start));
@@ -9767,7 +9809,7 @@ function srByDayGantt(dateStr, today){
   const nowMin=isToday?new Date().getHours()*60+new Date().getMinutes():-1;
   const mobileGroups=ROLE_ORDER.filter(r=>srRoles.has(r)).map(role=>{
     const roleBar=SR_ROLE_BAR[role]||{bg:'var(--dusty)',text:'var(--charcoal)'};
-    const roleMobile=_emps.filter(e=>e.role===role)
+    const roleMobile=_emps.filter(e=>staffGroupFor(e)===role)
       .map(emp=>({emp,shift:srShiftForEmp(emp.id,dateStr)}))
       .filter(x=>x.shift&&x.shift!=='off')
       .sort((a,b)=>a.shift.start.localeCompare(b.shift.start));
@@ -10389,7 +10431,13 @@ function rbTogglePanel(role){
   renderRosterPanels();
 }
 
-function rbGetEmpsForRole(role){ return _emps.filter(e=>e.role===role); }
+/* Grouped by staffGroupFor, not by role — so a Manager classified as a nurse is built,
+   counted and copied with the nurses, and leaves the Managers section entirely. Every
+   caller is roster-builder scoped (the leave audit, Copy Fortnight, Remove Duplicates,
+   the fortnight grid and the day timeline), so nothing here reaches payroll. The day
+   timeline's coverage strip counts this same array, which is how the nurse count picks
+   her up. */
+function rbGetEmpsForRole(role){ return _emps.filter(e=>staffGroupFor(e)===role); }
 
 function rbOverlapSegments(shifts){
   /* A placeholder is a slot, not a person, so two of its shifts at the same time are two
@@ -10924,7 +10972,12 @@ function renderDayTimelineForRole(role){
   cov.innerHTML=`<div class="rb-tl-name-spacer" style="font-size:0.6rem;font-weight:700;color:var(--muted);display:flex;align-items:center;padding-left:6px;border-right:1px solid rgba(234,217,220,0.6);">Coverage</div><div style="flex:1;position:relative;height:100%;">${slots}</div>`;
 }
 
-function rbRoleForEmp(empId){ const e=_emps.find(e=>e.id===empId); return e?.role||null; }
+/* The SECTION a shift belongs to, which is a grouping question, not a role one — hence
+   staffGroupFor. Every caller re-renders a roster section or asks which fortnight lock
+   applies, except rbSpawnCoverForLeave, where it decides which placeholder the cover is
+   built against: that is what lets a nurse-pool manager's annual leave offer NURSE cover
+   rather than looking for a Manager placeholder that does not exist. */
+function rbRoleForEmp(empId){ const e=_emps.find(e=>e.id===empId); return staffGroupFor(e); }
 
 async function rbAddShift(empId,date,role){
   rbPastFortGuard(date, async()=>{
@@ -12099,8 +12152,13 @@ async function printRoster(){
     const dayChunks=isLarge?[allDays.slice(0,7),allDays.slice(7).filter(Boolean)]:[allDays];
 
     if(isNurses){
-      const nurseEmps=_emps.filter(e=>(e.classification==='Registered Nurse'||e.classification==='Enrolled Nurse')&&e.active!==false).sort((a,b)=>a.name.localeCompare(b.name));
-      if(!nurseEmps.length){showToast('No staff with a nursing classification found');return;}
+      /* The nursing pool, not classification alone. This template used to test the
+         classification by itself, which was the fifth and only divergent copy of the
+         rule in the file: it included a Manager classified as a nurse but EXCLUDED
+         someone rostered as a Nurse whose classification is not a nursing one, so the
+         printed roster and the swap picker disagreed about who the nurses were. */
+      const nurseEmps=_emps.filter(e=>inNursingPool(e)&&e.active!==false&&!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
+      if(!nurseEmps.length){showToast('No nursing staff found');return;}
       dayChunks.forEach((days,ci)=>{
         if(!days.length) return;
         const weekLabel=dayChunks.length>1?`Nurses — Week ${ci===0?'A':'B'}`:'Nurses';
@@ -12108,7 +12166,7 @@ async function printRoster(){
       });
     } else {
       selectedRoles.forEach(role=>{
-        const roleEmps=_emps.filter(e=>e.role===role&&e.active!==false).sort((a,b)=>a.name.localeCompare(b.name));
+        const roleEmps=_emps.filter(e=>staffGroupFor(e)===role&&e.active!==false).sort((a,b)=>a.name.localeCompare(b.name));
         if(!roleEmps.length) return;
         dayChunks.forEach((days,ci)=>{
           if(!days.length) return;
@@ -12758,7 +12816,7 @@ async function renderRequestForm(){
     const sixMonthsStr=rbDateKey(new Date(Date.now()+6*30.5*86400000));
     // `active` matters: an archived placeholder kept offering its shifts to staff, because
     // this was the one placeholder lookup in the file that did not check it.
-    const placeholderIds=new Set(_emps.filter(e=>e.is_placeholder&&e.role===emp.role&&e.active!==false).map(e=>e.id));
+    const placeholderIds=new Set(_emps.filter(e=>e.is_placeholder&&staffGroupFor(e)===staffGroupFor(emp)&&e.active!==false).map(e=>e.id));
     /* No length cap. There used to be a .slice(0,14), chosen in July 2026 when cover
        shifts were hand-made and rare enough that the list could never reach it. Auto-cover
        made 17 the first-day figure, and the cap then truncated SILENTLY — nothing told
@@ -12772,10 +12830,7 @@ async function renderRequestForm(){
   const myShiftOptions=_reqMyShifts.length
     ?_reqMyShifts.map(s=>s.on_leave?`<option value="${s.id}" disabled>${reqFmtDate(s.date)} ${s.start_time}–${s.end_time} (Not in)</option>`:`<option value="${s.id}">${reqFmtDate(s.date)} ${s.start_time}–${s.end_time}</option>`).join('')
     :'<option value="">No upcoming shifts found</option>';
-  const _nursingClasses=['Registered Nurse','Enrolled Nurse'];
-  const _inNursingPool=e=>e.role==='Nurse'||_nursingClasses.includes(e.classification);
-  const _canSwap=(a,b)=>a.role===b.role||(_inNursingPool(a)&&_inNursingPool(b));
-  const sameRoleEmps=_emps.filter(e=>e.id!==emp.id&&e.active!==false&&!e.is_placeholder&&_canSwap(emp,e));
+  const sameRoleEmps=_emps.filter(e=>e.id!==emp.id&&e.active!==false&&!e.is_placeholder&&sameStaffGroup(emp,e));
   const colleagueOptions=sameRoleEmps.length
     ?'<option value="">Select colleague…</option>'+sameRoleEmps.map(e=>`<option value="${e.id}">${escHtml(e.name)}</option>`).join('')
     :'<option value="">No colleagues of same role found</option>';
@@ -12876,9 +12931,7 @@ async function reqSubmitLeave(){
   if(endDate<startDate){ showToast('End date must be after start date'); return; }
   // Annual leave conflict check
   if(leaveType==='annual_leave'){
-    const nursingClasses=['Registered Nurse','Enrolled Nurse'];
-    const inNursingPool=e=>e.role==='Nurse'||nursingClasses.includes(e.classification);
-    const sameGroup=(a,b)=>a.role===b.role||(inNursingPool(a)&&inNursingPool(b));
+
     const dates=[];
     const cur=new Date(startDate+'T12:00:00'), endD=new Date(endDate+'T12:00:00');
     while(cur<=endD){dates.push(rbDateKey(cur));cur.setDate(cur.getDate()+1);}
@@ -12888,7 +12941,7 @@ async function reqSubmitLeave(){
       for(const row of leaveEntries){
         if(row.employee_id===emp.id||!dates.includes(row.date)) continue;
         const other=_emps.find(e=>e.id===row.employee_id);
-        if(!other||!sameGroup(emp,other)) continue;
+        if(!other||!sameStaffGroup(emp,other)) continue;
         conflicts.push({empName:other.name,date:row.date});
       }
       conflicts.sort((a,b)=>a.date.localeCompare(b.date));
@@ -12925,10 +12978,7 @@ async function reqSubmitSwap(){
   const colShift=_reqColleagueShifts.find(s=>s.id===colleagueShiftId);
   const colleague=_emps.find(e=>e.id===colleagueId);
   if(!myShift||!colShift||!colleague){ showToast('Could not find shift data'); return; }
-  const nursingClasses=['Registered Nurse','Enrolled Nurse'];
-  const inNursingPool=e=>e.role==='Nurse'||nursingClasses.includes(e.classification);
-  const canSwapWith=(a,b)=>a.role===b.role||(inNursingPool(a)&&inNursingPool(b));
-  if(!canSwapWith(emp,colleague)){ showToast('Swaps can only be with staff of the same role or classification'); return; }
+  if(!sameStaffGroup(emp,colleague)){ showToast('Swaps can only be with staff of the same role or classification'); return; }
   const id='REQ'+Date.now();
   const now=new Date().toISOString();
   const expiresAt=reqExpiryFor(myShift.date);
@@ -12951,10 +13001,7 @@ async function reqSubmitGiveaway(){
   const myShift=_reqMyShifts.find(s=>s.id===myShiftId);
   const colleague=_emps.find(e=>e.id===colleagueId);
   if(!myShift||!colleague){ showToast('Could not find shift data'); return; }
-  const nursingClasses=['Registered Nurse','Enrolled Nurse'];
-  const inNursingPool=e=>e.role==='Nurse'||nursingClasses.includes(e.classification);
-  const canSwapWith=(a,b)=>a.role===b.role||(inNursingPool(a)&&inNursingPool(b));
-  if(!canSwapWith(emp,colleague)){ showToast('Can only give a shift to someone of the same role or classification'); return; }
+  if(!sameStaffGroup(emp,colleague)){ showToast('Can only give a shift to someone of the same role or classification'); return; }
   const id='REQ'+Date.now();
   const now=new Date().toISOString();
   const expiresAt=reqExpiryFor(myShift.date);
