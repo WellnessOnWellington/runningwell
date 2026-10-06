@@ -7632,7 +7632,19 @@ function exportMYOBSelected(){
   a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));
   a.download=`${fnFileLabel}.txt`;
   a.click();
-  showToast(`Exported ${ready.length} entr${ready.length===1?'y':'ies'} for ${exportedEmpCount} staff ✓`);
+  /* deduped.length, not ready.length — the toast used to report the count BEFORE
+     deduplication, so it over-stated the file by one per collapsed duplicate. On the
+     22 Sep – 5 Oct period it said 142 when 140 rows were written. exportedEmpCount beside
+     it was already counting the deduped set, so the two halves of the same sentence
+     disagreed about which list they were describing.
+
+     The collapsed count is appended when there is one. A duplicate pair is otherwise
+     invisible: the Timesheets grid renders one row per rostered block, so a second entry
+     on the same block cannot be seen there, and the ⚠ Duplicate shifts badge that does
+     notice it has nothing to click. This is the one place the number is already known. */
+  const _collapsed=ready.length-deduped.length;
+  showToast(`Exported ${deduped.length} entr${deduped.length===1?'y':'ies'} for ${exportedEmpCount} staff ✓`
+    +(_collapsed>0?` · ${_collapsed} duplicate${_collapsed===1?'':'s'} skipped`:''));
 }
 
 /* ── DOWNLOAD TIMESHEETS (PDF + ZIP) ── */
