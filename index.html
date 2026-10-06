@@ -7501,10 +7501,20 @@ function exportMYOBSelected(){
 
   const fnStart=getPayPeriodStart(tsOffset);
   const fnDays=getFortnight14Days(fnStart);
-  // Shared with the PDF archive and the finalize toggle so they can't disagree about what
-  // is finalised. requireTimes: a row with no times has nothing to pay, so it is not the
-  // payroll export's problem. No missing-day check for the same reason.
-  const {all:allEntries, notReady, detail}=tsUnfinalisedForPeriod(selectedIds, fnDays, {requireTimes:true});
+  /* Shared with the PDF archive and the finalize toggle so they can't disagree about what
+     is finalised. `requireTimes` keeps a row with no times out of the not-locked list —
+     it has nothing to pay, so it is not the payroll export's problem.
+
+     `includeMissing` IS needed, and its absence broke this button outright from 24 Sep to
+     6 Oct 2026. The missing-blocks confirm below was added without passing the option or
+     destructuring what it returns, so `missing` was never defined and clicking Export threw
+     `ReferenceError: Can't find variable: missing` before writing anything — no file, no
+     toast, nothing in the UI to say why. It surfaced on the first payroll run after the
+     change rather than immediately, because the previous period had already been exported.
+     The stale comment that used to sit here still said "No missing-day check for the same
+     reason", which is exactly what the block below stopped being true. */
+  const {all:allEntries, notReady, detail, missing, missingHours, missingDetail, debris}=
+    tsUnfinalisedForPeriod(selectedIds, fnDays, {requireTimes:true, includeMissing:true});
 
   const ready=allEntries.filter(e=>tsIsEntryReady(e)&&(e.finalStart||e.clockIn)&&(e.finalEnd||e.clockOut));
 
