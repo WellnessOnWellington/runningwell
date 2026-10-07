@@ -3575,6 +3575,17 @@
   </div>
 </div>
 
+<!-- Duplicate clock records — read-only explainer -->
+<div class="modal-bg" id="ts-dup-modal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal" style="max-width:600px;width:95%;">
+    <div class="modal-title">Duplicate clock records</div>
+    <div id="ts-dup-body" style="max-height:62vh;overflow-y:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="document.getElementById('ts-dup-modal').classList.remove('show')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- DB offline intercept modal -->
 <div class="modal-bg" id="db-guard-modal">
   <div class="modal">
@@ -6739,13 +6750,31 @@ function renderTimesheets(){
     const myobBadge=allLocked?`<div class="ts-emp-myob-badge">Ready for MYOB</div>`:'';
     const totalHrsEl=totalMins>0?`<div class="ts-emp-hours${allLocked?' ready':''}">${(totalMins/60).toFixed(1)}h</div>`:'';
 
-    // Fires when two or more entries claim the SAME rostered block — which is what a duplicate
-    // actually is. It used to fire whenever a day had more than one block and no leave explained
-    // it, so every genuine split shift was badged and a real duplicate never was.
-    const hasDuplicates=activeDays.some(date=>{
+    /* Days where two or more entries claim the SAME rostered block. Almost always a second
+       card tap: commit()'s clock-in branch looks only for a STUB entry, so a tap on a day
+       already worked and closed opens a brand-new one.
+
+       ⚠ THIS IS NOT A PAY PROBLEM, AND THE BADGE MUST NOT IMPLY IT IS.
+       groupEntriesByDay MERGES the taps — earliest clock-in to latest clock-out, hours
+       summed, the gap between them recorded as breakMins and NEVER deducted from pay
+       (_calcMYOBRowsBase prices the span and subtracts only the standard unpaid break).
+       The MYOB export then dedups per block on top of that, tie-breaking on clocked span.
+       Across three months of live data every affected day paid correctly.
+
+       So the badge used to fire on a structural fact that was permanently true and could
+       never clear — a scar on days that were locked, priced and correct, pointing at a row
+       the grid cannot render, with nothing to click. Two states instead:
+
+         ⚠ amber   the duplicate is UNSETTLED — nobody has priced or locked it yet, and a
+                   manager can still act
+         ✓ muted   settled. The trace stays visible rather than silently vanishing, which
+                   would leave a manager unable to tell "I dealt with it" from "there was
+                   never one".                                                              */
+    const dupDays=[];
+    activeDays.forEach(date=>{
       const dayShifts=empShifts.filter(s=>s.date===date);
       const dayEntries=empEntries.filter(e=>e.date===date);
-      if(dayEntries.length<2) return false;
+      if(dayEntries.length<2) return;
       const segs=dayShifts.length>1
         ?dayShifts.slice().sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''))
         :dayShifts;
@@ -6755,9 +6784,18 @@ function renderTimesheets(){
         const k=b?String(b.id):'';
         perBlock[k]=(perBlock[k]||0)+1;
       });
-      return Object.entries(perBlock).some(([k,n])=>k&&n>1);
+      if(!Object.entries(perBlock).some(([k,n])=>k&&n>1)) return;
+      // Priced = a manager gave the day explicit final times, which outrank everything and
+      // settle what is paid. Locked = it has been through review and is ready for payroll.
+      const canonical=groupEntriesByDay(dayEntries)[0];
+      const settled=!!(canonical.finalStart&&canonical.finalEnd)||dayEntries.every(e=>e.locked);
+      dupDays.push({date,settled});
     });
-    const dupBadge=hasDuplicates?`<div style="font-size:0.68rem;background:#fff3e0;color:#e65100;border:1px solid #ffb74d;border-radius:20px;padding:0.15rem 0.55rem;font-weight:700;">⚠ Duplicate shifts</div>`:'';
+    const dupUnsettled=dupDays.some(d=>!d.settled);
+    const dupBadge=!dupDays.length?''
+      :dupUnsettled
+        ?`<div class="ts-dup-badge" onclick="event.stopPropagation();tsShowDuplicates('${String(emp.id)}')" title="Two clock records on one rostered shift — click to see how the hours were worked out" style="font-size:0.68rem;background:#fff3e0;color:#e65100;border:1px solid #ffb74d;border-radius:20px;padding:0.15rem 0.55rem;font-weight:700;cursor:pointer;">⚠ Duplicate shifts</div>`
+        :`<div class="ts-dup-badge" onclick="event.stopPropagation();tsShowDuplicates('${String(emp.id)}')" title="Had duplicate clock records; settled. Click to see how the hours were worked out" style="font-size:0.68rem;background:var(--warm-white);color:var(--muted);border:1px solid var(--border);border-radius:20px;padding:0.15rem 0.55rem;font-weight:700;cursor:pointer;">✓ Duplicates settled</div>`;
 
     const empIdStr=String(emp.id);
     const collapsed=_tsCollapsed.has(empIdStr);
@@ -7821,6 +7859,95 @@ function tsShiftForEntry(entry, shiftsSrc){
 // bind to the block their hours overlap. Several entries on one block merge as they always have.
 // Entries matching no block — an unrostered stint, an open clock-in with no finish yet — get
 // their own row with no block, so nothing can silently vanish from the timesheet.
+/* Read-only explainer behind the ⚠ Duplicate shifts badge.
+
+   Deliberately renders NOTHING editable and adds no row to the grid. An earlier design
+   pushed an extra {seg:null} row into tsResolveDayRows so the stray entry could be clicked;
+   that would have double-counted the employee hours figure, which sums paidMinsFor PER ROW,
+   permanently cleared "Ready for MYOB" (three every() loops require every row locked, and a
+   row with no rostered block can never auto-approve), and offered a Lock button that
+   tsLockRow refuses because it re-derives the shift and demands a gap type the row does not
+   render. Reading the entries straight from _entries avoids all of it.
+
+   The point of the dialog is to answer the only question the badge raises — "where did my
+   hours come from?" — since the merge is invisible everywhere else. */
+async function tsShowDuplicates(empId){
+  const emp=_emps.find(e=>String(e.id)===String(empId));
+  if(!emp) return;
+  const fnStart=getPayPeriodStart(tsOffset), fnDays=getFortnight14Days(fnStart);
+  const mine=_entries.filter(e=>String(e.employeeId)===String(empId)&&fnDays.includes(e.date)&&!e.deleted);
+  const shiftsFor=d=>_rosterShifts.filter(s=>String(s.employee_id)===String(empId)&&s.date===d&&!s.is_day_off&&s.start_time);
+  const blocks=[];
+  fnDays.forEach(date=>{
+    const dayEntries=mine.filter(e=>e.date===date);
+    if(dayEntries.length<2) return;
+    const segs=shiftsFor(date).slice().sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+    const perBlock={};
+    dayEntries.forEach(e=>{
+      const b=e.leaveType?segs.find(x=>String(x.id)===String(e.shiftId)):tsBlockForEntry(e,segs);
+      const k=b?String(b.id):'';
+      perBlock[k]=(perBlock[k]||0)+1;
+    });
+    if(!Object.entries(perBlock).some(([k,n])=>k&&n>1)) return;
+    const canonical=groupEntriesByDay(dayEntries)[0];
+    const seg=tsShiftForEntry(canonical,_rosterShifts);
+    const isPH=_publicHolidays?.has(date)||false;
+    const paidMins=paidMinsFor(canonical,seg,emp,isPH);
+    const {finalStart:rs,finalEnd:re}=resolveFinalTimes(canonical,seg,emp);
+    const rawH=(rs&&re)?(timeToMin(re)-timeToMin(rs))/60:0;
+    const brk=(rs&&re)?effectiveUnpaidBreakMins(canonical,rawH):0;
+    const settled=!!(canonical.finalStart&&canonical.finalEnd)||dayEntries.every(e=>e.locked);
+    /* resolveFinalTimes snaps to the rostered times inside ROUND_WINDOW and prefers any
+       final a manager set, so the paid span often differs from the raw taps. Saying so
+       stops the dialog raising the exact question it exists to answer. */
+    const clockedSpan=(canonical.clockIn&&canonical.clockOut)?`${canonical.clockIn} – ${canonical.clockOut}`:null;
+    const adjusted=!!(clockedSpan&&rs&&re&&(rs!==canonical.clockIn||re!==canonical.clockOut));
+    blocks.push({date,dayEntries,segs,canonical,paidMins,rs,re,rawH,brk,settled,clockedSpan,adjusted});
+  });
+  const body=document.getElementById('ts-dup-body');
+  if(!blocks.length){
+    body.innerHTML=`<div style="padding:1rem 0;color:var(--muted);font-size:0.85rem;">No duplicate clock records in this pay period.</div>`;
+    document.getElementById('ts-dup-modal').classList.add('show');
+    return;
+  }
+  const fmt=m=>`${Math.floor(m/60)}h ${String(Math.round(m%60)).padStart(2,'0')}m`;
+  body.innerHTML=`
+    <div style="font-size:0.82rem;color:var(--muted);line-height:1.55;margin-bottom:1rem;">
+      <strong style="color:var(--charcoal);">${escHtml(emp.name)}</strong> has more than one clock record
+      against a single rostered shift on ${blocks.length} day${blocks.length===1?'':'s'} this period —
+      almost always a card tapped twice. <strong style="color:var(--charcoal);">No hours are lost and nothing is paid twice.</strong>
+      The records are combined into one shift, and the gap between taps is <em>not</em> deducted.
+    </div>
+    ${blocks.map(b=>`
+      <div style="border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:0.8rem 0.95rem;margin-bottom:0.8rem;background:var(--warm-white);">
+        <div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.55rem;">
+          <div style="font-weight:800;font-size:0.88rem;color:var(--charcoal);">${reqFmtDate(b.date)}</div>
+          <div style="font-size:0.7rem;font-weight:700;color:${b.settled?'var(--muted)':'#e65100'};">${b.settled?'✓ settled':'⚠ not yet locked'}</div>
+          <div style="margin-left:auto;font-size:0.72rem;color:var(--muted);">rostered ${b.segs.length?b.segs.map(x=>x.start_time.slice(0,5)+'–'+x.end_time.slice(0,5)).join(', '):'—'}</div>
+        </div>
+        <div style="font-size:0.74rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">Clock records</div>
+        ${b.dayEntries.slice().sort((x,y)=>(x.clockIn||'').localeCompare(y.clockIn||'')).map(e=>`
+          <div style="display:flex;gap:0.6rem;font-size:0.8rem;padding:0.2rem 0;color:var(--charcoal);">
+            <span style="min-width:5.5rem;font-weight:700;">${e.clockIn||'—'} – ${e.clockOut||'<span style="color:var(--burgundy);">no clock-out</span>'}</span>
+            <span style="color:var(--muted);">${e.leaveType?formatLeaveType(e.leaveType):(e.hours?e.hours+'h recorded':'—')}</span>
+            <span style="margin-left:auto;color:var(--muted);font-size:0.72rem;">${e.locked?'locked':'unlocked'}${e.lockedBy?' · '+escHtml(e.lockedBy):''}</span>
+          </div>`).join('')}
+        <div style="font-size:0.74rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.3rem;">How the paid hours were worked out</div>
+        <div style="font-size:0.8rem;line-height:1.7;color:var(--charcoal);">
+          Combined into one shift <strong>${b.rs||'—'} – ${b.re||'—'}</strong> &nbsp;=&nbsp; ${b.rawH?fmt(b.rawH*60):'—'}<br>
+          ${b.adjusted?`<span style="font-size:0.74rem;color:var(--muted);">Clocked ${b.clockedSpan} — the paid start and finish come from the rostered times or a manager's correction, not the raw taps.</span><br>`:''}
+          ${b.brk>0?`Less the standard unpaid break &nbsp;−&nbsp; ${b.brk} min<br>`:`No unpaid break (under 6 hours)<br>`}
+          <strong style="color:var(--success);">Paid: ${fmt(b.paidMins)}</strong>
+          ${b.canonical.breakCount>0?`<div style="font-size:0.74rem;color:var(--muted);margin-top:0.3rem;">The ${b.canonical.breakCount} gap${b.canonical.breakCount===1?'':'s'} between taps${b.canonical.breakMins!=null?` (${b.canonical.breakMins} min)`:''} ${b.canonical.breakCount===1?'is':'are'} inside that span and <em>not</em> deducted.</div>`:''}
+        </div>
+      </div>`).join('')}
+    <div style="font-size:0.75rem;color:var(--muted);line-height:1.5;">
+      Nothing here needs fixing for payroll — the extra record is already part of the shift
+      above, and the MYOB export counts each rostered shift once.
+    </div>`;
+  document.getElementById('ts-dup-modal').classList.add('show');
+}
+
 function tsResolveDayRows(date, dayShifts, dayEntries){
   if(dayShifts.length<=1){
     return [{seg:dayShifts[0]||null, entry:dayEntries.length?groupEntriesByDay(dayEntries)[0]:null}];
