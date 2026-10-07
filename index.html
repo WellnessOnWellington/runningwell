@@ -3054,11 +3054,18 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.1 &middot; October 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.2 &middot; October 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
             <div style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.2</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">8 October 2026 &mdash; The Export, and Two Taps on One Shift</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Export for MYOB is working again.</strong> From 24 September until 6 October the button did nothing at all &mdash; no file, no message, no error on screen. Nothing was exported wrongly in that time; the export simply never ran, so a period finalised in those twelve days needs exporting again. The message after an export now reports how many rows were <em>written to the file</em> rather than how many were read, and says how many duplicate records were merged on the way, so the number on screen is the number in the file.<br><br><strong>Duplicate clock records are explained rather than just flagged.</strong> A card tapped twice on one rostered shift creates two records. This has never cost anyone pay &mdash; the records are combined into a single shift running from the first clock-in to the last clock-out, the gap between the taps is not deducted, and the export counts each rostered shift once &mdash; but the timesheet only ever showed one row, so the warning pointed at something a manager could not see. The badge now says which state a day is in: <strong>amber</strong> while nobody has locked or priced it, <strong>grey</strong> once it has been dealt with. Clicking it opens a read-only summary of that day &mdash; every clock record, which of them are locked, how the paid hours were arrived at, and what was merged. It changes nothing; it only shows the working.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.1</div>
                 <div>
@@ -4494,7 +4501,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.1';
+const APP_VERSION='3.2';
 const APP_VERSION_DATE='October 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;

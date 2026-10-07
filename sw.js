@@ -2,7 +2,7 @@
    Strategy: network-first with offline fallback.
    Increment CACHE_VER on each deploy to bust stale cache. */
 
-const CACHE_VER = 'rw-v12';
+const CACHE_VER = 'rw-v13';
 const PRECACHE = ['/', '/index.html', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', e => {
