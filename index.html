@@ -9797,7 +9797,14 @@ function renderStaffRoster(){
   let emps=[..._emps];
   const staffFilter=document.getElementById('sr-staff-filter')?.value;
   if(staffFilter) emps=emps.filter(e=>e.id===staffFilter);
-  else if(srLayout==='fortnight') emps=emps.filter(e=>srRoles.has(e.role));
+  /* staffGroupFor, not e.role. The role tabs are a staff-facing "show me the
+     nurses" filter, not a statement about anyone's job title — so a Manager in
+     the nursing pool has to answer to the Nurse tab. Reading e.role dropped her
+     out of the grid entirely the moment somebody unticked Managers to look at
+     just the nurses, which is the normal way a nurse uses this view.
+     ⚠ srAdjacentHtml renders the SAME grid for the swipe-in pane and carries an
+     identical line. Both or neither, or swiping changes who is on the roster. */
+  else if(srLayout==='fortnight') emps=emps.filter(e=>srRoles.has(staffGroupFor(e)));
   else emps=[]; // person view with no selection: show placeholder
 
   // Populate staff dropdowns (preserve selection)
@@ -10068,12 +10075,15 @@ function srByDay(days,emps,today){
     const isToday=date===today;
     const shifts=emps.map(e=>({emp:e,shift:srShiftForEmp(e.id,date)})).filter(x=>x.shift&&x.shift!=='off');
     const SR_ROLE_ORDER={Receptionist:0,Nurse:1,Manager:2};
-    shifts.sort((a,b)=>(SR_ROLE_ORDER[a.emp.role]??9)-(SR_ROLE_ORDER[b.emp.role]??9)||a.shift.start.localeCompare(b.shift.start));
+    // Ordered by staff group, so the nursing pool sorts together rather than
+    // leaving one of them stranded below the managers at the foot of the cell.
+    const _grpOrd=e=>SR_ROLE_ORDER[staffGroupFor(e)]??9;
+    shifts.sort((a,b)=>_grpOrd(a.emp)-_grpOrd(b.emp)||a.shift.start.localeCompare(b.shift.start));
     const items=shifts.length
       ?shifts.map(({emp,shift})=>{
         const look=srLeaveLook(emp.id,date,shift.id);
         const clash=!look&&srLeaveClash(emp.id,date);
-        const p=emp.is_placeholder?{bg:'rgba(230,126,34,0.15)',color:'#c0622a'}:look?{bg:look.pill,color:look.pillText}:(SR_ROLE_PILL[emp.role]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
+        const p=emp.is_placeholder?{bg:'rgba(230,126,34,0.15)',color:'#c0622a'}:look?{bg:look.pill,color:look.pillText}:(SR_ROLE_PILL[staffGroupFor(emp)]||{bg:'rgba(180,160,170,0.12)',color:'var(--charcoal)'});
         const sMin=timeStrToMin(shift.start)||TL_START;
         const eMin=timeStrToMin(shift.end)||TL_END;
         const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
@@ -10183,7 +10193,14 @@ function srLeaveSpans(fromKey,toKey){
       const type=m.get(d);
       if(run&&run.type===type&&nextKey(run.end)===d){ run.end=d; run.days++; return; }
       if(run) spans.push(run);
-      run={empId,name:emp.name,role:emp.role,type,start:d,end:d,days:1,annual:type==='annual_leave'};
+      /* `group`, deliberately not `role`. The only consumer is srByLeave's role-tab
+         filter, and the question it asks is "whose leave competes with mine" — which
+         is the staff group, the same population reqSubmitLeave blocks on. A Manager
+         in the nursing pool filed under Managers made this view show a nurse a free
+         week that reqSubmitLeave then refused, which is the exact failure the note at
+         the top of this function says the view exists to prevent. Named apart from
+         `role` so nobody later reads it back as a job title. */
+      run={empId,name:emp.name,group:staffGroupFor(emp),type,start:d,end:d,days:1,annual:type==='annual_leave'};
     });
     if(run) spans.push(run);
   });
@@ -10198,7 +10215,7 @@ function srByLeave(monthKey, today){
      running 28 Sep – 4 Oct is one span, and clipping it at the month boundary
      would report it as two shorter ones in two different months. */
   const spans=srLeaveSpans(rbDateKey(new Date(Y,M-2,1)), rbDateKey(new Date(Y,M+1,0)))
-    .filter(s=>srRoles.has(s.role)&&s.start<=toKey&&s.end>=fromKey);
+    .filter(s=>srRoles.has(s.group)&&s.start<=toKey&&s.end>=fromKey);
 
   // date -> {annual:[names], other:n}
   const byDate=new Map();
@@ -14458,7 +14475,8 @@ document.addEventListener('change', e=>{
     const staffFilter=document.getElementById('sr-staff-filter')?.value;
     let emps=[..._emps];
     if(staffFilter) emps=emps.filter(e=>e.id===staffFilter);
-    else if(srLayout==='fortnight') emps=emps.filter(e=>srRoles.has(e.role));
+    // staffGroupFor — must match renderStaffRoster's filter exactly; see the note there.
+    else if(srLayout==='fortnight') emps=emps.filter(e=>srRoles.has(staffGroupFor(e)));
     else return '<div style="text-align:center;padding:4rem 2rem;color:var(--muted);font-size:0.85rem;font-weight:600;">Select a staff member to view their roster.</div>';
     return srRenderFortnight(adjStart, adjDays, emps, adjPublished, today);
   }
