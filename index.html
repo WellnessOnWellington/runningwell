@@ -3887,6 +3887,7 @@ function normaliseEntry(r) {
     unpaidBreakMins: r.unpaid_break_mins ?? null,
     paidBreakMins: r.paid_break_mins ?? null,
     breakNote: r.break_note || null,
+    breakDecisionSource: r.break_decision_source || null,
     deleted: r.deleted || false,
     travelKm: r.travel_km ?? null,
     leaveTypeGap: r.leave_type_gap || null,
@@ -3924,6 +3925,7 @@ function denormaliseEntry(e){
     unpaid_break_mins: e.unpaidBreakMins,
     paid_break_mins: e.paidBreakMins,
     break_note: e.breakNote,
+    break_decision_source: e.breakDecisionSource,
     deleted: e.deleted,
     travel_km: e.travelKm,
     leave_type_gap: e.leaveTypeGap,
@@ -4955,7 +4957,13 @@ async function processRFID(card){
   }).catch(()=>{});
 }
 
-async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidBreakMins=null,paidBreakMins=null,breakNote=null,travelKm=null){
+/* `decisionSource` records HOW the break figure was arrived at, not what it was. It
+   changes no pay: the 15s timeout and a deliberate Yes both write the expected break,
+   which is why they are byte-identical in the data today and why nobody can say how
+   many of ~600 monthly 30-minute deductions anyone actually agreed to. Written on the
+   clock-OUT branch only; a clock-in has no break decision to record.
+   See Runningwell-Vault/break_decision_source_column.sql. */
+async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidBreakMins=null,paidBreakMins=null,breakNote=null,travelKm=null,decisionSource=null){
   try {
     if(action==='in'){
       // If a leave entry exists for today, convert it to a clock-in and alert manager
@@ -5002,11 +5010,12 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
         unpaid_break_mins:unpaidBreakMins,
         paid_break_mins:paidBreakMins,
         break_note:breakNote||null,
-        travel_km:travelKm||null
+        travel_km:travelKm||null,
+        break_decision_source:decisionSource||null
       };
       await db.update('entries', open.id, patch);
       const cached=_entries.find(e=>e.id===open.id);
-      if(cached) Object.assign(cached,{clockOut:sheetTimeStr,hours:hoursStr,unpaidBreakMins,paidBreakMins,breakNote:breakNote||null,travelKm:travelKm||null});
+      if(cached) Object.assign(cached,{clockOut:sheetTimeStr,hours:hoursStr,unpaidBreakMins,paidBreakMins,breakNote:breakNote||null,travelKm:travelKm||null,breakDecisionSource:decisionSource||null});
       if(reason) await addNote(emp,noteType||'Departure note',timeStr,reason,open.id,todayKey);
       // Reason kept to the employee's own words only — expected/actual break figures are
       // shown structurally on the approval card, recomputed live rather than parsed from text.
@@ -5095,7 +5104,7 @@ async function submitReason(){
 ═══════════════════════════════════════════ */
 async function maybeBreakConfirm(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType){
   if(action!=='out'||!open?.clockIn){
-    await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType);
+    await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,null,null,null,null,'not_asked');
     return;
   }
   const[ih,im]=open.clockIn.split(':').map(Number);
@@ -5112,7 +5121,8 @@ async function maybeBreakConfirm(emp,action,timeStr,sheetTimeStr,isoNow,open,tod
     return;
   }
   if(!unpaidExpected&&!paidExpected){
-    await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType);
+    // Shift too short to earn a break — no overlay, nothing to ask.
+    await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,null,null,null,null,'not_asked');
     return;
   }
   _breakCommitArgs={emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,shiftHours,unpaidExpected,paidExpected};
@@ -5158,7 +5168,7 @@ function showBreakConfirm(firstName,unpaidMins,paidMins){
       const pct=(_breakTimerSecs/15)*100;
       document.getElementById('break-timer-bar').style.width=pct+'%';
       document.getElementById('break-timer-label').textContent=`Assuming yes in ${_breakTimerSecs}s…`;
-      if(_breakTimerSecs<=0) breakYes();
+      if(_breakTimerSecs<=0) breakYes(true);   // true = nobody answered
     },1000);
   });
 }
@@ -5167,13 +5177,18 @@ function _clearBreakTimer(){
   if(_breakTimerInterval){clearInterval(_breakTimerInterval);_breakTimerInterval=null;}
 }
 
-async function breakYes(){
+/* ⚠ Called from TWO places: the "Yes, as expected" button and the 15s countdown.
+   They write the same break figure, so without `fromTimer` the database cannot tell a
+   deduction somebody agreed to from one nobody answered. That distinction is the only
+   reason this parameter exists. */
+async function breakYes(fromTimer){
   _clearBreakTimer();
   document.getElementById('break-overlay').classList.remove('show');
   if(!_breakCommitArgs) return;
   const{emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected}=_breakCommitArgs;
   _breakCommitArgs=null;
-  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected,null);
+  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected,null,null,
+               fromTimer===true?'timeout':'confirmed');
 }
 
 function breakNo(){
@@ -5217,7 +5232,7 @@ async function submitBreakEdit(){
   const breakReason=document.getElementById('break-edit-reason').value.trim();
   _breakCommitArgs=null;
   document.getElementById('break-edit-overlay').classList.remove('show');
-  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidTaken,paidTaken,breakReason||null);
+  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidTaken,paidTaken,breakReason||null,null,'edited');
 }
 
 /* ═══════════════════════════════════════════
@@ -5270,18 +5285,21 @@ function showClinicOverlay(firstName,unpaidExpected,paidExpected){
       const pct=(_clinicTimerSecs/15)*100;
       bar.style.width=pct+'%';
       label.textContent=`Assuming no in ${_clinicTimerSecs}s…`;
-      if(_clinicTimerSecs<=0) clinicNo();
+      if(_clinicTimerSecs<=0) clinicNo(true);   // true = nobody answered
     },1000);
   });
 }
 
-function clinicNo(){
+/* Same dual-caller trap as breakYes: the "No, all good" button and the 15s countdown
+   both land here and both write the expected break. */
+function clinicNo(fromTimer){
   _clearClinicTimer();
   document.getElementById('clinic-overlay').classList.remove('show');
   if(!_clinicCommitArgs) return;
   const{emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected}=_clinicCommitArgs;
   _clinicCommitArgs=null;
-  commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected,null,null);
+  commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected,null,null,
+         fromTimer===true?'timeout':'confirmed');
 }
 
 function clinicYesExpand(){
@@ -5309,7 +5327,7 @@ async function submitClinicClockOut(){
   const kmVal=parseFloat(document.getElementById('clinic-km-input').value)||null;
   _clinicCommitArgs=null;
   document.getElementById('clinic-overlay').classList.remove('show');
-  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidTaken,paidTaken,breakReason||null,kmVal);
+  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidTaken,paidTaken,breakReason||null,kmVal,'edited');
 }
 
 /* ═══════════════════════════════════════════
