@@ -5080,6 +5080,40 @@ function showFlash(type,wave,greeting,name,sub,pendingMsg='',emp=null){
   flashT=setTimeout(()=>{o.classList.remove('show');returnOrFocusRFID();},2800);
 }
 
+/* The clock record must never depend on somebody typing a sentence. The prompt asks for
+   context; the tap is the legal record of when they were here. These two carry the clock
+   through when the context never arrives — cancelled, or walked away from.
+
+   The reason text is system-authored in that case, which `reason_in` already does on the
+   leave-conversion path (:4972), so a manager reading it sees plainly that nobody
+   answered rather than seeing nothing at all. */
+const REASON_CANCELLED='No reason given — the prompt was cancelled at the kiosk';
+const REASON_ABANDONED='No reason given — the prompt was left open and timed out';
+/* 90 seconds, and deliberately NOT a visible countdown. kiosk_overlay_timers.md is
+   explicit that staff must not be made to type against a clock, so this only fires on a
+   prompt that is still EMPTY — if there is any text in the box it reschedules and waits.
+   It exists to rescue an abandoned prompt, not to hurry anyone. */
+const REASON_IDLE_MS=90*1000;
+let _reasonTimer=null;
+function _clearReasonTimer(){ if(_reasonTimer){clearTimeout(_reasonTimer);_reasonTimer=null;} }
+function _startReasonTimer(){
+  _clearReasonTimer();
+  _reasonTimer=setTimeout(function tick(){
+    const box=document.getElementById('reason-text');
+    if(!pending||!document.getElementById('reason-overlay').classList.contains('show')) return;
+    if(box&&box.value.trim()){ _reasonTimer=setTimeout(tick,REASON_IDLE_MS); return; }  // still typing
+    _commitWithoutReason(REASON_ABANDONED);
+  },REASON_IDLE_MS);
+}
+/* Shared by cancel and timeout: close the prompt, keep the clock, flag it for a manager. */
+async function _commitWithoutReason(text){
+  _clearReasonTimer();
+  document.getElementById('reason-overlay').classList.remove('show');
+  const p=pending; pending=null;
+  if(p) await maybeBreakConfirm(p.emp,p.action,p.timeStr,p.sheetTimeStr,p.isoNow,p.open,p.todayKey,text,p.noteType);
+  returnOrFocusRFID();
+}
+
 function showReasonPrompt(firstName,action,label){
   document.getElementById('reason-overlay').classList.add('show');
   document.getElementById('reason-title').textContent=action==='in'?'Just let us know, '+firstName+' 😊':'Quick note before you go, '+firstName;
@@ -5089,14 +5123,19 @@ function showReasonPrompt(firstName,action,label){
   document.getElementById('reason-submit-btn').textContent=action==='in'?'Submit & check in':'Submit & check out';
   document.getElementById('reason-text').value='';
   setTimeout(()=>document.getElementById('reason-text').focus(),120);
+  _startReasonTimer();
 }
 
-function cancelReason(){document.getElementById('reason-overlay').classList.remove('show');pending=null;returnOrFocusRFID();}
+/* Cancel used to DISCARD the clock record outright — no row, no screen, no trace. The
+   tap had already happened; only the explanation was declined. Covered by
+   late_in_CANCEL in Runningwell-Vault/kiosk_tap_suite.js. */
+async function cancelReason(){ await _commitWithoutReason(REASON_CANCELLED); }
 
 async function submitReason(){
   const txt=document.getElementById('reason-text').value.trim();
   if(!txt){document.getElementById('reason-text').style.borderColor='var(--wine)';return;}
   document.getElementById('reason-text').style.borderColor='';
+  _clearReasonTimer();
   document.getElementById('reason-overlay').classList.remove('show');
   if(pending){
     const{emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,noteType}=pending;
