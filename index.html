@@ -5120,6 +5120,26 @@ async function maybeBreakConfirm(emp,action,timeStr,sheetTimeStr,isoNow,open,tod
 }
 
 function showBreakConfirm(firstName,unpaidMins,paidMins){
+  /* Kill any countdown already running before starting another.
+
+     The interval below is assigned to the single global _breakTimerInterval from inside
+     a requestAnimationFrame callback. Calling this function while one is already live
+     overwrote the only reference to it, stranding an interval that nothing could clear —
+     and every stranded one keeps decrementing the SHARED _breakTimerSecs. Orphans live as
+     long as the page does, which on the kiosk is a whole day, so each overlapping pair
+     permanently shortened every later countdown.
+
+     Measured in Chrome, two builds side by side, after 1 / 2 / 3 overlapping pairs:
+       without this line  2.00, 4.00, 5.66 decrements per second -> countdown 2.7s
+       with it            1.00, 1.00, 1.00                       -> countdown 15s
+     This overlay auto-commits 30 minutes unpaid on expiry, so the countdown is how long
+     someone has to say they did not get their break. Four qualifying overlaps in six
+     months of live data (9 Jul, 20 Jul, 5 Aug, 2 Oct 2026).
+
+     ⚠ Does NOT fix the lost clock-out: _breakCommitArgs is a single global that a second
+     tap overwrites, so one of two overlapping clock-outs is still discarded. Covered by
+     two_taps_during_break in Runningwell-Vault/kiosk_tap_suite.js, which still fails. */
+  _clearBreakTimer();
   const items=[];
   if(unpaidMins) items.push(`<div class="break-expected-item">🍽 <strong>${unpaidMins} min</strong> unpaid meal break</div>`);
   if(paidMins)   items.push(`<div class="break-expected-item">☕ <strong>${paidMins} min</strong> paid rest break</div>`);
@@ -5208,6 +5228,7 @@ function _clearClinicTimer(){
 }
 
 function showClinicOverlay(firstName,unpaidExpected,paidExpected){
+  _clearClinicTimer();   // same orphan-interval trap as showBreakConfirm above
   document.getElementById('clinic-overlay-title').textContent=`Before you go, ${firstName}…`;
   // Reset to default state
   document.getElementById('clinic-btn-row').style.display='flex';
