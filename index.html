@@ -4963,7 +4963,7 @@ async function processRFID(card){
    many of ~600 monthly 30-minute deductions anyone actually agreed to. Written on the
    clock-OUT branch only; a clock-in has no break decision to record.
    See Runningwell-Vault/break_decision_source_column.sql. */
-async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidBreakMins=null,paidBreakMins=null,breakNote=null,travelKm=null,decisionSource=null){
+async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidBreakMins=null,paidBreakMins=null,breakNote=null,travelKm=null,decisionSource=null,deferFlash=false){
   try {
     if(action==='in'){
       // If a leave entry exists for today, convert it to a clock-in and alert manager
@@ -5027,8 +5027,14 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       // anyway — the break may not be resolved yet and a manager may still adjust the times.
       const _onSiteMins=Math.max(0,Math.round(hrs*60));
       const _onSite=_onSiteMins>=60?Math.floor(_onSiteMins/60)+'h '+String(_onSiteMins%60).padStart(2,'0')+'m':_onSiteMins+'m';
-      showFlash('depart','🌸','See you next time,',emp.name.split(' ')[0],
-        open.clockIn+' – '+timeStr+' · '+_onSite+' on site',_kioskFlashMsg(emp),emp);
+      /* With deferFlash the clock is already saved but the break has not been asked yet.
+         Hand the flash back instead of showing it, so the overlay appears exactly where
+         it does today and the confirmation still lands after the question is answered.
+         The user-visible sequence is unchanged; only the WRITE has moved earlier. */
+      const _flashArgs=['depart','🌸','See you next time,',emp.name.split(' ')[0],
+        open.clockIn+' – '+timeStr+' · '+_onSite+' on site',_kioskFlashMsg(emp),emp];
+      if(deferFlash) return {entryId:open.id, flashArgs:_flashArgs};
+      showFlash(..._flashArgs);
     }
   } catch(e) {
     let detail='Please try again';
@@ -5099,6 +5105,47 @@ async function submitReason(){
   }
 }
 
+/* ── Resolve the break on a clock-out that is ALREADY SAVED ───────────────────
+   The clock time is a fact and is written the moment the card is read. The break is a
+   judgement, and this applies it afterwards. If it never runs — the overlay is
+   superseded by the next person, or nobody answers and the page reloads — the row keeps
+   `break_decision_source: 'unresolved'` and pays the expected break, because
+   effectiveUnpaidBreakMins (:4461) treats a null as the expected value. Same money,
+   honestly labelled.
+
+   Before this split, a second tap overwrote _breakCommitArgs and the FIRST person's
+   clock-out was never written at all. Covered by two_taps_during_break. */
+async function resolveBreak(a, unpaidBreakMins, paidBreakMins, breakNote, travelKm, decisionSource){
+  if(!a||!a.entryId) return;
+  try{
+    const entry=_entries.find(e=>String(e.id)===String(a.entryId));
+    const unpaidExpected=a.unpaidExpected??0;
+    const breakFlagged=unpaidBreakMins!==null&&unpaidBreakMins<unpaidExpected;
+    const patch={
+      unpaid_break_mins:unpaidBreakMins,
+      paid_break_mins:paidBreakMins,
+      break_note:breakNote||null,
+      travel_km:travelKm||null,
+      break_decision_source:decisionSource||null
+    };
+    // Only ever UPGRADE to pending. The clock write already set the status and must not
+    // be walked back to 'normal' by a later break answer.
+    if(breakFlagged) patch.status='pending';
+    await db.update('entries', a.entryId, patch);
+    if(entry) Object.assign(entry,{unpaidBreakMins,paidBreakMins,breakNote:breakNote||null,
+      travelKm:travelKm||null,breakDecisionSource:decisionSource||null,
+      status:breakFlagged?'pending':entry.status});
+    if(breakFlagged) await addNote(a.emp,'Break note',a.timeStr,breakNote||'No reason given',a.entryId,a.todayKey);
+  }catch(e){
+    // The clock-out is already recorded, so this cannot cost anyone a shift. Say so
+    // rather than failing silently, and leave the row flagged for a manager.
+    showFlash('error','⚠','','Break not saved','Your clock-out was recorded');
+    console.error(e);
+    return;
+  }
+  if(a.flashArgs) showFlash(...a.flashArgs);
+}
+
 /* ═══════════════════════════════════════════
    BREAK CONFIRMATION POPUP
 ═══════════════════════════════════════════ */
@@ -5116,7 +5163,10 @@ async function maybeBreakConfirm(emp,action,timeStr,sheetTimeStr,isoNow,open,tod
   const rShift=srShiftForEmp(emp.id,todayKey);
   const isClinic=emp.can_travel&&rShift&&rShift!=='off'&&rShift.lane==='75plus';
   if(isClinic){
-    _clinicCommitArgs={emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected};
+    const saved=await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,
+                             null,null,null,null,'unresolved',true);
+    if(!saved) return;                      // the clock write failed; commit already said so
+    _clinicCommitArgs={...saved, emp, todayKey, timeStr, unpaidExpected, paidExpected};
     showClinicOverlay(empFirstName(emp),unpaidExpected,paidExpected);
     return;
   }
@@ -5125,7 +5175,13 @@ async function maybeBreakConfirm(emp,action,timeStr,sheetTimeStr,isoNow,open,tod
     await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,null,null,null,null,'not_asked');
     return;
   }
-  _breakCommitArgs={emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,shiftHours,unpaidExpected,paidExpected};
+  /* THE CLOCK IS WRITTEN HERE, before anything is asked. Everything below this line is
+     a follow-up on a row that already exists, so a second tap can no longer cost the
+     first person their clock-out. */
+  const saved=await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,
+                           null,null,null,null,'unresolved',true);
+  if(!saved) return;                        // the clock write failed; commit already said so
+  _breakCommitArgs={...saved, emp, todayKey, timeStr, shiftHours, unpaidExpected, paidExpected};
   showBreakConfirm(emp.name.split(' ')[0],unpaidExpected,paidExpected);
 }
 
@@ -5185,10 +5241,9 @@ async function breakYes(fromTimer){
   _clearBreakTimer();
   document.getElementById('break-overlay').classList.remove('show');
   if(!_breakCommitArgs) return;
-  const{emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected}=_breakCommitArgs;
-  _breakCommitArgs=null;
-  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected,null,null,
-               fromTimer===true?'timeout':'confirmed');
+  const a=_breakCommitArgs; _breakCommitArgs=null;
+  await resolveBreak(a, a.unpaidExpected, a.paidExpected, null, null,
+                     fromTimer===true?'timeout':'confirmed');
 }
 
 function breakNo(){
@@ -5224,7 +5279,8 @@ function adjustBreak(type,delta){
 
 async function submitBreakEdit(){
   if(!_breakCommitArgs) return;
-  const{emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected}=_breakCommitArgs;
+  const a=_breakCommitArgs;
+  const{unpaidExpected,paidExpected}=a;
   const unpaidEl=document.getElementById('break-unpaid-input');
   const paidEl=document.getElementById('break-paid-input');
   const unpaidTaken=unpaidEl?(parseInt(unpaidEl.value)||0):unpaidExpected;
@@ -5232,7 +5288,7 @@ async function submitBreakEdit(){
   const breakReason=document.getElementById('break-edit-reason').value.trim();
   _breakCommitArgs=null;
   document.getElementById('break-edit-overlay').classList.remove('show');
-  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidTaken,paidTaken,breakReason||null,null,'edited');
+  await resolveBreak(a, unpaidTaken, paidTaken, breakReason||null, null, 'edited');
 }
 
 /* ═══════════════════════════════════════════
@@ -5296,10 +5352,9 @@ function clinicNo(fromTimer){
   _clearClinicTimer();
   document.getElementById('clinic-overlay').classList.remove('show');
   if(!_clinicCommitArgs) return;
-  const{emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected}=_clinicCommitArgs;
-  _clinicCommitArgs=null;
-  commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected,null,null,
-         fromTimer===true?'timeout':'confirmed');
+  const a=_clinicCommitArgs; _clinicCommitArgs=null;
+  resolveBreak(a, a.unpaidExpected, a.paidExpected, null, null,
+               fromTimer===true?'timeout':'confirmed');
 }
 
 function clinicYesExpand(){
@@ -5318,7 +5373,8 @@ function adjustClinicBreak(type,delta){
 
 async function submitClinicClockOut(){
   if(!_clinicCommitArgs) return;
-  const{emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidExpected,paidExpected}=_clinicCommitArgs;
+  const a=_clinicCommitArgs;
+  const{unpaidExpected,paidExpected}=a;
   const unpaidEl=document.getElementById('clinic-unpaid-input');
   const paidEl=document.getElementById('clinic-paid-input');
   const unpaidTaken=unpaidEl?(parseInt(unpaidEl.value)||0):unpaidExpected;
@@ -5327,7 +5383,7 @@ async function submitClinicClockOut(){
   const kmVal=parseFloat(document.getElementById('clinic-km-input').value)||null;
   _clinicCommitArgs=null;
   document.getElementById('clinic-overlay').classList.remove('show');
-  await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidTaken,paidTaken,breakReason||null,kmVal,'edited');
+  await resolveBreak(a, unpaidTaken, paidTaken, breakReason||null, kmVal, 'edited');
 }
 
 /* ═══════════════════════════════════════════
