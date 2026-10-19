@@ -7680,6 +7680,62 @@ function myobExToggleAll(checked){
   document.querySelectorAll('.myob-ex-emp-cb:not(:disabled)').forEach(cb=>cb.checked=checked);
 }
 
+/* Which entries the MYOB export pays: one per (employee, date, rostered block).
+   Lifted out of exportMYOBSelected verbatim so Analytics prices hours over the
+   SAME set the export does — a second copy of this rule would drift, and the
+   rule has already been wrong twice (see below). Callers pass the entries they
+   want considered; the export passes its ready rows. */
+function myobDedupEntries(entries, shiftsSrc=_rosterShifts){
+  // Deduplicate: for each (employee, date, shiftId) keep only the best entry.
+  // Prevents double rows when the same SHIFT has multiple entries in the DB, while
+  // still exporting BOTH blocks of a split shift — a day with two rostered blocks
+  // has two entries, and keying only on (employee, date) made the second look like a
+  // duplicate of the first, so one block was silently dropped and never paid.
+  //
+  // This key was (employee, date) until 2026-08-17. It could not include shiftId
+  // before then: the DB held orphaned duplicate leave rows from four June roster
+  // rebuilds (one day carried four identical annual-leave rows pointing at shift ids
+  // that no longer existed), and the day-level key was the only thing collapsing
+  // them — keying on shiftId would have exported all four. Those 72 orphans were
+  // cleaned up on 2026-08-17, verified to zero across every date, which is what
+  // unblocked this. If duplicate leave rows ever reappear, this key will pay them
+  // out — so keep rbCleanupLinkedEntryOnShiftDelete working.
+  // Key on the ROSTERED BLOCK the entry's hours fall in, not on shiftId. Worked entries never
+  // carry a shift_id — only leave does (159 of 166 live) — so the shiftId key degraded to
+  // (employee, date) and silently dropped the second block of every split shift. Four staff
+  // were paid ~1h short for the 26 Aug evening meeting before this was found.
+  // Largest overlap, not the first match: blocks can be contiguous (13:30-16:30 + 16:30-20:30)
+  // and _rosterShifts is push-mutated in-session, so a first-match rule is order-dependent —
+  // the same export could pay two different amounts depending on what was clicked beforehand.
+  // Keyed on block id, not start_time: two blocks can share a start_time after a roster rebuild.
+  // Pure timeToMin string arithmetic — never Date or clock_in_iso, which DST would break.
+  const _blockKey=e=>{
+    const b=tsBlockForEntry(e,shiftsSrc.filter(s=>s.employee_id===e.employeeId&&s.date===e.date));
+    return b?String(b.id):'';
+  };
+  const dedupMap={};
+  entries.forEach(e=>{
+    const key=`${e.employeeId}|${e.date}|${_blockKey(e)}`;
+    if(!dedupMap[key]){dedupMap[key]=e;return;}
+    const cur=dedupMap[key];
+    if(!cur.locked&&e.locked){dedupMap[key]=e;return;}
+    if(cur.locked&&!e.locked)return;
+    // Tie-break on the span these two actually cover, not on entries.hours. That column is
+    // written seven different ways, is never break-deducted, and is not updated when a manager
+    // edits final times — it differs from paid hours on most rows in the data. It has not
+    // mis-paid anyone because the locked test above almost always settles it first, but a
+    // tiebreaker for a payroll row should not read a number with no agreed meaning.
+    // Measure the CLOCKED span, not the final one. The question here is which of two rows is the
+    // substantive record, and a manager may have patched finals onto a stray one-minute mis-tap so
+    // it spans the whole day — on 2026-08-04 that row would beat the real shift by a minute and
+    // pay 0.28h more, because the mis-tap carries no break and the real row does.
+    const _span=x=>{const a=x.clockIn||x.finalStart,b=x.clockOut||x.finalEnd;
+      return (a&&b)?Math.max(0,timeToMin(b)-timeToMin(a)):0;};
+    if(_span(e)>_span(cur))dedupMap[key]=e;
+  });
+  return Object.values(dedupMap);
+}
+
 function exportMYOBSelected(){
   const selectedIds=new Set([...document.querySelectorAll('.myob-ex-emp-cb:checked')].map(cb=>cb.value));
   if(!selectedIds.size){showToast('Select at least one staff member');return;}
@@ -7732,54 +7788,7 @@ function exportMYOBSelected(){
   const headers=['Employee Co./Last Name','Employee First Name','Payroll Category','Job','Customer Co./Last Name','Customer First Name','Notes','Date','Units','Employee Card ID','Employee Record ID','Start/Stop Time','Customer Card ID','Customer Record ID'];
   lines.push(headers.join('\t'));
 
-  // Deduplicate: for each (employee, date, shiftId) keep only the best entry.
-  // Prevents double rows when the same SHIFT has multiple entries in the DB, while
-  // still exporting BOTH blocks of a split shift — a day with two rostered blocks
-  // has two entries, and keying only on (employee, date) made the second look like a
-  // duplicate of the first, so one block was silently dropped and never paid.
-  //
-  // This key was (employee, date) until 2026-08-17. It could not include shiftId
-  // before then: the DB held orphaned duplicate leave rows from four June roster
-  // rebuilds (one day carried four identical annual-leave rows pointing at shift ids
-  // that no longer existed), and the day-level key was the only thing collapsing
-  // them — keying on shiftId would have exported all four. Those 72 orphans were
-  // cleaned up on 2026-08-17, verified to zero across every date, which is what
-  // unblocked this. If duplicate leave rows ever reappear, this key will pay them
-  // out — so keep rbCleanupLinkedEntryOnShiftDelete working.
-  // Key on the ROSTERED BLOCK the entry's hours fall in, not on shiftId. Worked entries never
-  // carry a shift_id — only leave does (159 of 166 live) — so the shiftId key degraded to
-  // (employee, date) and silently dropped the second block of every split shift. Four staff
-  // were paid ~1h short for the 26 Aug evening meeting before this was found.
-  // Largest overlap, not the first match: blocks can be contiguous (13:30-16:30 + 16:30-20:30)
-  // and _rosterShifts is push-mutated in-session, so a first-match rule is order-dependent —
-  // the same export could pay two different amounts depending on what was clicked beforehand.
-  // Keyed on block id, not start_time: two blocks can share a start_time after a roster rebuild.
-  // Pure timeToMin string arithmetic — never Date or clock_in_iso, which DST would break.
-  const _blockKey=e=>{
-    const b=tsBlockForEntry(e,_rosterShifts.filter(s=>s.employee_id===e.employeeId&&s.date===e.date));
-    return b?String(b.id):'';
-  };
-  const dedupMap={};
-  ready.forEach(e=>{
-    const key=`${e.employeeId}|${e.date}|${_blockKey(e)}`;
-    if(!dedupMap[key]){dedupMap[key]=e;return;}
-    const cur=dedupMap[key];
-    if(!cur.locked&&e.locked){dedupMap[key]=e;return;}
-    if(cur.locked&&!e.locked)return;
-    // Tie-break on the span these two actually cover, not on entries.hours. That column is
-    // written seven different ways, is never break-deducted, and is not updated when a manager
-    // edits final times — it differs from paid hours on most rows in the data. It has not
-    // mis-paid anyone because the locked test above almost always settles it first, but a
-    // tiebreaker for a payroll row should not read a number with no agreed meaning.
-    // Measure the CLOCKED span, not the final one. The question here is which of two rows is the
-    // substantive record, and a manager may have patched finals onto a stray one-minute mis-tap so
-    // it spans the whole day — on 2026-08-04 that row would beat the real shift by a minute and
-    // pay 0.28h more, because the mis-tap carries no break and the real row does.
-    const _span=x=>{const a=x.clockIn||x.finalStart,b=x.clockOut||x.finalEnd;
-      return (a&&b)?Math.max(0,timeToMin(b)-timeToMin(a)):0;};
-    if(_span(e)>_span(cur))dedupMap[key]=e;
-  });
-  const deduped=Object.values(dedupMap);
+  const deduped=myobDedupEntries(ready);
 
   deduped.forEach(entry=>{
     const emp=_emps.find(em=>em.id===entry.employeeId);
