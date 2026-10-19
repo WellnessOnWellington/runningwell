@@ -222,6 +222,12 @@ else pushes normally.
   `_rosterShifts` is `push`-mutated in eight places, so first-match would make the
   export order-dependent. Key on block **id**, not `start_time` — two blocks can
   share a start time after a rebuild.
+- **Analytics prices hours through the MYOB export's own functions** —
+  `myobDedupEntries` then `calcMYOBRows`. Change either and every Analytics
+  figure changes with it; that is deliberate, so the reports always equal what
+  MYOB was sent (reconciled to the cent for five finalised periods, 19 Oct 2026).
+  Do not give Analytics its own hours maths. It is read-only and computes from
+  what `loadAll` already holds; its one fetch (`timesheet_audit`) is windowed.
 - **No `pay_period_anchor` column exists.** The value is the `PAY_PERIOD_ANCHOR`
   constant; the Settings editor for it was removed because it always failed.
 
