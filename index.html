@@ -1738,9 +1738,12 @@
   .an-pp { display:flex; align-items:center; gap:0.25rem; background:var(--warm-white); border:1.5px solid var(--border); border-radius:var(--radius-sm); padding:0.2rem; }
   .an-pp-btn { width:30px; height:30px; border:none; background:transparent; border-radius:8px; color:var(--burgundy); font-size:1rem; font-weight:800; cursor:pointer; font-family:'Nunito',sans-serif; }
   .an-pp-btn:hover { background:var(--blush); }
-  #an-pp-label { font-size:0.8rem; font-weight:800; color:var(--charcoal); padding:0 0.4rem; white-space:nowrap; }
-  .an-pp-cur { font-size:0.62rem; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--success); background:var(--success-lt); border-radius:30px; padding:0.1rem 0.45rem; margin-left:0.3rem; vertical-align:1px; }
+  /* Fixed width so the arrows stay put whatever the dates. The longest label measured
+     ("Tue, 10 Sept – Mon, 23 Sept 2024", 217px over 91 periods) fits with room to spare. */
+  #an-pp-label { font-size:0.8rem; font-weight:800; color:var(--charcoal); padding:0 0.4rem; white-space:nowrap; min-width:14.5rem; text-align:center; font-variant-numeric:tabular-nums; }
   #an-pp-now { font-size:0.72rem; font-weight:800; color:var(--burgundy); background:var(--white); border:1.5px solid var(--border); border-radius:8px; padding:0.3rem 0.6rem; cursor:pointer; font-family:'Nunito',sans-serif; }
+  #an-pp-now.on, #an-pp-now:disabled { color:var(--success); background:var(--success-lt); border-color:#BFD6C7; cursor:default; }
+  #an-pp-now:not(:disabled):hover { background:var(--blush-lt); }
   .an-layout { display:flex; flex-wrap:wrap; gap:1.25rem; align-items:flex-start; }
   .an-side { flex:0 0 236px; background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:0.6rem 0.5rem 0.9rem; position:sticky; top:0; }
   .an-main { flex:999 1 560px; min-width:0; display:flex; flex-direction:column; gap:1.25rem; }
@@ -9573,11 +9576,19 @@ function anToggleFav(id){
 function anUpdatePPLabel(){
   const el=document.getElementById('an-pp-label');
   if(!el) return;
-  const fn=getPayPeriodStart(_anPPOffset);
-  const cur=_anPPOffset===0?' <span class="an-pp-cur">current</span>':'';
-  el.innerHTML=`${escHtml(anPeriodLabel(fn))}${cur}`;
+  el.textContent=anPeriodLabel(getPayPeriodStart(_anPPOffset));
+  /* The picker must not move as you step through periods: the label has a fixed width
+     (CSS), and "Current" is ALWAYS present — lit and disabled on the current period,
+     a plain button that jumps back to it everywhere else. Hiding it, either way, shifted
+     the arrows. */
   const now=document.getElementById('an-pp-now');
-  if(now) now.style.visibility=_anPPOffset===0?'hidden':'visible';
+  if(now){
+    const onCurrent=_anPPOffset===0;
+    now.disabled=onCurrent;
+    now.classList.toggle('on',onCurrent);
+    now.title=onCurrent?'Showing the current pay period':'Go to the current pay period';
+    if(onCurrent) now.setAttribute('aria-current','true'); else now.removeAttribute('aria-current');
+  }
 }
 
 function anRenderLater(r){
