@@ -3054,11 +3054,18 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.2 &middot; October 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.3 &middot; October 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
             <div style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.3</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">15 October 2026 &mdash; Clock Records That Stay Put</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>A clock-out can no longer be lost on the kiosk.</strong> When two people tapped out close together, the second tap could arrive while the first person&rsquo;s break question was still on screen, and one of the two clock-outs was silently dropped &mdash; it showed up later as a missing clock-out for a manager to fix by hand. The clock-out is now saved the moment the card is tapped, before the break question is asked, so a second tap cannot erase it. Cancelling or walking away from the &ldquo;reason&rdquo; box no longer throws the clock record away either, and the break countdown now always runs its full time.<br><br>Behind the scenes, each unpaid break now records <em>how</em> it was decided &mdash; confirmed by the staff member, edited, or left to time out &mdash; so a 30-minute deduction can be explained later. No pay figure changes. On Who&rsquo;s On, Sue is now shown with the nurses.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.2</div>
                 <div>
@@ -4503,7 +4510,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.2';
+const APP_VERSION='3.3';
 const APP_VERSION_DATE='October 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
