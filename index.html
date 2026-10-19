@@ -1819,6 +1819,11 @@
   .an-hbar { display:flex; height:22px; border-radius:5px; overflow:hidden; background:var(--warm-white); }
   .an-hbar span { display:block; height:100%; border-right:1.5px solid #fff; }
   .an-hbar-total { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
+  .an-people-ctl { display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; }
+  .an-people-head { display:flex; align-items:center; gap:0.9rem; flex-wrap:wrap; }
+  .an-shade-note { display:flex; align-items:flex-start; gap:0.45rem; font-size:0.7rem; color:var(--muted); font-weight:600; margin-top:0.5rem; line-height:1.45; }
+  .an-shade-key { flex:0 0 auto; width:14px; height:12px; border-radius:3px; background:#F6EEF0; border:1.5px solid #F6EEF0; margin-top:1px; }
+  .an-shade-key.dashed { border:1.5px dashed var(--dusty); }
   /* Person panel */
   #an-person-back { position:fixed; inset:0; background:rgba(45,36,38,0.28); z-index:300; display:none; }
   #an-person-back.open { display:block; }
@@ -9460,6 +9465,7 @@ const AN_GROUP_COLORS={Receptionist:'#27AE60',Nurse:'#2471A3',Manager:'#8E44AD'}
 const AN_GROUP_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
 const AN_REPORTS=[
   {id:'overview', label:'Overview', render:anRenderOverview, pp:true},
+  {id:'people',   label:'People',   render:anRenderPeople,   pp:false},
   {id:'hours',    group:'Hours & pay',   label:'Hours vs rostered',     render:anRenderHours,    pp:true},
   {id:'paycat',   group:'Hours & pay',   label:'Hours by pay category', render:anRenderPayCat,   pp:true},
   {id:'forecast', group:'Hours & pay',   label:'Roster forecast',       render:anRenderForecast, pp:true},
@@ -9499,7 +9505,7 @@ function anRender(){
   document.getElementById('an-pp').style.display=(r&&r.pp)?'':'none';
   document.getElementById('an-group-wrap').style.display=isLog?'none':'';
   document.getElementById('an-hint').textContent=isLog?('Logs · '+(logDef?.label||''))
-    :(r.group?(r.group+' · '+r.label):'Overview · click a tile to open its report');
+    :(r.group?(r.group+' · '+r.label):(r.id==='overview'?'Overview · click a tile to open its report':r.label));
   if(isLog){ anShowLog(_anView.slice(4)); return; }
   anUpdatePPLabel();
   try{
@@ -9518,8 +9524,8 @@ function anRenderSide(){
   if(!el) return;
   const favs=anFavs();
   const item=(id,label,opts={})=>`<button type="button" class="an-item${_anView===id?' on':''}${opts.later?' later':''}" onclick="anShow('${id}')"><span>${escHtml(label)}</span>${opts.later?'<span class="an-later">Later</span>':(opts.star?'<span class="an-star" aria-label="Favourite">&#9733;</span>':'')}</button>`;
-  let h=item('overview','Overview');
-  const favReports=favs.map(id=>AN_REPORTS.find(x=>x.id===id&&!x.later&&x.id!=='overview')).filter(Boolean);
+  let h=item('overview','Overview')+item('people','People');
+  const favReports=favs.map(id=>AN_REPORTS.find(x=>x.id===id&&!x.later&&x.id!=='overview'&&x.id!=='people')).filter(Boolean);
   h+='<div class="an-grp">Favourites</div>';
   h+=favReports.length?favReports.map(r=>item(r.id,r.label,{star:true})).join('')
     :'<div class="an-fav-empty">Star a report to pin it here.</div>';
@@ -9567,7 +9573,7 @@ function anRenderLater(r){
 /* Header strip every report shares: title, favourite star, print. */
 function anHead(r, sub, extra=''){
   const fav=anFavs().includes(r.id);
-  const star=r.id==='overview'?'':`<button type="button" class="an-fav${fav?' on':''}" onclick="anToggleFav('${r.id}')" aria-label="${fav?'Remove from favourites':'Add to favourites'}" title="${fav?'Remove from favourites':'Add to favourites'}">${fav?'&#9733;':'&#9734;'}</button>`;
+  const star=(r.id==='overview'||r.id==='people')?'':`<button type="button" class="an-fav${fav?' on':''}" onclick="anToggleFav('${r.id}')" aria-label="${fav?'Remove from favourites':'Add to favourites'}" title="${fav?'Remove from favourites':'Add to favourites'}">${fav?'&#9733;':'&#9734;'}</button>`;
   const crumb=r.group?`<div class="an-crumb"><button type="button" class="an-link" onclick="anShow('overview')">Overview</button> › ${escHtml(r.group)}</div>`:'';
   return `<div class="an-head">
     <div style="min-width:0;">${crumb}<h2 class="an-h1">${escHtml(r.label)} ${star}</h2>${sub?`<div class="an-sub">${sub}</div>`:''}</div>
@@ -9594,6 +9600,11 @@ function anRecentStarts(n){ const out=[]; for(let i=n-1;i>=0;i--) out.push(getPa
 function anInScope(emp, group=_anGroup){ return !!emp&&!emp.is_placeholder&&(!group||staffGroupFor(emp)===group); }
 function anEmpById(){ return new Map(_emps.map(e=>[String(e.id),e])); }
 function anName(emp){ return emp?.name||'Unknown'; }
+/* The leave type an entry is PAID as, or null. Same precedence as _calcMYOBRowsBase
+   (payroll_type first): leave typed in from Timesheets is a payroll_type with no
+   leave_type, and reading leave_type alone missed it — Melissa Yandle's personal
+   leave on 1 Oct 2026 counted as no leave at all. */
+function anLeaveOf(e){ const t=e.payrollType||e.leaveType; return t&&LEAVE_TYPES[t]?t:null; }
 
 let _anCatKindMap=null;
 /* Which bucket a MYOB payroll category belongs in. Built FROM MYOB_CATS, so a
@@ -9769,6 +9780,8 @@ function anBars(labels, values, opts={}){
   const span=(vmax-vmin)||1, ph=H-T-B, y=v=>T+(vmax-v)/span*ph;
   const n=values.length, slot=(W-L-R)/Math.max(1,n), bw=Math.min(48,slot*0.6);
   let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
+  if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return;
+    s+=`<rect x="${(L+i*slot+3).toFixed(1)}" y="2" width="${(slot-6).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}><title>${sh==='current'?'Still running — incomplete':'Before 11 Aug 2026 — may be incomplete'}</title></rect>`; });
   [...new Set([vmax, 0, vmin])].forEach(g=>{ s+=`<line x1="${L}" x2="${W-R}" y1="${y(g).toFixed(1)}" y2="${y(g).toFixed(1)}" stroke="#F0E4E7"/><text x="${L-6}" y="${(y(g)+4).toFixed(1)}" class="an-ax" text-anchor="end">${escHtml(fmt(g))}</text>`; });
   s+=`<line x1="${L}" x2="${W-R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="#D9C4C8" stroke-width="1.5"/>`;
   values.forEach((v,i)=>{
@@ -9789,6 +9802,8 @@ function anStack(labels, series, opts={}){
   const max=opts.percent?100:Math.max(1,...totals);
   const fmt=opts.fmt||(v=>String(Math.round(v)));
   let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
+  if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return;
+    s+=`<rect x="${(L+i*slot+3).toFixed(1)}" y="2" width="${(slot-6).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}><title>${sh==='current'?'Still running — incomplete':'Before 11 Aug 2026 — may be incomplete'}</title></rect>`; });
   [0,0.5,1].forEach(f=>{ const yy=T+ph*(1-f); s+=`<line x1="${L}" x2="${W-R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#F0E4E7"/><text x="${L-6}" y="${(yy+4).toFixed(1)}" class="an-ax" text-anchor="end">${opts.percent?Math.round(f*100)+'%':escHtml(fmt(max*f))}</text>`; });
   labels.forEach((lab,i)=>{
     const x=L+i*slot+(slot-bw)/2; let yy=T+ph;
@@ -9846,13 +9861,14 @@ function anRenderOverview(){
     ${tile('workload','Approved with no changes',anPct(wl[5].pct),anDelta(wl[5].pct,wl[4].pct,'pts',true),anSpark(wl.map(w=>w.pct)))}
   </div>`;
   const labels=starts.map(anShortPeriod);
-  const c1=anBars(labels,tot.map(t=>t.diff),{fmt:v=>(v>0?'+':'')+v.toFixed(0)+'h',aria:'Hours worked over or under roster, last six pay periods',
+  const shade=anShadeFor(starts);
+  const c1=anBars(labels,tot.map(t=>t.diff),{shade,fmt:v=>(v>0?'+':'')+v.toFixed(0)+'h',aria:'Hours worked over or under roster, last six pay periods',
     colorFor:(v,i)=>i===5?(v>=0?'#8B2535':'#3A6B4F'):(v>=0?'#D4899A':'#9DBBA8')});
   const kt=Ps.map(p=>anKindTotals(p));
-  const c2=anStack(labels,AN_KINDS.filter(k=>AN_WORK_KINDS.includes(k.k)).map(k=>({label:k.label,color:k.color,values:kt.map(t=>t[k.k])})),{percent:true,aria:'Share of worked hours by pay category, last six pay periods'});
+  const c2=anStack(labels,AN_KINDS.filter(k=>AN_WORK_KINDS.includes(k.k)).map(k=>({label:k.label,color:k.color,values:kt.map(t=>t[k.k])})),{shade,percent:true,aria:'Share of worked hours by pay category, last six pay periods'});
   h+=`<div class="an-two">
-    ${anChartCard('Hours worked over roster','Paid hours minus rostered hours, per pay period (Tue–Mon). Completed days only.',c1,anOpenLink('hours'))}
-    ${anChartCard('Worked hours by pay category','Share of worked hours, per pay period (Tue–Mon). Leave not included.',c2+anLegend(AN_KINDS.filter(k=>AN_WORK_KINDS.includes(k.k))),anOpenLink('paycat'))}
+    ${anChartCard('Hours worked over roster','Paid hours minus rostered hours, per pay period (Tue–Mon). Completed days only.',c1+anShadeNote(shade),anOpenLink('hours'))}
+    ${anChartCard('Worked hours by pay category','Share of worked hours, per pay period (Tue–Mon). Leave not included.',c2+anLegend(AN_KINDS.filter(k=>AN_WORK_KINDS.includes(k.k)))+anShadeNote(shade),anOpenLink('paycat'))}
   </div>`;
   return h;
 }
@@ -9869,7 +9885,7 @@ function anRenderHours(){
   h+=anNotice(P);
   if(_anHoursBy==='period'){
     const tot=Ps.map(anTotals);
-    h+=anChartCard('Over / under roster by pay period','Completed days only.',anBars(starts.map(anShortPeriod),tot.map(t=>t.diff),{fmt:v=>(v>0?'+':'')+v.toFixed(1)+'h',aria:'Hours over or under roster, last six pay periods',colorFor:v=>v>=0?'#8B2535':'#3A6B4F'}));
+    h+=anChartCard('Over / under roster by pay period','Completed days only.',anBars(starts.map(anShortPeriod),tot.map(t=>t.diff),{shade:anShadeFor(starts),fmt:v=>(v>0?'+':'')+v.toFixed(1)+'h',aria:'Hours over or under roster, last six pay periods',colorFor:v=>v>=0?'#8B2535':'#3A6B4F'})+anShadeNote(anShadeFor(starts)));
     h+=anTable([{t:'Pay period'},{t:'Rostered',n:1},{t:'Worked',n:1},{t:'Difference',n:1},{t:'Paid leave',n:1},{t:'Finalised'}],
       tot.map((t,i)=>`<tr><td><strong>${escHtml(anPeriodLabel(starts[i]))}</strong></td><td class="n">${anH(t.rostered)}</td><td class="n">${anH(t.worked)}</td><td class="n ${t.diff>0?'an-bad':t.diff<0?'an-good':''}"><strong>${anSignedH(t.diff)}</strong></td><td class="n">${anH(t.leave)}</td><td>${Ps[i].finalised?'Yes':'<span class="an-flat">No</span>'}</td></tr>`).reverse());
     return h;
@@ -9907,7 +9923,7 @@ function anRenderPayCat(){
   let h=anHead(r,'Every paid hour, grouped by the payroll category it is exported under. Leave is included here.');
   h+=anNotice(P);
   h+=anChartCard('Paid hours by category','Per pay period (Tue–Mon). Hover a block for its figure.',
-    anStack(starts.map(anShortPeriod),AN_KINDS.map(k=>({label:k.label,color:k.color,values:kt.map(t=>t[k.k])})),{fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last six pay periods'})+anLegend(AN_KINDS));
+    anStack(starts.map(anShortPeriod),AN_KINDS.map(k=>({label:k.label,color:k.color,values:kt.map(t=>t[k.k])})),{shade:anShadeFor(starts),fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last six pay periods'})+anLegend(AN_KINDS)+anShadeNote(anShadeFor(starts)));
   const t=kt[5], total=AN_KINDS.reduce((a,k)=>a+t[k.k],0), worked=AN_WORK_KINDS.reduce((a,k)=>a+t[k],0);
   const kindRows=AN_KINDS.filter(k=>t[k.k]>0).map(k=>`<tr><td><span class="an-sw" style="background:${k.color}"></span>${escHtml(k.label)}</td><td class="n">${anH(t[k.k])}</td><td class="n">${anPct(total?t[k.k]/total*100:null,1)}</td><td class="n">${AN_WORK_KINDS.includes(k.k)?anPct(worked?t[k.k]/worked*100:null,1):'<span class="an-flat">—</span>'}</td></tr>`);
   if(kindRows.length) kindRows.push(`<tr class="an-total"><td>Total</td><td class="n">${anH(total)}</td><td class="n">100%</td><td></td></tr>`);
@@ -9977,7 +9993,7 @@ function anRenderTravel(){
   const km=Ps.map(p=>p.rows.reduce((a,x)=>a+x.travelKm,0));
   let h=anHead(r,'Kilometres claimed at the clinic-travel prompt, exported to MYOB as "Travelling Allowance per KLM".');
   h+=anNotice(P);
-  h+=anChartCard('Kilometres per pay period','Pay periods (Tue–Mon).',anBars(starts.map(anShortPeriod),km,{fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last six pay periods'}));
+  h+=anChartCard('Kilometres per pay period','Pay periods (Tue–Mon).',anBars(starts.map(anShortPeriod),km,{shade:anShadeFor(starts),fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last six pay periods'})+anShadeNote(anShadeFor(starts)));
   const by=new Map();
   P.rows.filter(x=>x.travelKm>0).forEach(x=>{ const k=String(x.emp.id); if(!by.has(k)) by.set(k,{emp:x.emp,km:0,trips:0}); const o=by.get(k); o.km+=x.travelKm; o.trips++; });
   const rows=[...by.values()].sort((a,b)=>b.km-a.km).map(o=>`<tr><td>${anWho(o.emp)}</td><td class="n">${o.trips}</td><td class="n"><strong>${o.km.toFixed(1)}</strong></td></tr>`);
@@ -10068,12 +10084,12 @@ function anRenderLeave(){
   const colors={annual_leave:'#3A6B4F',personal_leave:'#A07228',public_holiday:'#2D2426',unpaid_leave:'#B7CBBE',compassionate_leave:'#8B2535',long_service_leave:'#2471A3'};
   const seen=new Set(), perMonth={}, upcoming=[];
   _entries.forEach(e=>{
-    if(e.deleted||!e.leaveType) return;
+    const lt=e.deleted?null:anLeaveOf(e); if(!lt) return;
     const emp=byId.get(String(e.employeeId)); if(!anInScope(emp)) return;
-    const k=e.employeeId+'|'+e.date+'|'+e.leaveType; if(seen.has(k)) return; seen.add(k);
-    if(e.date>today){ upcoming.push({emp,date:e.date,type:e.leaveType}); return; }
+    const k=e.employeeId+'|'+e.date+'|'+lt; if(seen.has(k)) return; seen.add(k);
+    if(e.date>today){ upcoming.push({emp,date:e.date,type:lt}); return; }
     const m=e.date.slice(0,7); if(!months.includes(m)) return;
-    perMonth[m]=perMonth[m]||{}; perMonth[m][e.leaveType]=(perMonth[m][e.leaveType]||0)+1;
+    perMonth[m]=perMonth[m]||{}; perMonth[m][lt]=(perMonth[m][lt]||0)+1;
   });
   let h=anHead(r,'Days of leave taken by month over the last year, and what is booked from tomorrow. One person on leave for one day counts as one day.');
   const mLabels=months.map(m=>new Date(m+'-01T12:00:00').toLocaleDateString('en-AU',{month:'short'}));
@@ -10144,7 +10160,7 @@ function anRenderKiosk(){
   h+=anChartCard('Kiosk misses per pay period','Pay periods (Tue–Mon).',anStack(starts.map(anShortPeriod),[
     {label:'No clock-out',color:'#D4899A',values:ks.map(x=>x.noOut.length)},
     {label:'Typed in by a manager',color:'#A63245',values:ks.map(x=>x.mgrAdded.length)},
-    {label:'No record at all',color:'#2D2426',values:ks.map(x=>x.noRecord.length)}],{aria:'Kiosk misses by kind, last six pay periods'})
+    {label:'No record at all',color:'#2D2426',values:ks.map(x=>x.noRecord.length)}],{shade:anShadeFor(starts),aria:'Kiosk misses by kind, last six pay periods'})+anShadeNote(anShadeFor(starts))
     +anLegend([{label:'No clock-out',color:'#D4899A'},{label:'Typed in by a manager',color:'#A63245'},{label:'No record at all',color:'#2D2426'}]));
   const byId=anEmpById();
   const items=[];
@@ -10174,7 +10190,7 @@ function anRenderWorkload(){
     <div class="an-card an-tile static"><span class="an-tl">Times changed by a manager</span><span class="an-tv">${w.adjusted.length}</span><span class="an-td">${anDelta(w.adjusted.length,wl[4].adjusted.length,'',false)}</span></div>
     <div class="an-card an-tile static"><span class="an-tl">Finalised</span><span class="an-tv an-tv-sm">${finTxt}</span><span class="an-td an-flat">${w.fin?escHtml(lagTxt)+(w.fin.finalized_by?' · by '+escHtml(w.fin.finalized_by):''):''}</span></div>
   </div>`;
-  h+=anChartCard('Approved with no changes','Share of clocked shifts, per pay period (Tue–Mon).',anBars(starts.map(anShortPeriod),wl.map(x=>x.pct==null?0:x.pct),{fmt:v=>Math.round(v)+'%',aria:'Share of clocked shifts approved with no changes, last six pay periods',colorFor:(v,i)=>i===5?'#3A6B4F':'#9DBBA8'}));
+  h+=anChartCard('Approved with no changes','Share of clocked shifts, per pay period (Tue–Mon).',anBars(starts.map(anShortPeriod),wl.map(x=>x.pct==null?0:x.pct),{shade:anShadeFor(starts),fmt:v=>Math.round(v)+'%',aria:'Share of clocked shifts approved with no changes, last six pay periods',colorFor:(v,i)=>i===5?'#3A6B4F':'#9DBBA8'})+anShadeNote(anShadeFor(starts)));
   const mgrRows=Object.entries(w.byMgr).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`<tr><td>${escHtml(n)}</td><td class="n">${c}</td></tr>`);
   h+=`<div class="an-two"><div><div class="an-h2 an-tabletitle">Times changed, by manager</div>${anTable([{t:'Manager'},{t:'Shifts changed',n:1}],mgrRows,{empty:'No times were changed by hand.'})}</div>
     <div><div class="an-h2 an-tabletitle">Timesheet audit entries</div><div id="an-wl-audit">${anEmpty('Loading…')}</div></div></div>`;
@@ -10231,7 +10247,7 @@ function anPersonHtml(empId){
   const daySet=new Set(P.days);
   const reqs=(_requests||[]).filter(q=>String(q.initiatorId)===empId&&q.createdAt&&daySet.has(rbDateKey(new Date(q.createdAt))));
   const today=anToday(), horizon=anAddDays(today,90);
-  const up=[...new Set(_entries.filter(e=>!e.deleted&&e.leaveType&&String(e.employeeId)===empId&&e.date>today&&e.date<=horizon).map(e=>e.date+'|'+e.leaveType))].sort();
+  const up=[...new Set(_entries.filter(e=>!e.deleted&&anLeaveOf(e)&&String(e.employeeId)===empId&&e.date>today&&e.date<=horizon).map(e=>e.date+'|'+anLeaveOf(e)))].sort();
   const outTxt=out?[out.lateIn&&`${out.lateIn} started after roster`,out.earlyOut&&`${out.earlyOut} finished early`,out.lateOut&&`${out.lateOut} finished late`,out.unrost&&`${out.unrost} unrostered`].filter(Boolean).join(' · '):'';
   const stat=(l,v,s)=>`<div class="an-pstat"><div class="an-tl">${l}</div><div class="an-pv">${v}</div><div class="an-ps">${s||''}</div></div>`;
   const g=staffGroupFor(emp);
@@ -10251,7 +10267,7 @@ function anPersonHtml(empId){
     ${stat('Kiosk misses',String(kn),kn?'see Kiosk reliability':'none this period')}
   </div>`;
   const vals=Ps.map(p=>{ const o=mine(p); return o.worked-o.rostered; });
-  h+=`<div class="an-psec"><div class="an-h2">Over / under roster, last 6 pay periods</div>${anBars(starts.map(anShortPeriod),vals,{height:170,fmt:v=>(v>0?'+':'')+v.toFixed(1),aria:'Hours over or under roster for '+anName(emp)+', last six pay periods',colorFor:(v,i)=>i===5?(v>=0?'#8B2535':'#3A6B4F'):(v>=0?'#D4899A':'#9DBBA8')})}</div>`;
+  h+=`<div class="an-psec"><div class="an-h2">Over / under roster, last 6 pay periods</div>${anBars(starts.map(anShortPeriod),vals,{height:170,shade:anShadeFor(starts),fmt:v=>(v>0?'+':'')+v.toFixed(1),aria:'Hours over or under roster for '+anName(emp)+', last six pay periods',colorFor:(v,i)=>i===5?(v>=0?'#8B2535':'#3A6B4F'):(v>=0?'#D4899A':'#9DBBA8')})}${anShadeNote(anShadeFor(starts))}</div>`;
   const rows=P.rows.filter(r=>String(r.emp.id)===empId).sort((a,b)=>a.entry.date.localeCompare(b.entry.date)||String(a.entry.finalStart||a.entry.clockIn).localeCompare(String(b.entry.finalStart||b.entry.clockIn)));
   const tr=rows.map(r=>{
     const e=r.entry, fin=resolveFinalTimes(e,r.shift,r.emp);
@@ -10263,7 +10279,7 @@ function anPersonHtml(empId){
   if(up.length){
     h+=`<div class="an-psec"><div class="an-h2">Leave booked, next 90 days</div><div class="an-sub">${up.map(x=>{ const [d,t]=x.split('|'); return `${escHtml(anDateShort(d))} · ${escHtml(formatLeaveType(t))}`; }).join('<br>')}</div></div>`;
   }
-  h+=`<div class="an-pactions"><button type="button" class="btn-primary" style="flex:0 0 auto;padding:0.7rem 1.1rem;" onclick="anOpenTimesheets()">Open timesheets</button><button type="button" class="an-ghost" onclick="anOpenClockAudit('${escHtml(empId)}')">Clock audit for ${escHtml(anName(emp).split(' ')[0])}</button></div>`;
+  h+=`<div class="an-pactions"><button type="button" class="btn-primary" style="flex:0 0 auto;padding:0.7rem 1.1rem;" onclick="anShowPerson('${escHtml(empId)}')">Open full profile</button><button type="button" class="an-ghost" onclick="anOpenTimesheets()">Open timesheets</button><button type="button" class="an-ghost" onclick="anOpenClockAudit('${escHtml(empId)}')">Clock audit for ${escHtml(anName(emp).split(' ')[0])}</button></div>`;
   return h;
 }
 function anOpenTimesheets(){
@@ -10281,6 +10297,173 @@ function anOpenClockAudit(empId){
   renderClockAudit(true);
   const s=document.getElementById('ca-filter-emp');
   if(s){ s.value=empId; renderClockAudit(true); }
+}
+
+/* ── People: "how is this person going" ──
+   The full-page version of the person panel, over a choice of ranges. Every range is
+   counted in WHOLE PAY PERIODS, never calendar months: a calendar month cuts pay
+   periods in half, so its totals would never match an export and its per-period bars
+   would show part-periods as drops. "About 1 month" is therefore two pay periods.
+
+   Figures are RATES wherever people differ in how much they work (per 10 rostered
+   shifts, % of rostered hours), and each sits beside the typical figure for the
+   person's own staff group — the median across that group over the same range. The
+   comparison is with their group and their own history, deliberately not with one
+   named colleague: a part-time receptionist and a full-time nurse are not comparable
+   on raw counts.
+
+   Current staff only, as loadAll loads them (decided 19 Oct 2026). */
+let _anPeopleId=null, _anPeopleRange='month';
+const AN_RANGES=[
+  {id:'current',label:'Current pay period',offsets:[0]},
+  {id:'last',   label:'Last pay period',   offsets:[-1]},
+  {id:'month',  label:'About 1 month',     offsets:[-2,-1]},
+  {id:'3m',     label:'About 3 months',    offsets:[-6,-5,-4,-3,-2,-1]},
+  {id:'6m',     label:'About 6 months',    offsets:[-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1]},
+];
+function anSetPeople(id){ _anPeopleId=String(id); anRender(); }
+function anSetPeopleRange(r){ _anPeopleRange=r; anRender(); }
+function anShowPerson(empId){ anClosePerson(); _anPeopleId=String(empId); anShow('people'); }
+
+/* Everything the page shows, for EVERY current staff member over the range, so the
+   group's typical figure is computed from exactly the same numbers as the person's. */
+function anPeopleStats(starts){
+  const Ps=starts.map(s=>anPeriod(s,''));
+  const by=new Map();
+  const get=emp=>{ const k=String(emp.id); if(!by.has(k)){ const o={emp,group:staffGroupFor(emp),rostered:0,worked:0,leaveH:0,
+      shifts:0,lateIn:0,lateInMin:0,earlyOut:0,earlyOutMin:0,lateOut:0,lateOutMin:0,earlyIn:0,unrost:0,
+      noOut:0,mgrAdded:0,noRecord:0,clocked:0,changed:0,kinds:{},per:starts.map(()=>({diff:0,lateIn:0,shifts:0,misses:0}))};
+      AN_KINDS.forEach(x=>o.kinds[x.k]=0); by.set(k,o);} return by.get(k); };
+  _emps.forEach(e=>{ if(anInScope(e,'')) get(e); });
+  Ps.forEach((P,i)=>{
+    anHoursByEmp(P).forEach(h=>{ const o=get(h.emp); o.rostered+=h.rostered; o.worked+=h.worked; o.leaveH+=h.leave; o.per[i].diff+=h.worked-h.rostered; });
+    anOutside(P).forEach(x=>{ const o=get(x.emp); ['shifts','lateIn','lateInMin','earlyOut','earlyOutMin','lateOut','lateOutMin','earlyIn','unrost'].forEach(f=>o[f]+=x[f]); o.per[i].lateIn+=x.lateIn; o.per[i].shifts+=x.shifts; });
+    const k=anKiosk(P);
+    const hit=(id,f)=>{ const o=by.get(String(id)); if(o){ o[f]++; o.per[i].misses++; } };
+    k.noOut.forEach(e=>hit(e.employeeId,'noOut')); k.mgrAdded.forEach(e=>hit(e.employeeId,'mgrAdded')); k.noRecord.forEach(m=>hit(m.employeeId,'noRecord'));
+    P.rows.forEach(r=>{
+      if(r.entry.date>=P.today) return;
+      const o=by.get(String(r.emp.id)); if(!o) return;
+      r.myob.forEach(x=>o.kinds[x.kind]+=x.hours);
+      if(!r.isLeave&&r.entry.clockIn&&r.shift&&r.emp.role!=='Manager'){ o.clocked++; if(r.entry.manuallyAdjusted) o.changed++; }
+    });
+  });
+  by.forEach(o=>{
+    const per10=n=>o.shifts>0?n/o.shifts*10:null;
+    const worked=AN_WORK_KINDS.reduce((a,k)=>a+o.kinds[k],0);
+    o.rate={
+      overPct: o.rostered>0?(o.worked-o.rostered)/o.rostered*100:null,
+      lateIn: per10(o.lateIn), earlyOut: per10(o.earlyOut), lateOut: per10(o.lateOut),
+      // Denominator ≈ rostered shifts: clocked + typed in + never recorded.
+      misses: (o.shifts+o.mgrAdded+o.noRecord)>0?(o.noOut+o.mgrAdded+o.noRecord)/(o.shifts+o.mgrAdded+o.noRecord)*10:null,
+      changed: o.clocked>0?o.changed/o.clocked*100:null,
+      penalty: worked>0?AN_PENALTY_KINDS.reduce((a,k)=>a+o.kinds[k],0)/worked*100:null,
+    };
+  });
+  return {Ps, by};
+}
+function anMedian(a){ const v=a.filter(x=>x!=null&&isFinite(x)).sort((x,y)=>x-y); if(!v.length) return null; const m=Math.floor(v.length/2); return v.length%2?v[m]:(v[m-1]+v[m])/2; }
+
+/* Shading for per-pay-period charts. Two kinds of period are not like the others:
+     current — still running, so it is short on hours by construction
+     early   — before 11 Aug 2026, when Running Well became the only record of hours;
+               paper timesheets covered some of that time, so it may be incomplete
+   The early shading stops appearing on its own once no range reaches back that far
+   (about February 2027 for the six-month range) — nothing needs removing by hand. */
+const AN_SOLE_RECORD_FROM='2026-08-11';
+function anShadeFor(starts){
+  const today=anToday();
+  return starts.map(s=>{ const end=anAddDays(s,13); if(end>=today) return 'current'; if(s<AN_SOLE_RECORD_FROM) return 'early'; return null; });
+}
+function anShadeNote(shade){
+  let h='';
+  if(shade.includes('current')) h+=`<div class="an-shade-note"><span class="an-shade-key dashed" aria-hidden="true"></span>Outlined: the pay period still running — incomplete, so it reads low.</div>`;
+  if(shade.includes('early')) h+=`<div class="an-shade-note"><span class="an-shade-key" aria-hidden="true"></span>Shaded: pay periods before 11 Aug 2026, when Running Well became the only record of hours — paper timesheets covered some of that time, so these may be incomplete.</div>`;
+  return h;
+}
+
+function anRenderPeople(){
+  const r=AN_REPORTS.find(x=>x.id==='people');
+  const staff=_emps.filter(e=>anInScope(e)).sort((a,b)=>anName(a).localeCompare(anName(b)));
+  if(!staff.length) return anHead(r,'')+anEmpty('No current staff in this group.');
+  if(!_anPeopleId||!staff.some(e=>String(e.id)===_anPeopleId)) _anPeopleId=String(staff[0].id);
+  const range=AN_RANGES.find(x=>x.id===_anPeopleRange)||AN_RANGES[2];
+  const starts=range.offsets.map(o=>getPayPeriodStart(o));
+  const shade=anShadeFor(starts);
+  const {Ps, by}=anPeopleStats(starts);
+  const me=by.get(_anPeopleId), emp=me.emp, g=me.group, gl=AN_GROUP_LABELS[g]||g||'their group';
+  const peers=[...by.values()].filter(o=>o.group===g);
+  const typ=f=>anMedian(peers.map(o=>o.rate[f]));
+  const first=Ps[0].days[0], last=Ps[Ps.length-1].days[13];
+  const pick=`<label class="an-ctl">Staff member <select class="form-select an-sel" onchange="anSetPeople(this.value)">${staff.map(e=>`<option value="${escHtml(String(e.id))}"${String(e.id)===_anPeopleId?' selected':''}>${escHtml(anName(e))}</option>`).join('')}</select></label>`;
+  const seg=`<div class="an-seg" role="group" aria-label="Range">${AN_RANGES.map(x=>`<button type="button" class="an-segb${x.id===range.id?' on':''}" onclick="anSetPeopleRange('${x.id}')">${x.label}</button>`).join('')}</div>`;
+  let h=anHead(r,'How one person is going, beside the typical figure for their staff group over the same range. Ranges are whole pay periods (Tue–Mon), so totals match payroll.');
+  h+=`<div class="an-people-ctl">${pick}${seg}</div>`;
+  const dfmt=d=>new Date(d+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
+  h+=`<div class="an-card an-pad an-people-head">
+    <div class="admin-avatar" style="width:46px;height:46px;font-size:0.9rem;" aria-hidden="true">${escHtml(anName(emp).split(' ').map(x=>x[0]).slice(0,2).join(''))}</div>
+    <div style="flex:1;min-width:0;"><div class="an-pname">${escHtml(anName(emp))}</div>
+      <div class="an-sub">${anGroupDot(g)}${emp.classification?' · '+escHtml(emp.classification):''}${emp.type?' · '+escHtml(emp.type):''}</div></div>
+    <div class="an-sub" style="text-align:right;"><strong>${escHtml(range.label)}</strong><br>${escHtml(dfmt(first))} – ${escHtml(dfmt(last))} · ${starts.length} pay period${starts.length===1?'':'s'}</div>
+  </div>`;
+  if(shade.includes('current')) h+=`<div class="an-notice">This range includes the pay period still running. Only days already finished are counted, and its figures are incomplete until the period ends on ${escHtml(dfmt(Ps[Ps.length-1].days[13]))}.</div>`;
+  if(shade.includes('early')) h+=`<div class="an-notice">This range reaches back before 11 Aug 2026, when Running Well became the only record of hours. Some of that time was on paper timesheets, so figures for those weeks may be incomplete. This note disappears once ranges no longer reach that far.</div>`;
+  const isMgr=emp.role==='Manager';
+  const vs=(v,t,fmt)=>`<span class="an-flat">${escHtml(gl)} typically ${t==null?'—':escHtml(fmt(t))}</span>`;
+  const pct1=v=>v==null?'—':(v>0?'+':'')+v.toFixed(1)+'%';
+  const r10=v=>v==null?'—':v.toFixed(1)+' per 10 shifts';
+  const tile=(label,value,sub)=>`<div class="an-card an-tile static"><span class="an-tl">${label}</span><span class="an-tv">${value}</span><span class="an-td">${sub}</span></div>`;
+  const leaveDays=(()=>{ const s=new Set(); _entries.forEach(e=>{ if(!e.deleted&&anLeaveOf(e)&&String(e.employeeId)===_anPeopleId&&e.date>=first&&e.date<=last&&e.date<anToday()) s.add(e.date); }); return s.size; })();
+  h+=`<div class="an-tiles">
+    ${tile('Over / under roster',pct1(me.rate.overPct),`${anSignedH(me.worked-me.rostered)}h · `+vs(me.rate.overPct,typ('overPct'),pct1))}
+    ${tile('Started after roster',isMgr?'—':(me.rate.lateIn==null?'—':me.rate.lateIn.toFixed(1)),isMgr?'<span class="an-flat">managers do not clock</span>':'<span class="an-flat">per 10 shifts</span> · '+vs(me.rate.lateIn,typ('lateIn'),v=>v.toFixed(1)))}
+    ${tile('Kiosk misses',isMgr?'—':(me.rate.misses==null?'—':me.rate.misses.toFixed(1)),isMgr?'<span class="an-flat">managers do not clock</span>':'<span class="an-flat">per 10 shifts</span> · '+vs(me.rate.misses,typ('misses'),v=>v.toFixed(1)))}
+    ${tile('Paid leave taken',anH(me.leaveH)+'h',`<span class="an-flat">${leaveDays} day${leaveDays===1?'':'s'} with leave</span>`)}
+    ${tile('Penalty-rate hours',anPct(me.rate.penalty),vs(me.rate.penalty,typ('penalty'),v=>v.toFixed(0)+'%'))}
+  </div>`;
+  if(starts.length>1){
+    const labels=starts.map(anShortPeriod), n=starts.length;
+    const c1=anBars(labels,me.per.map(p=>p.diff),{shade,fmt:v=>(v>0?'+':'')+v.toFixed(1),aria:'Hours over or under roster for '+anName(emp)+' per pay period',colorFor:v=>v>=0?'#8B2535':'#3A6B4F'});
+    const c2=isMgr?anEmpty('Managers do not clock, so there is nothing to show here.')
+      :anStack(labels,[{label:'Started after roster',color:'#D4899A',values:me.per.map(p=>p.lateIn)},{label:'Kiosk misses',color:'#2D2426',values:me.per.map(p=>p.misses)}],{shade,aria:'Late starts and kiosk misses for '+anName(emp)+' per pay period'})
+        +anLegend([{label:'Started after roster',color:'#D4899A'},{label:'Kiosk misses',color:'#2D2426'}]);
+    h+=`<div class="an-two">${anChartCard('Over / under roster','Hours, per pay period (Tue–Mon). Completed days only.',c1+anShadeNote(shade))}${anChartCard('Late starts and kiosk misses','Shifts, per pay period (Tue–Mon).',c2+(isMgr?'':anShadeNote(shade)))}</div>`;
+    if(n>=6) h+=`<div class="an-foot">Bars are counts, so a pay period with fewer shifts will look better than it is — the rates in the table below allow for that.</div>`;
+  }
+  const row=(label,mine,t,note)=>`<tr><td>${label}</td><td class="n"><strong>${mine}</strong></td><td class="n">${t}</td><td class="an-flat">${note||''}</td></tr>`;
+  const f1=v=>v==null?'—':v.toFixed(1), fp=v=>v==null?'—':v.toFixed(0)+'%';
+  const rows=[
+    row('Rostered hours',anH(me.rostered),'',''),
+    row('Worked hours',anH(me.worked),'',''),
+    row('Over / under roster',pct1(me.rate.overPct),pct1(typ('overPct')),'of rostered hours'),
+  ];
+  if(!isMgr) rows.push(
+    row('Rostered shifts clocked',String(me.shifts),'',''),
+    row('Started after roster',f1(me.rate.lateIn),f1(typ('lateIn')),`per 10 shifts · ${me.lateIn} shift${me.lateIn===1?'':'s'}, ${anMins(me.lateInMin).replace(/<[^>]+>/g,'')}`),
+    row('Finished before roster',f1(me.rate.earlyOut),f1(typ('earlyOut')),`per 10 shifts · ${me.earlyOut} shift${me.earlyOut===1?'':'s'}`),
+    row('Finished after roster',f1(me.rate.lateOut),f1(typ('lateOut')),`per 10 shifts · ${me.lateOut} shift${me.lateOut===1?'':'s'}, ${anMins(me.lateOutMin).replace(/<[^>]+>/g,'')}`),
+    row('Unrostered shifts',String(me.unrost),'',''),
+    row('Kiosk misses',f1(me.rate.misses),f1(typ('misses')),`per 10 shifts · ${me.noOut} no clock-out, ${me.mgrAdded} typed in, ${me.noRecord} no record`),
+    row('Times changed by a manager',fp(me.rate.changed),fp(typ('changed')),`of clocked shifts · ${me.changed} of ${me.clocked}`),
+  );
+  rows.push(row('Penalty-rate share',fp(me.rate.penalty),fp(typ('penalty')),'of worked hours'));
+  h+=`<div class="an-h2 an-tabletitle">The detail</div>`+anTable([{t:'Measure'},{t:escHtml(anName(emp).split(' ')[0]),n:1},{t:escHtml(gl)+' typically',n:1},{t:''}],rows);
+  h+=`<div class="an-foot">"Typically" is the median for current ${escHtml(gl.toLowerCase())} over the same range, so one unusual person does not move it. Rates allow for different amounts of work. Time outside roster uses paid times after grace-period snapping, and is neutral by design — whether a late start is docked or absorbed is a policy still being decided.</div>`;
+  // Leave taken and booked
+  const taken={}; const seen=new Set();
+  _entries.forEach(e=>{ const lt=e.deleted?null:anLeaveOf(e); if(!lt||String(e.employeeId)!==_anPeopleId||e.date<first||e.date>last||e.date>=anToday()) return; const k=e.date+'|'+lt; if(seen.has(k)) return; seen.add(k); taken[lt]=(taken[lt]||0)+1; });
+  const today=anToday(), horizon=anAddDays(today,90);
+  const up=[...new Set(_entries.filter(e=>!e.deleted&&anLeaveOf(e)&&String(e.employeeId)===_anPeopleId&&e.date>today&&e.date<=horizon).map(e=>e.date+'|'+anLeaveOf(e)))].sort();
+  const reqs=(_requests||[]).filter(q=>String(q.initiatorId)===_anPeopleId&&q.createdAt&&(d=>d>=first&&d<=last)(rbDateKey(new Date(q.createdAt))));
+  const tl={leave:'Leave',swap:'Swap',giveaway:'Give away',pickup:'Pick up'};
+  const sl={approved:'Approved',declined:'Declined',expired:'Expired',revoked:'Revoked',pending_peer:'Waiting for colleague',pending_manager:'Waiting for manager'};
+  h+=`<div class="an-two">
+    <div><div class="an-h2 an-tabletitle">Leave taken in this range</div>${anTable([{t:'Leave'},{t:'Days',n:1}],Object.entries(taken).map(([t,n])=>`<tr><td>${escHtml(formatLeaveType(t))}</td><td class="n">${n}</td></tr>`),{empty:'No leave taken in this range.'})}
+      <div class="an-h2 an-tabletitle" style="margin-top:1rem;">Leave booked, next 90 days</div>${anTable([{t:'Date'},{t:'Leave'}],up.map(x=>{ const [d,t]=x.split('|'); return `<tr><td>${escHtml(anDateShort(d))}</td><td>${escHtml(formatLeaveType(t))}</td></tr>`; }),{empty:'Nothing booked.'})}</div>
+    <div><div class="an-h2 an-tabletitle">Requests raised in this range</div>${anTable([{t:'Raised'},{t:'Type'},{t:'Status'}],reqs.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).map(q=>`<tr><td>${escHtml(new Date(q.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'}))}</td><td>${tl[q.type]||escHtml(q.type)}</td><td>${escHtml(sl[q.status]||q.status)}</td></tr>`),{empty:'No requests raised in this range.'})}</div>
+  </div>`;
+  h+=`<div class="an-pactions"><button type="button" class="an-ghost" onclick="anOpenPerson('${escHtml(_anPeopleId)}')">Quick look at one pay period</button><button type="button" class="an-ghost" onclick="anOpenClockAudit('${escHtml(_anPeopleId)}')">Clock audit for ${escHtml(anName(emp).split(' ')[0])}</button></div>`;
+  return h;
 }
 
 /* ── Print / PDF ──
