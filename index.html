@@ -10081,10 +10081,10 @@ function anRenderOutside(){
   let h=anHead(r,`Kiosk clock times against the roster, counted only beyond each role\'s grace period — inside it is on time. Clocked in early counts only from ${EARLY_REVIEW_MINS} minutes, when the kiosk asks why; a few minutes early is ordinary. This is about clocking, not pay: whether a late start is docked or absorbed is a separate policy still being decided, and pay is in Hours vs rostered.`);
   h+=anNotice(P);
   const list=anOutside(P).filter(o=>o.lateIn||o.earlyIn||o.earlyOut||o.lateOut||o.unrost).sort((a,b)=>(b.lateInMin+b.earlyOutMin+b.lateOutMin+b.earlyInMin)-(a.lateInMin+a.earlyOutMin+a.lateOutMin+a.earlyInMin));
-  const cell=(n,m)=>n?`${n} · ${anMins(m)}`:'<span class="an-flat">–</span>';
-  const rows=list.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(o.group)}</td><td class="n">${o.shifts}</td><td class="n">${cell(o.lateIn,o.lateInMin)}</td><td class="n">${cell(o.earlyOut,o.earlyOutMin)}</td><td class="n">${cell(o.earlyIn,o.earlyInMin)}</td><td class="n">${cell(o.lateOut,o.lateOutMin)}</td><td class="n">${o.unrost?`${o.unrost} · ${anH(o.unrostH)}h`:'<span class="an-flat">–</span>'}</td></tr>`);
-  h+=anTable([{t:'Staff member'},{t:'Group'},{t:'Clocked shifts',n:1},{t:'Clocked in late',n:1},{t:'Clocked out early',n:1},{t:'Clocked in early',n:1},{t:'Clocked out late',n:1},{t:'Unrostered shifts',n:1}],rows,{empty:'Every clock time in this period was within the grace period.'});
-  h+=`<div class="an-foot">Each cell is the number of shifts · total minutes beyond the roster. Managers are left out: they do not clock, and their hours are taken from the roster. Shifts typed in by a manager have no clock time to judge, and a missing clock-out leaves only the clock-in judged — both are counted under Kiosk reliability. Unrostered shifts are clocked days with no roster block at all. ⚠ A difference of an hour or more usually means the shift was moved and the roster was not updated — the same hours, worked at a different time — rather than lateness. Check the roster before reading it as attendance.</div>`;
+  const cell=(n,m,base)=>n?`${n} of ${base} · ${anMins(m)}`:'<span class="an-flat">–</span>';
+  const rows=list.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(o.group)}</td><td class="n">${cell(o.lateIn,o.lateInMin,o.shifts)}</td><td class="n">${cell(o.earlyOut,o.earlyOutMin,o.shifts)}</td><td class="n">${cell(o.earlyIn,o.earlyInMin,o.shifts)}</td><td class="n">${cell(o.lateOut,o.lateOutMin,o.shifts)}</td><td class="n">${o.unrost?`${o.unrost} · ${anH(o.unrostH)}h`:'<span class="an-flat">–</span>'}</td></tr>`);
+  h+=anTable([{t:'Staff member'},{t:'Group'},{t:'Clocked in late',n:1},{t:'Clocked out early',n:1},{t:'Clocked in early',n:1},{t:'Clocked out late',n:1},{t:'Unrostered shifts',n:1}],rows,{empty:'Every clock time in this period was within the grace period.'});
+  h+=`<div class="an-foot">Each cell reads <em>times</em> of <em>clocked shifts</em> · total time beyond the roster. Managers are left out: they do not clock, and their hours are taken from the roster. Shifts typed in by a manager have no clock time to judge, and a missing clock-out leaves only the clock-in judged — both are counted under Kiosk reliability. Unrostered shifts are clocked days with no roster block at all. ⚠ A difference of an hour or more usually means the shift was moved and the roster was not updated — the same hours, worked at a different time — rather than lateness. Check the roster before reading it as attendance.</div>`;
   return h;
 }
 
@@ -10358,9 +10358,12 @@ function anOpenClockAudit(empId){
    periods in half, so its totals would never match an export and its per-period bars
    would show part-periods as drops. "About 1 month" is therefore two pay periods.
 
-   Figures are RATES wherever people differ in how much they work (per 10 rostered
-   shifts, % of rostered hours), and each sits beside the typical figure for the
-   person's own staff group — the median across that group over the same range. The
+   Events are shown as the RAW COUNT first, with the shifts it came from ("3 of 18
+   shifts") — the number someone would actually say. The percentage beside it exists
+   only to compare with the person's own staff group (the median across that group over
+   the same range), since 3 of 18 and 3 of 5 are not the same record. "Per 10 shifts"
+   was tried first and dropped (19 Oct 2026): nobody says it out loud. Hours are a % of
+   rostered hours. The
    comparison is with their group and their own history, deliberately not with one
    named colleague: a part-time receptionist and a full-time nurse are not comparable
    on raw counts.
@@ -10418,13 +10421,13 @@ function anPeopleStats(starts){
     });
   });
   by.forEach(o=>{
-    const per10=n=>o.shifts>0?n/o.shifts*10:null;
+    const pct=n=>o.shifts>0?n/o.shifts*100:null;
+    o.missBase=o.shifts+o.mgrAdded+o.noRecord; // ≈ rostered shifts: clocked + typed in + never recorded
     const worked=AN_WORK_KINDS.reduce((a,k)=>a+o.kinds[k],0);
     o.rate={
       overPct: o.rostered>0?(o.worked-o.rostered)/o.rostered*100:null,
-      lateIn: per10(o.lateIn), earlyIn: per10(o.earlyIn), earlyOut: per10(o.earlyOut), lateOut: per10(o.lateOut),
-      // Denominator ≈ rostered shifts: clocked + typed in + never recorded.
-      misses: (o.shifts+o.mgrAdded+o.noRecord)>0?(o.noOut+o.mgrAdded+o.noRecord)/(o.shifts+o.mgrAdded+o.noRecord)*10:null,
+      lateIn: pct(o.lateIn), earlyIn: pct(o.earlyIn), earlyOut: pct(o.earlyOut), lateOut: pct(o.lateOut),
+      misses: o.missBase>0?(o.noOut+o.mgrAdded+o.noRecord)/o.missBase*100:null,
       changed: o.clocked>0?o.changed/o.clocked*100:null,
       penalty: worked>0?AN_PENALTY_KINDS.reduce((a,k)=>a+o.kinds[k],0)/worked*100:null,
     };
@@ -10481,13 +10484,15 @@ function anRenderPeople(){
   const isMgr=emp.role==='Manager';
   const vs=(v,t,fmt)=>`<span class="an-flat">${escHtml(gl)} typically ${t==null?'—':escHtml(fmt(t))}</span>`;
   const pct1=v=>v==null?'—':(v>0?'+':'')+v.toFixed(1)+'%';
-  const r10=v=>v==null?'—':v.toFixed(1)+' per 10 shifts';
+  // "3 of 18 shifts (17%)" — the count leads; the % is for the group comparison.
+  const ofN=(n,base,pctv)=>base>0?`of ${base} shift${base===1?'':'s'} (${pctv.toFixed(0)}%)`:'no clocked shifts';
+  const pctT=t=>t==null?'—':t.toFixed(0)+'%';
   const tile=(label,value,sub)=>`<div class="an-card an-tile static"><span class="an-tl">${label}</span><span class="an-tv">${value}</span><span class="an-td">${sub}</span></div>`;
   const leaveDays=(()=>{ const s=new Set(); _entries.forEach(e=>{ if(!e.deleted&&anLeaveOf(e)&&String(e.employeeId)===_anPeopleId&&e.date>=first&&e.date<=last&&e.date<anToday()) s.add(e.date); }); return s.size; })();
   h+=`<div class="an-tiles">
     ${tile('Over / under roster',pct1(me.rate.overPct),`${anSignedH(me.worked-me.rostered)}h · `+vs(me.rate.overPct,typ('overPct'),pct1))}
-    ${tile('Clocked in late',isMgr?'—':(me.rate.lateIn==null?'—':me.rate.lateIn.toFixed(1)),isMgr?'<span class="an-flat">managers do not clock</span>':'<span class="an-flat">per 10 shifts</span> · '+vs(me.rate.lateIn,typ('lateIn'),v=>v.toFixed(1)))}
-    ${tile('Kiosk misses',isMgr?'—':(me.rate.misses==null?'—':me.rate.misses.toFixed(1)),isMgr?'<span class="an-flat">managers do not clock</span>':'<span class="an-flat">per 10 shifts</span> · '+vs(me.rate.misses,typ('misses'),v=>v.toFixed(1)))}
+    ${tile('Clocked in late',isMgr?'—':String(me.lateIn),isMgr?'<span class="an-flat">managers do not clock</span>':`<span class="an-flat">${ofN(me.lateIn,me.shifts,me.rate.lateIn||0)}</span> · `+vs(me.rate.lateIn,typ('lateIn'),pctT))}
+    ${tile('Kiosk misses',isMgr?'—':String(me.noOut+me.mgrAdded+me.noRecord),isMgr?'<span class="an-flat">managers do not clock</span>':`<span class="an-flat">${ofN(me.noOut+me.mgrAdded+me.noRecord,me.missBase,me.rate.misses||0)}</span> · `+vs(me.rate.misses,typ('misses'),pctT))}
     ${tile('Paid leave taken',anH(me.leaveH)+'h',`<span class="an-flat">${leaveDays} day${leaveDays===1?'':'s'} with leave</span>`)}
     ${tile('Penalty-rate hours',anPct(me.rate.penalty),vs(me.rate.penalty,typ('penalty'),v=>v.toFixed(0)+'%'))}
   </div>`;
@@ -10500,8 +10505,9 @@ function anRenderPeople(){
     h+=`<div class="an-two">${anChartCard('Over / under roster','Hours, per pay period (Tue–Mon). Completed days only.',c1+anShadeNote(shade))}${anChartCard('Late clock-ins and kiosk misses','Shifts, per pay period (Tue–Mon).',c2+(isMgr?'':anShadeNote(shade)))}</div>`;
     if(n>=6) h+=`<div class="an-foot">Bars are counts, so a pay period with fewer shifts will look better than it is — the rates in the table below allow for that.</div>`;
   }
+  const cnt=(n,base)=>base>0?`${n} of ${base} · ${(n/base*100).toFixed(0)}%`:'—';
   const row=(label,mine,t,note)=>`<tr><td>${label}</td><td class="n"><strong>${mine}</strong></td><td class="n">${t}</td><td class="an-flat">${note||''}</td></tr>`;
-  const f1=v=>v==null?'—':v.toFixed(1), fp=v=>v==null?'—':v.toFixed(0)+'%';
+  const fp=v=>v==null?'—':v.toFixed(0)+'%';
   const rows=[
     row('Rostered hours',anH(me.rostered),'',''),
     row('Worked hours',anH(me.worked),'',''),
@@ -10509,17 +10515,17 @@ function anRenderPeople(){
   ];
   if(!isMgr) rows.push(
     row('Clocked shifts',String(me.shifts),'',''),
-    row('Clocked in late',f1(me.rate.lateIn),f1(typ('lateIn')),`per 10 shifts · ${me.lateIn} shift${me.lateIn===1?'':'s'}, ${anMins(me.lateInMin).replace(/<[^>]+>/g,'')}`),
-    row('Clocked in early',f1(me.rate.earlyIn),f1(typ('earlyIn')),`per 10 shifts · 60+ minutes before the roster · ${me.earlyIn} shift${me.earlyIn===1?'':'s'}`),
-    row('Clocked out early',f1(me.rate.earlyOut),f1(typ('earlyOut')),`per 10 shifts · ${me.earlyOut} shift${me.earlyOut===1?'':'s'}`),
-    row('Clocked out late',f1(me.rate.lateOut),f1(typ('lateOut')),`per 10 shifts · ${me.lateOut} shift${me.lateOut===1?'':'s'}, ${anMins(me.lateOutMin).replace(/<[^>]+>/g,'')}`),
+    row('Clocked in late',cnt(me.lateIn,me.shifts),fp(typ('lateIn')),me.lateIn?`${anMins(me.lateInMin).replace(/<[^>]+>/g,'')} in total`:''),
+    row('Clocked in early',cnt(me.earlyIn,me.shifts),fp(typ('earlyIn')),'60+ minutes before the roster'),
+    row('Clocked out early',cnt(me.earlyOut,me.shifts),fp(typ('earlyOut')),me.earlyOut?`${anMins(me.earlyOutMin).replace(/<[^>]+>/g,'')} in total`:''),
+    row('Clocked out late',cnt(me.lateOut,me.shifts),fp(typ('lateOut')),me.lateOut?`${anMins(me.lateOutMin).replace(/<[^>]+>/g,'')} in total`:''),
     row('Unrostered shifts',String(me.unrost),'',''),
-    row('Kiosk misses',f1(me.rate.misses),f1(typ('misses')),`per 10 shifts · ${me.noOut} no clock-out, ${me.mgrAdded} typed in, ${me.noRecord} no record`),
+    row('Kiosk misses',cnt(me.noOut+me.mgrAdded+me.noRecord,me.missBase),fp(typ('misses')),`${me.noOut} no clock-out, ${me.mgrAdded} typed in, ${me.noRecord} no record`),
     row('Times changed by a manager',fp(me.rate.changed),fp(typ('changed')),`of clocked shifts · ${me.changed} of ${me.clocked}`),
   );
   rows.push(row('Penalty-rate share',fp(me.rate.penalty),fp(typ('penalty')),'of worked hours'));
   h+=`<div class="an-h2 an-tabletitle">The detail</div>`+anTable([{t:'Measure'},{t:escHtml(anName(emp).split(' ')[0]),n:1},{t:escHtml(gl)+' typically',n:1},{t:''}],rows);
-  h+=`<div class="an-foot">"Typically" is the median for current ${escHtml(gl.toLowerCase())} over the same range, so one unusual person does not move it. Rates allow for different amounts of work. Clock times count only beyond the grace period (clocked in early: 60+ minutes), and are about clocking, not pay — whether a late start is docked or absorbed is a policy still being decided.</div>`;
+  h+=`<div class="an-foot">"Typically" is the median for current ${escHtml(gl.toLowerCase())} over the same range, so one unusual person does not move it. Counts show the shifts they came from; the percentages are what the group comparison uses, since people work different numbers of shifts. Clock times count only beyond the grace period (clocked in early: 60+ minutes), and are about clocking, not pay — whether a late start is docked or absorbed is a policy still being decided.</div>`;
   // Leave taken and booked
   const taken={}; const seen=new Set();
   _entries.forEach(e=>{ const lt=e.deleted?null:anLeaveOf(e); if(!lt||String(e.employeeId)!==_anPeopleId||e.date<first||e.date>last||e.date>=anToday()) return; const k=e.date+'|'+lt; if(seen.has(k)) return; seen.add(k); taken[lt]=(taken[lt]||0)+1; });
