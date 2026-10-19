@@ -9482,7 +9482,7 @@ const AN_GROUP_COLORS={Receptionist:'#27AE60',Nurse:'#2471A3',Manager:'#8E44AD'}
 const AN_GROUP_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
 const AN_REPORTS=[
   {id:'overview', label:'Overview', render:anRenderOverview, pp:true},
-  {id:'people',   label:'People',   render:anRenderPeople,   pp:false},
+  {id:'people',   label:'People',   render:anRenderPeople,   pp:false, after:anSizePeopleSelect},
   {id:'hours',    group:'Hours & pay',   label:'Hours vs rostered',     render:anRenderHours,    pp:true},
   {id:'paycat',   group:'Hours & pay',   label:'Hours by pay category', render:anRenderPayCat,   pp:true},
   {id:'forecast', group:'Hours & pay',   label:'Roster forecast',       render:anRenderForecast, pp:true},
@@ -10346,6 +10346,22 @@ const AN_RANGES=[
   {id:'3m',     label:'About 3 months',    offsets:[-6,-5,-4,-3,-2,-1]},
   {id:'6m',     label:'About 6 months',    offsets:[-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1]},
 ];
+/* A dropdown sizes itself to its longest option, so filtering to a staff group with
+   shorter names shrank it and slid the range buttons beside it sideways. Its width is
+   set from the longest name across ALL current staff instead, whatever the filter.
+   Measured in the select's own font; re-measured once web fonts finish loading, since
+   a fallback font measures differently. */
+function anSizePeopleSelect(){
+  const sel=document.getElementById('an-people-sel');
+  if(!sel) return;
+  const cs=getComputedStyle(sel);
+  const ctx=(anSizePeopleSelect._c||(anSizePeopleSelect._c=document.createElement('canvas'))).getContext('2d');
+  ctx.font=`${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const longest=Math.max(0,..._emps.filter(e=>anInScope(e,'')).map(e=>ctx.measureText(anName(e)).width));
+  const pad=['paddingLeft','paddingRight','borderLeftWidth','borderRightWidth'].reduce((a,k)=>a+(parseFloat(cs[k])||0),0);
+  sel.style.width=Math.ceil(longest+pad+6)+'px';
+}
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{ try{ anSizePeopleSelect(); }catch(e){} });
 function anSetPeople(id){ _anPeopleId=String(id); anRender(); }
 function anSetPeopleRange(r){ _anPeopleRange=r; anRender(); }
 function anShowPerson(empId){ anClosePerson(); _anPeopleId=String(empId); anShow('people'); }
@@ -10420,7 +10436,7 @@ function anRenderPeople(){
   const peers=[...by.values()].filter(o=>o.group===g);
   const typ=f=>anMedian(peers.map(o=>o.rate[f]));
   const first=Ps[0].days[0], last=Ps[Ps.length-1].days[13];
-  const pick=`<label class="an-ctl">Staff member <select class="form-select an-sel" onchange="anSetPeople(this.value)">${staff.map(e=>`<option value="${escHtml(String(e.id))}"${String(e.id)===_anPeopleId?' selected':''}>${escHtml(anName(e))}</option>`).join('')}</select></label>`;
+  const pick=`<label class="an-ctl">Staff member <select class="form-select an-sel" id="an-people-sel" onchange="anSetPeople(this.value)">${staff.map(e=>`<option value="${escHtml(String(e.id))}"${String(e.id)===_anPeopleId?' selected':''}>${escHtml(anName(e))}</option>`).join('')}</select></label>`;
   const seg=`<div class="an-seg" role="group" aria-label="Range">${AN_RANGES.map(x=>`<button type="button" class="an-segb${x.id===range.id?' on':''}" onclick="anSetPeopleRange('${x.id}')">${x.label}</button>`).join('')}</div>`;
   let h=anHead(r,'How one person is going, beside the typical figure for their staff group over the same range. Ranges are whole pay periods (Tue–Mon), so totals match payroll.');
   h+=`<div class="an-people-ctl">${pick}${seg}</div>`;
