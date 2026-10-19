@@ -1726,6 +1726,10 @@
   .hg-card-wide { grid-column:span 2; }
   @media (max-width:960px) { .hg-grid { grid-template-columns:1fr; } .hg-card-wide { grid-column:span 1; } }
 
+  /* About → Release History: only the newest release reads at full strength. */
+  .about-history > div:not(:first-child) { opacity:0.5; }
+  .about-history > div:not(:first-child) div { color:var(--muted) !important; }
+
   /* ══════════════════════════════
      ANALYTICS — report library
   ══════════════════════════════ */
@@ -3200,7 +3204,10 @@
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
-            <div style="display:flex;flex-direction:column;gap:0.85rem;">
+            <!-- Newest entry FIRST, in full colour. Older entries are faded by the .about-history
+                 rule, never by hand: fading per row was forgotten at every bump from v2.2 to v3.3,
+                 which left eleven old releases looking current. -->
+            <div class="about-history" style="display:flex;flex-direction:column;gap:0.85rem;">
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.4</div>
                 <div>
@@ -3285,122 +3292,122 @@
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Split shifts are now paid correctly. A day rostered as two separate blocks was exporting only one of them to MYOB, so the second block went unpaid &mdash; two days were affected and have been corrected. Leave taken on a split-shift day now attaches properly to each block instead of showing as an unexplained missing clock-in, and swapping or giving away a clinic shift no longer quietly moves it to the floor lane. Duplicate leave records left behind by earlier roster rebuilds have been cleaned up. My Timesheets in the Staff Portal now shows your two most recently completed pay periods, labelled by date &mdash; the current period was never available to download, since it is only finalised after it ends. Calendar Setup is now read-only: those dates are fixed once and changing them would move every past pay period. Behind the scenes, every change to the database is now recorded in a tamper-proof log and backed up off-site daily.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v2.1</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v2.1</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">13 August 2026 &mdash; Staff Self-Service Timesheets</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">13 August 2026 &mdash; Staff Self-Service Timesheets</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Staff can now download their own PDF timesheet for the current and previous pay period directly from the Staff Portal, once a manager has reviewed and pushed that pay period &mdash; no more manual download-and-email. Unreviewed days are clearly marked Provisional so what staff see always matches what's actually been checked. Manager and staff logins now also remember who last signed in on that device, skipping straight to the PIN field on return.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v2.0</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v2.0</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">11 August 2026 &mdash; Go-Live: Paper Timesheets Retired</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">11 August 2026 &mdash; Go-Live: Paper Timesheets Retired</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Running Well is now the sole record of staff hours &mdash; backup physical timesheets stop from today. This release also bundles several weeks of reliability work: break-shortfall and late-departure gap decisions can no longer be silently bypassed, late overruns can be resolved right from the timesheet row with Notes kept in sync, deleted roster shifts no longer leave orphaned leave entries behind, and MYOB export now lets you choose exactly which staff to include. Kiosk card-reader focus is now reliable during PIN entry, break notes, and staff requests. Fixed several Windows-specific performance issues causing reported mouse lag on kiosk PCs, and timesheet hour totals are now guaranteed to match the MYOB breakdown exactly.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.9</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.9</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">3 August 2026 &mdash; Break Shortfall Decisions &amp; iOS Fixes</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">3 August 2026 &mdash; Break Shortfall Decisions &amp; iOS Fixes</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">A break reported shorter than expected now needs a manager decision &mdash; pay as reported or pay to the standard break &mdash; before a shift can auto-approve or lock, shown with a clear Expected/Actual/Shortfall breakdown on both the Notes tab and the timesheet row. Added late-departure gap handling. Pending Notes tab sorted newest-first. Fixed iOS safe-area and status bar overlap issues on the Staff Portal and mobile views.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.8</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.8</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">16 July 2026 &mdash; PDF Timesheets, Gap Enforcement &amp; Android Fix</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">16 July 2026 &mdash; PDF Timesheets, Gap Enforcement &amp; Android Fix</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">PDF timesheets now include unrostered shifts, correct hours calculated from final times, break info (estimated where not captured), and gap leave rows matching MYOB. Lock button blocked until gap type is set on flagged entries. Notes and notifications sorted newest-first. Unrostered arrival notes show full clock range. Android kiosk buttons no longer clipped by the navigation bar.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.7</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.7</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">3 July 2026 &mdash; Staff Portal, Leave Conflicts &amp; Mobile Polish</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">3 July 2026 &mdash; Staff Portal, Leave Conflicts &amp; Mobile Polish</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Staff notifications now close the loop — approved and flagged notes appear in the Staff Portal so staff know the outcome before their next shift. Tapping the clock-in badge goes straight to the portal without re-authenticating. Annual leave requests are blocked when a same-role colleague already has leave on those dates. Auto-approved shifts now snap to roster times in both the timesheet view and MYOB export. Mobile kiosk buttons fixed on small Android screens.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.6</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.6</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">2 July 2026 &mdash; Manager Profiles</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">2 July 2026 &mdash; Manager Profiles</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Manager accounts expanded with first and last name, linked staff card, email, designation, and an active toggle for clean offboarding. Edit modal replaces the old change-PIN flow.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.5</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.5</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">1 July 2026 &mdash; Print Templates &amp; Smart Shift Swaps</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">1 July 2026 &mdash; Print Templates &amp; Smart Shift Swaps</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Roster print now offers Compact, Large, and Nurses templates. Large prints landscape across two pages (Week A / Week B) at double size. Nurses template filters to nursing-classified staff with 75+ lane shifts highlighted in grey. Shift swaps and give-aways now match on classification as well as role, allowing the nurse manager to swap shifts with nurses.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.4</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.4</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">10 June 2026 &mdash; Roster UX &amp; Per-Role Settings</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">10 June 2026 &mdash; Roster UX &amp; Per-Role Settings</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Copy fortnight overhauled with conflict detection modal and Ctrl+Z undo. Auto-approve fixed to require an actual clock-in. Settings reorganised into Role Thresholds, Access Control, and Calendar Setup — grace period, discrepancy flagging, and coverage thresholds now configurable per role.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.3</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.3</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">19 May 2026 &mdash; MYOB Export &amp; Timesheet Tools</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">19 May 2026 &mdash; MYOB Export &amp; Timesheet Tools</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">MYOB export column order matched exactly for direct import. Evening hours split and break deduction logic corrected. Ready for MYOB badge and warnings improved. Timesheet entries can now be hard deleted with Ctrl+Z undo. PDF download per staff member with ZIP bundle.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.2</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.2</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">2 May 2026 &mdash; Travel Allowance &amp; Database Health</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">2 May 2026 &mdash; Travel Allowance &amp; Database Health</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Travel allowance added for clinic shifts. Live database health check introduced with kiosk indicator and manager safeguard banner. Mobile database status indicator added.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.1</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.1</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">12 April 2026 &mdash; Mobile Admin &amp; Presence Panel</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">12 April 2026 &mdash; Mobile Admin &amp; Presence Panel</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Mobile admin panel introduced with read-only timesheets and swipeable roster day view. Live presence panel replaced stat tiles on the team page. Mobile kiosk scroll fixed. Shift swap requests, pending request pill on clock-in screen, pay cycle navigation, and Who's On improvements.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v1.0</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v1.0</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">3 April 2026 &mdash; First complete release</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">3 April 2026 &mdash; First complete release</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">MYOB export, staff requests, payroll type selection, and Ready for MYOB badge. All core features complete.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v0.5</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v0.5</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">25 March 2026 &mdash; Clock Intelligence</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">25 March 2026 &mdash; Clock Intelligence</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Roster-aware clock-in, grace period logic, reason prompts for late and early arrivals, unrostered arrival detection.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v0.4</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v0.4</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">18 March 2026 &mdash; Timesheets &amp; Notes</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">18 March 2026 &mdash; Timesheets &amp; Notes</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Traffic light approval system, lock and approve flow, notes tab for reviewing flagged clock-ins.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v0.3</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v0.3</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">12 March 2026 &mdash; Roster</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">12 March 2026 &mdash; Roster</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Fortnightly A/B roster templates, coverage bar, first GitHub Pages deployment.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v0.2</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v0.2</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">9 March 2026 &mdash; Staff &amp; Admin</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">9 March 2026 &mdash; Staff &amp; Admin</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">Team tab, employee records, manager PIN login, admin panel.</div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.75rem;align-items:baseline;opacity:0.5;">
-                <div style="font-size:0.72rem;font-weight:800;color:var(--muted);white-space:nowrap;min-width:3.5rem;">v0.1</div>
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v0.1</div>
                 <div>
-                  <div style="font-size:0.76rem;font-weight:700;color:var(--muted);margin-bottom:0.15rem;">6 March 2026 &mdash; Inception</div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">6 March 2026 &mdash; Inception</div>
                   <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;">RFID card scanning, kiosk clock-in/out, live clock display.</div>
                 </div>
               </div>
