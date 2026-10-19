@@ -10484,7 +10484,9 @@ function anRenderPeople(){
   if(shade.includes('early')) h+=`<div class="an-notice">This range reaches back before 11 Aug 2026, when Running Well became the only record of hours. Some of that time was on paper timesheets, so figures for those weeks may be incomplete. This note disappears once ranges no longer reach that far.</div>`;
   const isMgr=emp.role==='Manager';
   // Own line under the tile's detail line — the group comparison never shares a line.
-  const vs=(v,t,fmt)=>`<span class="an-flat an-typ">${escHtml(gl)} typically ${t==null?'—':escHtml(fmt(t))}</span>`;
+  // Short on the tile — the group is in the header card just above, and spelled out in
+  // the detail table's column; the hover says it in full.
+  const vs=(v,t,fmt)=>`<span class="an-flat an-typ" title="Typical for ${escHtml(gl)} over the same range (median)">Typical: ${t==null?'—':escHtml(fmt(t))}</span>`;
   const pct1=v=>v==null?'—':(v>0?'+':'')+v.toFixed(1)+'%';
   // "3 of 18 shifts (17%)" — the count leads; the % is for the group comparison.
   const ofN=(n,base,pctv)=>base>0?`of ${base} shift${base===1?'':'s'} (${pctv.toFixed(0)}%)`:'no clocked shifts';
