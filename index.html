@@ -1760,7 +1760,16 @@
   .an-card { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
   .an-pad { padding:1.1rem 1.25rem 1rem; }
   .an-head { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
-  .an-head-actions { display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap; }
+  /* margin-left:auto keeps the actions on the right even when a long subtitle wraps them
+     onto their own line — without it they fell to the left edge. */
+  .an-head.tight { flex-wrap:nowrap; align-items:flex-start; }
+  .an-head.tight > div:first-child { flex:1 1 0; }
+  /* People: one small button per row, equal widths, top right. */
+  .an-head.tight .an-head-actions { flex-direction:column; align-items:stretch; gap:0.35rem; }
+  .an-head-actions { display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap; margin-left:auto; justify-content:flex-end; flex-shrink:0; }
+  /* Secondary, quiet actions (People's person links) — smaller and lighter than Print. */
+  .an-mini-btn { background:transparent; color:var(--muted); border:1.5px solid var(--border); border-radius:8px; padding:0.3rem 0.65rem; font-family:'Nunito',sans-serif; font-size:0.72rem; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .an-mini-btn:hover { color:var(--burgundy); border-color:var(--dusty); background:var(--blush-lt); }
   .an-h1 { margin:0.2rem 0 0; font-family:'Lora',serif; font-size:1.4rem; font-weight:600; color:var(--charcoal); display:flex; align-items:center; gap:0.4rem; }
   .an-h2 { font-size:0.88rem; font-weight:800; color:var(--charcoal); }
   .an-sub { font-size:0.74rem; color:var(--muted); font-weight:500; margin-top:0.2rem; line-height:1.5; max-width:880px; }
@@ -9596,13 +9605,15 @@ function anRenderLater(r){
 }
 
 /* Header strip every report shares: title, favourite star, print. */
-function anHead(r, sub, extra=''){
+// opts.noPrint: the page puts Print at its foot instead (People — printing is the rare use).
+// opts.tight: keep the (small) actions beside the title; the description wraps instead.
+function anHead(r, sub, extra='', opts={}){
   const fav=anFavs().includes(r.id);
   const star=(r.id==='overview'||r.id==='people')?'':`<button type="button" class="an-fav${fav?' on':''}" onclick="anToggleFav('${r.id}')" aria-label="${fav?'Remove from favourites':'Add to favourites'}" title="${fav?'Remove from favourites':'Add to favourites'}">${fav?'&#9733;':'&#9734;'}</button>`;
   const crumb=r.group?`<div class="an-crumb"><button type="button" class="an-link" onclick="anShow('overview')">Overview</button> › ${escHtml(r.group)}</div>`:'';
-  return `<div class="an-head">
+  return `<div class="an-head${opts.tight?' tight':''}">
     <div style="min-width:0;">${crumb}<h2 class="an-h1">${escHtml(r.label)} ${star}</h2>${sub?`<div class="an-sub">${sub}</div>`:''}</div>
-    <div class="an-head-actions">${extra}<button type="button" class="an-ghost" onclick="anPrint()">Print / Save PDF</button></div>
+    <div class="an-head-actions">${extra}${opts.noPrint?'':'<button type="button" class="an-ghost" onclick="anPrint()">Print / Save PDF</button>'}</div>
   </div>`;
 }
 
@@ -10438,7 +10449,8 @@ function anRenderPeople(){
   const first=Ps[0].days[0], last=Ps[Ps.length-1].days[13];
   const pick=`<label class="an-ctl">Staff member <select class="form-select an-sel" id="an-people-sel" onchange="anSetPeople(this.value)">${staff.map(e=>`<option value="${escHtml(String(e.id))}"${String(e.id)===_anPeopleId?' selected':''}>${escHtml(anName(e))}</option>`).join('')}</select></label>`;
   const seg=`<div class="an-seg" role="group" aria-label="Range">${AN_RANGES.map(x=>`<button type="button" class="an-segb${x.id===range.id?' on':''}" onclick="anSetPeopleRange('${x.id}')">${x.label}</button>`).join('')}</div>`;
-  let h=anHead(r,'How one person is going, beside the typical figure for their staff group over the same range. Ranges are whole pay periods (Tue–Mon), so totals match payroll.');
+  const jump=`<button type="button" class="an-mini-btn" onclick="anOpenPerson('${escHtml(_anPeopleId)}')" title="Quick look at one pay period" aria-label="Quick look at one pay period">Quick look</button><button type="button" class="an-mini-btn" onclick="anOpenClockAudit('${escHtml(_anPeopleId)}')" title="Clock audit for ${escHtml(anName(emp))}" aria-label="Clock audit for ${escHtml(anName(emp))}">Clock audit</button>`;
+  let h=anHead(r,'How one person is going, beside the typical figure for their staff group over the same range. Ranges are whole pay periods (Tue–Mon), so totals match payroll.',jump,{noPrint:true,tight:true});
   h+=`<div class="an-people-ctl">${pick}${seg}</div>`;
   const dfmt=d=>new Date(d+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
   h+=`<div class="an-card an-pad an-people-head">
@@ -10503,7 +10515,7 @@ function anRenderPeople(){
       <div class="an-h2 an-tabletitle" style="margin-top:1rem;">Leave booked, next 90 days</div>${anTable([{t:'Date'},{t:'Leave'}],up.map(x=>{ const [d,t]=x.split('|'); return `<tr><td>${escHtml(anDateShort(d))}</td><td>${escHtml(formatLeaveType(t))}</td></tr>`; }),{empty:'Nothing booked.'})}</div>
     <div><div class="an-h2 an-tabletitle">Requests raised in this range</div>${anTable([{t:'Raised'},{t:'Type'},{t:'Status'}],reqs.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).map(q=>`<tr><td>${escHtml(new Date(q.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'}))}</td><td>${tl[q.type]||escHtml(q.type)}</td><td>${escHtml(sl[q.status]||q.status)}</td></tr>`),{empty:'No requests raised in this range.'})}</div>
   </div>`;
-  h+=`<div class="an-pactions"><button type="button" class="an-ghost" onclick="anOpenPerson('${escHtml(_anPeopleId)}')">Quick look at one pay period</button><button type="button" class="an-ghost" onclick="anOpenClockAudit('${escHtml(_anPeopleId)}')">Clock audit for ${escHtml(anName(emp).split(' ')[0])}</button></div>`;
+  h+=`<div class="an-pactions an-print-skip"><button type="button" class="an-ghost" onclick="anPrint()">Print / Save PDF</button></div>`;
   return h;
 }
 
@@ -10520,7 +10532,7 @@ function anPrint(){
   const usesPP=r&&r.pp;
   area.innerHTML=`<div class="an-print-head"><div><strong>Running Well · Analytics</strong> — ${escHtml(r?r.label:'')}</div>
     <div>${usesPP?escHtml(anPeriodLabel(getPayPeriodStart(_anPPOffset)))+' · ':''}${_anGroup?escHtml(AN_GROUP_LABELS[_anGroup])+' · ':''}Printed ${escHtml(new Date().toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}))}${currentManager?.name?' by '+escHtml(currentManager.name):''}</div></div>`+rep.innerHTML;
-  area.querySelectorAll('.an-head-actions,.an-fav').forEach(n=>n.remove());
+  area.querySelectorAll('.an-head-actions,.an-fav,.an-print-skip').forEach(n=>n.remove());
   document.body.classList.add('an-printing');
   const done=()=>{ document.body.classList.remove('an-printing'); area.innerHTML=''; window.removeEventListener('afterprint',done); };
   window.addEventListener('afterprint',done);
