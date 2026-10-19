@@ -1835,6 +1835,7 @@
   .an-hbar { display:flex; height:22px; border-radius:5px; overflow:hidden; background:var(--warm-white); }
   .an-hbar span { display:block; height:100%; border-right:1.5px solid #fff; }
   .an-hbar-total { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
+  .an-typ { display:block; margin-top:0.15rem; }
   .an-people-ctl { display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; }
   .an-people-head { display:flex; align-items:center; gap:0.9rem; flex-wrap:wrap; }
   .an-shade-note { display:flex; align-items:flex-start; gap:0.45rem; font-size:0.7rem; color:var(--muted); font-weight:600; margin-top:0.5rem; line-height:1.45; }
@@ -10482,7 +10483,8 @@ function anRenderPeople(){
   if(shade.includes('current')) h+=`<div class="an-notice">This range includes the pay period still running. Only days already finished are counted, and its figures are incomplete until the period ends on ${escHtml(dfmt(Ps[Ps.length-1].days[13]))}.</div>`;
   if(shade.includes('early')) h+=`<div class="an-notice">This range reaches back before 11 Aug 2026, when Running Well became the only record of hours. Some of that time was on paper timesheets, so figures for those weeks may be incomplete. This note disappears once ranges no longer reach that far.</div>`;
   const isMgr=emp.role==='Manager';
-  const vs=(v,t,fmt)=>`<span class="an-flat">${escHtml(gl)} typically ${t==null?'—':escHtml(fmt(t))}</span>`;
+  // Own line under the tile's detail line — the group comparison never shares a line.
+  const vs=(v,t,fmt)=>`<span class="an-flat an-typ">${escHtml(gl)} typically ${t==null?'—':escHtml(fmt(t))}</span>`;
   const pct1=v=>v==null?'—':(v>0?'+':'')+v.toFixed(1)+'%';
   // "3 of 18 shifts (17%)" — the count leads; the % is for the group comparison.
   const ofN=(n,base,pctv)=>base>0?`of ${base} shift${base===1?'':'s'} (${pctv.toFixed(0)}%)`:'no clocked shifts';
@@ -10490,9 +10492,9 @@ function anRenderPeople(){
   const tile=(label,value,sub)=>`<div class="an-card an-tile static"><span class="an-tl">${label}</span><span class="an-tv">${value}</span><span class="an-td">${sub}</span></div>`;
   const leaveDays=(()=>{ const s=new Set(); _entries.forEach(e=>{ if(!e.deleted&&anLeaveOf(e)&&String(e.employeeId)===_anPeopleId&&e.date>=first&&e.date<=last&&e.date<anToday()) s.add(e.date); }); return s.size; })();
   h+=`<div class="an-tiles">
-    ${tile('Over / under roster',pct1(me.rate.overPct),`${anSignedH(me.worked-me.rostered)}h · `+vs(me.rate.overPct,typ('overPct'),pct1))}
-    ${tile('Clocked in late',isMgr?'—':String(me.lateIn),isMgr?'<span class="an-flat">managers do not clock</span>':`<span class="an-flat">${ofN(me.lateIn,me.shifts,me.rate.lateIn||0)}</span> · `+vs(me.rate.lateIn,typ('lateIn'),pctT))}
-    ${tile('Kiosk misses',isMgr?'—':String(me.noOut+me.mgrAdded+me.noRecord),isMgr?'<span class="an-flat">managers do not clock</span>':`<span class="an-flat">${ofN(me.noOut+me.mgrAdded+me.noRecord,me.missBase,me.rate.misses||0)}</span> · `+vs(me.rate.misses,typ('misses'),pctT))}
+    ${tile('Over / under roster',pct1(me.rate.overPct),`<span class="an-flat">${anSignedH(me.worked-me.rostered)}h</span>`+vs(me.rate.overPct,typ('overPct'),pct1))}
+    ${tile('Clocked in late',isMgr?'—':String(me.lateIn),isMgr?'<span class="an-flat">managers do not clock</span>':`<span class="an-flat">${ofN(me.lateIn,me.shifts,me.rate.lateIn||0)}</span>`+vs(me.rate.lateIn,typ('lateIn'),pctT))}
+    ${tile('Kiosk misses',isMgr?'—':String(me.noOut+me.mgrAdded+me.noRecord),isMgr?'<span class="an-flat">managers do not clock</span>':`<span class="an-flat">${ofN(me.noOut+me.mgrAdded+me.noRecord,me.missBase,me.rate.misses||0)}</span>`+vs(me.rate.misses,typ('misses'),pctT))}
     ${tile('Paid leave taken',anH(me.leaveH)+'h',`<span class="an-flat">${leaveDays} day${leaveDays===1?'':'s'} with leave</span>`)}
     ${tile('Penalty-rate hours',anPct(me.rate.penalty),vs(me.rate.penalty,typ('penalty'),v=>v.toFixed(0)+'%'))}
   </div>`;
