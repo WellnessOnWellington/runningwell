@@ -9496,7 +9496,7 @@ const AN_REPORTS=[
   {id:'paycat',   group:'Hours & pay',   label:'Hours by pay category', render:anRenderPayCat,   pp:true},
   {id:'forecast', group:'Hours & pay',   label:'Roster forecast',       render:anRenderForecast, pp:true},
   {id:'travel',   group:'Hours & pay',   label:'Travel km',             render:anRenderTravel,   pp:true},
-  {id:'outside',  group:'Attendance',    label:'Time outside roster',   render:anRenderOutside,  pp:true},
+  {id:'outside',  group:'Attendance',    label:'Clock times vs roster', render:anRenderOutside,  pp:true},
   {id:'breaks',   group:'Attendance',    label:'Break decisions',
     later:'How each unpaid break was decided has only been recorded since 15 October 2026. There is not enough of it to read yet — this report is planned for December.'},
   {id:'cover',    group:'Leave & cover', label:'Leave cover check',     render:anRenderCover,    pp:false},
@@ -10037,7 +10037,24 @@ function anRenderTravel(){
   return h;
 }
 
-/* ── Time outside roster ── */
+/* ── Clock times vs roster ──
+   Judged on the kiosk CLOCK times, not paid times. The question is "did they clock in
+   and out on time", and the paid times answer a different one: grace snapping turns a
+   6-minute-late tap into an on-time start, and a manager's edit replaces the tap. Pay
+   is already covered by Over / under roster.
+
+   Stored clock times are the real tap, except within ROUND_WINDOW (5 min) of the roster,
+   where the kiosk rounds them to it. Every threshold here is at least the grace period
+   (5+ min), so the rounding never decides anything — checked against 981 taps since
+   11 Aug 2026: none stored more than 5 minutes from the real tap.
+
+   Thresholds match the timesheet flags: late in / early out / late out count from the
+   role's grace period (GRACE_BY_ROLE, read on emp.role as that rule requires); early in
+   only from EARLY_REVIEW_MINS (60), the point at which the kiosk asks why — a few minutes
+   early is ordinary and pay snaps it to the roster anyway.
+
+   Shifts typed in by a manager have no clock to judge and are left out; a missing
+   clock-out leaves only the clock-in judged. Both are counted under Kiosk misses. */
 function anOutside(P){
   const by=new Map();
   const get=emp=>{ const k=String(emp.id); if(!by.has(k)) by.set(k,{emp,group:staffGroupFor(emp),shifts:0,lateIn:0,lateInMin:0,earlyIn:0,earlyInMin:0,earlyOut:0,earlyOutMin:0,lateOut:0,lateOutMin:0,unrost:0,unrostH:0,items:[]}); return by.get(k); };
@@ -10046,14 +10063,14 @@ function anOutside(P){
     if(r.isLeave||!e.clockIn||e.date>=P.today||r.emp.role==='Manager') return;
     const o=get(r.emp);
     if(!r.shift){ o.unrost++; o.unrostH+=r.worked; o.items.push({e,what:'Not rostered',mins:Math.round(r.worked*60)}); return; }
-    const {finalStart:fs, finalEnd:fe}=resolveFinalTimes(e,r.shift,r.emp);
-    if(!fs||!fe) return;
     o.shifts++;
-    const rs=timeToMin(r.shift.start_time), re=timeToMin(r.shift.end_time), s=timeToMin(fs), en=timeToMin(fe);
-    if(s>rs){ o.lateIn++; o.lateInMin+=s-rs; o.items.push({e,what:'Paid start after rostered start',mins:s-rs}); }
-    if(s<rs){ o.earlyIn++; o.earlyInMin+=rs-s; o.items.push({e,what:'Paid start before rostered start',mins:rs-s}); }
-    if(en<re){ o.earlyOut++; o.earlyOutMin+=re-en; o.items.push({e,what:'Paid finish before rostered finish',mins:re-en}); }
-    if(en>re){ o.lateOut++; o.lateOutMin+=en-re; o.items.push({e,what:'Paid finish after rostered finish',mins:en-re}); }
+    const g=GRACE_BY_ROLE[r.emp.role]??10;
+    const rs=timeToMin(r.shift.start_time), re=timeToMin(r.shift.end_time);
+    const ci=timeToMin(e.clockIn), co=e.clockOut?timeToMin(e.clockOut):null;
+    if(ci-rs>=g){ o.lateIn++; o.lateInMin+=ci-rs; o.items.push({e,what:'Clocked in late',mins:ci-rs}); }
+    if(rs-ci>EARLY_REVIEW_MINS){ o.earlyIn++; o.earlyInMin+=rs-ci; o.items.push({e,what:'Clocked in early',mins:rs-ci}); }
+    if(co!==null&&re-co>=g){ o.earlyOut++; o.earlyOutMin+=re-co; o.items.push({e,what:'Clocked out early',mins:re-co}); }
+    if(co!==null&&co-re>=g){ o.lateOut++; o.lateOutMin+=co-re; o.items.push({e,what:'Clocked out late',mins:co-re}); }
   });
   return [...by.values()];
 }
@@ -10061,13 +10078,13 @@ function anMins(m){ if(!m) return '<span class="an-flat">–</span>'; const h=Ma
 function anRenderOutside(){
   const r=AN_REPORTS.find(x=>x.id==='outside');
   const P=anPeriod(getPayPeriodStart(_anPPOffset));
-  let h=anHead(r,'Where PAID times differ from the roster. These are the times after grace-period snapping, so anything inside the grace period already counts as on the roster. Neutral by design: whether a late start is docked or absorbed is a policy still being decided.');
+  let h=anHead(r,`Kiosk clock times against the roster, counted only beyond each role\'s grace period — inside it is on time. Clocked in early counts only from ${EARLY_REVIEW_MINS} minutes, when the kiosk asks why; a few minutes early is ordinary. This is about clocking, not pay: whether a late start is docked or absorbed is a separate policy still being decided, and pay is in Hours vs rostered.`);
   h+=anNotice(P);
   const list=anOutside(P).filter(o=>o.lateIn||o.earlyIn||o.earlyOut||o.lateOut||o.unrost).sort((a,b)=>(b.lateInMin+b.earlyOutMin+b.lateOutMin+b.earlyInMin)-(a.lateInMin+a.earlyOutMin+a.lateOutMin+a.earlyInMin));
   const cell=(n,m)=>n?`${n} · ${anMins(m)}`:'<span class="an-flat">–</span>';
   const rows=list.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(o.group)}</td><td class="n">${o.shifts}</td><td class="n">${cell(o.lateIn,o.lateInMin)}</td><td class="n">${cell(o.earlyOut,o.earlyOutMin)}</td><td class="n">${cell(o.earlyIn,o.earlyInMin)}</td><td class="n">${cell(o.lateOut,o.lateOutMin)}</td><td class="n">${o.unrost?`${o.unrost} · ${anH(o.unrostH)}h`:'<span class="an-flat">–</span>'}</td></tr>`);
-  h+=anTable([{t:'Staff member'},{t:'Group'},{t:'Rostered shifts',n:1},{t:'Started after roster',n:1},{t:'Finished before roster',n:1},{t:'Started before roster',n:1},{t:'Finished after roster',n:1},{t:'Unrostered shifts',n:1}],rows,{empty:'Every paid time in this period matches the roster.'});
-  h+=`<div class="an-foot">Each cell is the number of shifts · total time. Managers are left out: they do not clock, and their hours are taken from the roster. Unrostered shifts are worked days with no roster block at all.</div>`;
+  h+=anTable([{t:'Staff member'},{t:'Group'},{t:'Clocked shifts',n:1},{t:'Clocked in late',n:1},{t:'Clocked out early',n:1},{t:'Clocked in early',n:1},{t:'Clocked out late',n:1},{t:'Unrostered shifts',n:1}],rows,{empty:'Every clock time in this period was within the grace period.'});
+  h+=`<div class="an-foot">Each cell is the number of shifts · total minutes beyond the roster. Managers are left out: they do not clock, and their hours are taken from the roster. Shifts typed in by a manager have no clock time to judge, and a missing clock-out leaves only the clock-in judged — both are counted under Kiosk reliability. Unrostered shifts are clocked days with no roster block at all. ⚠ A difference of an hour or more usually means the shift was moved and the roster was not updated — the same hours, worked at a different time — rather than lateness. Check the roster before reading it as attendance.</div>`;
   return h;
 }
 
@@ -10284,7 +10301,7 @@ function anPersonHtml(empId){
   const reqs=(_requests||[]).filter(q=>String(q.initiatorId)===empId&&q.createdAt&&daySet.has(rbDateKey(new Date(q.createdAt))));
   const today=anToday(), horizon=anAddDays(today,90);
   const up=[...new Set(_entries.filter(e=>!e.deleted&&anLeaveOf(e)&&String(e.employeeId)===empId&&e.date>today&&e.date<=horizon).map(e=>e.date+'|'+anLeaveOf(e)))].sort();
-  const outTxt=out?[out.lateIn&&`${out.lateIn} started after roster`,out.earlyOut&&`${out.earlyOut} finished early`,out.lateOut&&`${out.lateOut} finished late`,out.unrost&&`${out.unrost} unrostered`].filter(Boolean).join(' · '):'';
+  const outTxt=out?[out.lateIn&&`${out.lateIn} clocked in late`,out.earlyOut&&`${out.earlyOut} clocked out early`,out.lateOut&&`${out.lateOut} clocked out late`,out.earlyIn&&`${out.earlyIn} clocked in early`,out.unrost&&`${out.unrost} unrostered`].filter(Boolean).join(' · '):'';
   const stat=(l,v,s)=>`<div class="an-pstat"><div class="an-tl">${l}</div><div class="an-pv">${v}</div><div class="an-ps">${s||''}</div></div>`;
   const g=staffGroupFor(emp);
   let h=`<div class="an-phead">
@@ -10297,7 +10314,7 @@ function anPersonHtml(empId){
   h+=`<div class="an-pgrid">
     ${stat('Worked',anH(me.worked)+'h','rostered '+anH(me.rostered)+'h')}
     ${stat('Over / under roster',anSignedH(diff)+'h',Ps[4]?(Math.abs(diff-pdiff)<0.01?'same as previous period':(diff>pdiff?'▲ ':'▼ ')+Math.abs(diff-pdiff).toFixed(2)+'h vs previous period'):'')}
-    ${stat('Outside roster',out?String(out.lateIn+out.earlyOut+out.lateOut+out.earlyIn+out.unrost):'0',escHtml(outTxt||'all paid times match the roster'))}
+    ${stat('Clock times vs roster',out?String(out.lateIn+out.earlyOut+out.lateOut+out.earlyIn+out.unrost):'0',escHtml(outTxt||'all clock times within the grace period'))}
     ${stat('Paid leave this period',anH(me.leave)+'h',up.length?`${up.length} day${up.length===1?'':'s'} booked in the next 90 days`:'nothing booked in the next 90 days')}
     ${stat('Requests',String(reqs.length),reqs.length?escHtml(reqs.map(q=>q.type).join(', ')):'none raised this period')}
     ${stat('Kiosk misses',String(kn),kn?'see Kiosk reliability':'none this period')}
@@ -10405,7 +10422,7 @@ function anPeopleStats(starts){
     const worked=AN_WORK_KINDS.reduce((a,k)=>a+o.kinds[k],0);
     o.rate={
       overPct: o.rostered>0?(o.worked-o.rostered)/o.rostered*100:null,
-      lateIn: per10(o.lateIn), earlyOut: per10(o.earlyOut), lateOut: per10(o.lateOut),
+      lateIn: per10(o.lateIn), earlyIn: per10(o.earlyIn), earlyOut: per10(o.earlyOut), lateOut: per10(o.lateOut),
       // Denominator ≈ rostered shifts: clocked + typed in + never recorded.
       misses: (o.shifts+o.mgrAdded+o.noRecord)>0?(o.noOut+o.mgrAdded+o.noRecord)/(o.shifts+o.mgrAdded+o.noRecord)*10:null,
       changed: o.clocked>0?o.changed/o.clocked*100:null,
@@ -10469,7 +10486,7 @@ function anRenderPeople(){
   const leaveDays=(()=>{ const s=new Set(); _entries.forEach(e=>{ if(!e.deleted&&anLeaveOf(e)&&String(e.employeeId)===_anPeopleId&&e.date>=first&&e.date<=last&&e.date<anToday()) s.add(e.date); }); return s.size; })();
   h+=`<div class="an-tiles">
     ${tile('Over / under roster',pct1(me.rate.overPct),`${anSignedH(me.worked-me.rostered)}h · `+vs(me.rate.overPct,typ('overPct'),pct1))}
-    ${tile('Started after roster',isMgr?'—':(me.rate.lateIn==null?'—':me.rate.lateIn.toFixed(1)),isMgr?'<span class="an-flat">managers do not clock</span>':'<span class="an-flat">per 10 shifts</span> · '+vs(me.rate.lateIn,typ('lateIn'),v=>v.toFixed(1)))}
+    ${tile('Clocked in late',isMgr?'—':(me.rate.lateIn==null?'—':me.rate.lateIn.toFixed(1)),isMgr?'<span class="an-flat">managers do not clock</span>':'<span class="an-flat">per 10 shifts</span> · '+vs(me.rate.lateIn,typ('lateIn'),v=>v.toFixed(1)))}
     ${tile('Kiosk misses',isMgr?'—':(me.rate.misses==null?'—':me.rate.misses.toFixed(1)),isMgr?'<span class="an-flat">managers do not clock</span>':'<span class="an-flat">per 10 shifts</span> · '+vs(me.rate.misses,typ('misses'),v=>v.toFixed(1)))}
     ${tile('Paid leave taken',anH(me.leaveH)+'h',`<span class="an-flat">${leaveDays} day${leaveDays===1?'':'s'} with leave</span>`)}
     ${tile('Penalty-rate hours',anPct(me.rate.penalty),vs(me.rate.penalty,typ('penalty'),v=>v.toFixed(0)+'%'))}
@@ -10478,9 +10495,9 @@ function anRenderPeople(){
     const labels=starts.map(anShortPeriod), n=starts.length;
     const c1=anBars(labels,me.per.map(p=>p.diff),{shade,fmt:v=>(v>0?'+':'')+v.toFixed(1),aria:'Hours over or under roster for '+anName(emp)+' per pay period',colorFor:v=>v>=0?'#8B2535':'#3A6B4F'});
     const c2=isMgr?anEmpty('Managers do not clock, so there is nothing to show here.')
-      :anStack(labels,[{label:'Started after roster',color:'#D4899A',values:me.per.map(p=>p.lateIn)},{label:'Kiosk misses',color:'#2D2426',values:me.per.map(p=>p.misses)}],{shade,aria:'Late starts and kiosk misses for '+anName(emp)+' per pay period'})
-        +anLegend([{label:'Started after roster',color:'#D4899A'},{label:'Kiosk misses',color:'#2D2426'}]);
-    h+=`<div class="an-two">${anChartCard('Over / under roster','Hours, per pay period (Tue–Mon). Completed days only.',c1+anShadeNote(shade))}${anChartCard('Late starts and kiosk misses','Shifts, per pay period (Tue–Mon).',c2+(isMgr?'':anShadeNote(shade)))}</div>`;
+      :anStack(labels,[{label:'Clocked in late',color:'#D4899A',values:me.per.map(p=>p.lateIn)},{label:'Kiosk misses',color:'#2D2426',values:me.per.map(p=>p.misses)}],{shade,aria:'Late clock-ins and kiosk misses for '+anName(emp)+' per pay period'})
+        +anLegend([{label:'Clocked in late',color:'#D4899A'},{label:'Kiosk misses',color:'#2D2426'}]);
+    h+=`<div class="an-two">${anChartCard('Over / under roster','Hours, per pay period (Tue–Mon). Completed days only.',c1+anShadeNote(shade))}${anChartCard('Late clock-ins and kiosk misses','Shifts, per pay period (Tue–Mon).',c2+(isMgr?'':anShadeNote(shade)))}</div>`;
     if(n>=6) h+=`<div class="an-foot">Bars are counts, so a pay period with fewer shifts will look better than it is — the rates in the table below allow for that.</div>`;
   }
   const row=(label,mine,t,note)=>`<tr><td>${label}</td><td class="n"><strong>${mine}</strong></td><td class="n">${t}</td><td class="an-flat">${note||''}</td></tr>`;
@@ -10491,17 +10508,18 @@ function anRenderPeople(){
     row('Over / under roster',pct1(me.rate.overPct),pct1(typ('overPct')),'of rostered hours'),
   ];
   if(!isMgr) rows.push(
-    row('Rostered shifts clocked',String(me.shifts),'',''),
-    row('Started after roster',f1(me.rate.lateIn),f1(typ('lateIn')),`per 10 shifts · ${me.lateIn} shift${me.lateIn===1?'':'s'}, ${anMins(me.lateInMin).replace(/<[^>]+>/g,'')}`),
-    row('Finished before roster',f1(me.rate.earlyOut),f1(typ('earlyOut')),`per 10 shifts · ${me.earlyOut} shift${me.earlyOut===1?'':'s'}`),
-    row('Finished after roster',f1(me.rate.lateOut),f1(typ('lateOut')),`per 10 shifts · ${me.lateOut} shift${me.lateOut===1?'':'s'}, ${anMins(me.lateOutMin).replace(/<[^>]+>/g,'')}`),
+    row('Clocked shifts',String(me.shifts),'',''),
+    row('Clocked in late',f1(me.rate.lateIn),f1(typ('lateIn')),`per 10 shifts · ${me.lateIn} shift${me.lateIn===1?'':'s'}, ${anMins(me.lateInMin).replace(/<[^>]+>/g,'')}`),
+    row('Clocked in early',f1(me.rate.earlyIn),f1(typ('earlyIn')),`per 10 shifts · 60+ minutes before the roster · ${me.earlyIn} shift${me.earlyIn===1?'':'s'}`),
+    row('Clocked out early',f1(me.rate.earlyOut),f1(typ('earlyOut')),`per 10 shifts · ${me.earlyOut} shift${me.earlyOut===1?'':'s'}`),
+    row('Clocked out late',f1(me.rate.lateOut),f1(typ('lateOut')),`per 10 shifts · ${me.lateOut} shift${me.lateOut===1?'':'s'}, ${anMins(me.lateOutMin).replace(/<[^>]+>/g,'')}`),
     row('Unrostered shifts',String(me.unrost),'',''),
     row('Kiosk misses',f1(me.rate.misses),f1(typ('misses')),`per 10 shifts · ${me.noOut} no clock-out, ${me.mgrAdded} typed in, ${me.noRecord} no record`),
     row('Times changed by a manager',fp(me.rate.changed),fp(typ('changed')),`of clocked shifts · ${me.changed} of ${me.clocked}`),
   );
   rows.push(row('Penalty-rate share',fp(me.rate.penalty),fp(typ('penalty')),'of worked hours'));
   h+=`<div class="an-h2 an-tabletitle">The detail</div>`+anTable([{t:'Measure'},{t:escHtml(anName(emp).split(' ')[0]),n:1},{t:escHtml(gl)+' typically',n:1},{t:''}],rows);
-  h+=`<div class="an-foot">"Typically" is the median for current ${escHtml(gl.toLowerCase())} over the same range, so one unusual person does not move it. Rates allow for different amounts of work. Time outside roster uses paid times after grace-period snapping, and is neutral by design — whether a late start is docked or absorbed is a policy still being decided.</div>`;
+  h+=`<div class="an-foot">"Typically" is the median for current ${escHtml(gl.toLowerCase())} over the same range, so one unusual person does not move it. Rates allow for different amounts of work. Clock times count only beyond the grace period (clocked in early: 60+ minutes), and are about clocking, not pay — whether a late start is docked or absorbed is a policy still being decided.</div>`;
   // Leave taken and booked
   const taken={}; const seen=new Set();
   _entries.forEach(e=>{ const lt=e.deleted?null:anLeaveOf(e); if(!lt||String(e.employeeId)!==_anPeopleId||e.date<first||e.date>last||e.date>=anToday()) return; const k=e.date+'|'+lt; if(seen.has(k)) return; seen.add(k); taken[lt]=(taken[lt]||0)+1; });
