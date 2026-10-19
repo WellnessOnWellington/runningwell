@@ -3196,11 +3196,18 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.3 &middot; October 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.4 &middot; October 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
             <div style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.4</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">19 October 2026 &mdash; Analytics</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>The Analytics tab now has reports.</strong> A menu down the left groups them by topic: hours against the roster, hours by pay category, a roster forecast, travel, time outside the roster, leave cover, leave patterns, requests and swaps, kiosk reliability and timesheet workload. The Overview gives five headline figures, each compared with the previous pay period. Star a report to keep it at the top of the menu. One pay-period picker and one staff filter drive every report, and every report can be printed or saved as a PDF.<br><br><strong>People</strong> shows how one person is going over a pay period, a month, three months or six months, beside the typical figure for their staff group. Click any name in a report for a quick look at that person.<br><br>The hours and pay figures are worked out exactly the way the MYOB export works them out, so they match what payroll was sent. A pay period still running is outlined, and weeks before 11 August &mdash; when Running Well became the only record of hours &mdash; are shaded, since those may be incomplete. The audit logs that used to fill this tab are unchanged, under <em>Logs</em> at the bottom of the menu. Analytics only reads; it changes nothing.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.3</div>
                 <div>
@@ -4652,7 +4659,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.3';
+const APP_VERSION='3.4';
 const APP_VERSION_DATE='October 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
