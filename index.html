@@ -1838,6 +1838,10 @@
   .an-hbar span { display:block; height:100%; border-right:1.5px solid #fff; }
   .an-hbar-total { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
   .an-typ { display:block; margin-top:0.15rem; }
+  #an-tip { position:fixed; z-index:400; pointer-events:none; display:none; max-width:280px; background:var(--charcoal); color:#fff; font-family:'Nunito',sans-serif; font-size:0.74rem; font-weight:600; line-height:1.45; padding:0.5rem 0.65rem; border-radius:8px; white-space:pre-line; box-shadow:0 6px 20px rgba(40,20,30,0.25); }
+  #an-tip.show { display:block; }
+  .an-cal [data-tip] { cursor:default; }
+  .an-cal [data-tip]:hover { stroke:#2D2426; stroke-width:1.5; }
   .an-bul { padding-left:0.75rem; text-indent:-0.75rem; }
   .an-bul::before { content:'•'; display:inline-block; width:0.75rem; text-indent:0; }
   .an-tv-unit { font-family:'Nunito',sans-serif; font-size:0.85rem; font-weight:700; color:var(--muted); white-space:nowrap; }
@@ -9701,6 +9705,12 @@ function anPeriod(fnStart, group=_anGroup){
      rostered and not worked — Melissa Yandle, 1 Oct 2026, showed 5.5h short for it. */
   const leaveShiftIds=new Set(_entries.filter(e=>!e.deleted&&e.leaveType&&e.shiftId).map(e=>String(e.shiftId)));
   rows.forEach(r=>{ const pt=r.entry.payrollType||r.entry.leaveType; if(r.shift&&pt&&LEAVE_TYPES[pt]) leaveShiftIds.add(String(r.shift.id)); });
+  /* …unless someone actually WORKED it. A block flagged as leave with a worked entry on it
+     is a worked shift — the roster flag is stale (Josephina TUT, 10 Sep 2026: 08:30-11:00
+     marked leave, clocked 08:30-11:00). Counting it as leave dropped its rostered hours
+     while its worked hours stayed, and left the People tiles one shift short of the
+     clock-time chart. */
+  const workedBlockIds=new Set(rows.filter(r=>r.shift&&!r.isLeave&&r.worked>0).map(r=>String(r.shift.id)));
   const rostered=[];
   _rosterShifts.forEach(s=>{
     if(!daySet.has(s.date)||s.is_day_off||!s.start_time||!s.end_time) return;
@@ -9709,7 +9719,7 @@ function anPeriod(fnStart, group=_anGroup){
     const span=Math.max(0,timeToMin(s.end_time)-timeToMin(s.start_time))/60;
     const paid=Math.max(0,span-expectedUnpaidBreakMins(span,emp.id,s.date)/60);
     rostered.push({shift:s, emp, group:staffGroupFor(emp), date:s.date, paid,
-      onLeave:!!s.on_leave||leaveShiftIds.has(String(s.id))});
+      onLeave:(!!s.on_leave||leaveShiftIds.has(String(s.id)))&&!workedBlockIds.has(String(s.id))});
   });
   const P={fnStart, days, today, group, finalised:anIsFinalised(fnStart), inPeriod, rows, rostered,
            collapsed:timed.length-deduped.length, started:days[0]<today, complete:days[13]<today};
@@ -9754,14 +9764,19 @@ function anKiosk(P){
   const past=P.inPeriod.filter(e=>e.date<P.today);
   const kioskRows=past.filter(e=>String(e.id).startsWith('T'));
   const noOut=kioskRows.filter(e=>e.clockIn&&!e.clockOut);
+  /* Before 11 Aug 2026 paper timesheets ran alongside the kiosk, so a shift typed in by
+     a manager — or a rostered block with no entry — was the normal process, not a missed
+     clock. Only from AN_SOLE_RECORD_FROM do those count. A kiosk clock-in with no
+     clock-out is a kiosk miss in either era, so noOut keeps every date. */
   const mgrAdded=past.filter(e=>{
+    if(e.date<AN_SOLE_RECORD_FROM) return false;
     if(!String(e.id).startsWith('M')||e.leaveType||e.lockedBy==='Auto') return false;
     if(e.payrollType&&LEAVE_TYPES[e.payrollType]) return false;
     return byId.get(String(e.employeeId))?.role!=='Manager';
   });
   const ids=new Set(_emps.filter(e=>anInScope(e,P.group)).map(e=>String(e.id)));
   let noRecord=[];
-  try{ noRecord=tsUnfinalisedForPeriod(ids,P.days,{includeMissing:true}).missing; }catch(e){ console.warn('anKiosk: missing-block check failed',e); }
+  try{ noRecord=tsUnfinalisedForPeriod(ids,P.days,{includeMissing:true}).missing.filter(m=>m.date>=AN_SOLE_RECORD_FROM); }catch(e){ console.warn('anKiosk: missing-block check failed',e); }
   const groups=new Map();
   kioskRows.forEach(e=>{
     const sh=tsShiftForEntry(e,_rosterShifts);
@@ -10481,6 +10496,159 @@ function anShadeNote(shade){
   return h;
 }
 
+/* Every clocked, rostered shift for one person over the given pay periods, as minutes
+   from the roster at each end: positive = later than rostered. Same rules as anOutside —
+   clock times, completed days, not leave, managers excluded (they do not clock). */
+function anPersonShifts(empId, Ps){
+  const out=[];
+  Ps.forEach(P=>P.rows.forEach(r=>{
+    const e=r.entry;
+    if(String(r.emp.id)!==String(empId)||r.isLeave||!e.clockIn||!r.shift||e.date>=P.today||r.emp.role==='Manager') return;
+    const rs=timeToMin(r.shift.start_time), re=timeToMin(r.shift.end_time);
+    out.push({date:e.date, inDev:timeToMin(e.clockIn)-rs, outDev:e.clockOut?timeToMin(e.clockOut)-re:null,
+      clockIn:e.clockIn, clockOut:e.clockOut, rStart:String(r.shift.start_time).slice(0,5), rEnd:String(r.shift.end_time).slice(0,5)});
+  }));
+  return out.sort((a,b)=>a.date.localeCompare(b.date)||a.rStart.localeCompare(b.rStart));
+}
+/* Attendance calendar — one square per rostered (or worked) day, weeks across, weekdays
+   down. Replaced a per-shift scatter of clock-in/out minutes (20 Oct 2026), which kept the
+   dates but was too noisy to read: most of it was on-time dots. Each day gets ONE state,
+   worst first:
+     missed  — a missed clock that day (no clock-out, typed in, or rostered with no record)
+     late    — clocked in late; a day also clocked out early still reads "late", the hover
+               says both (Joel, 20 Oct 2026)
+     early   — clocked out early
+     ontime  — clocked in and out within grace
+     planned / unplanned — leave, split as on the Leave tile; a block flagged as leave on
+               the roster with no leave entry is shown as planned, and the hover says so
+     unrost  — worked with no roster block
+     paper   — worked before 11 Aug 2026 with no clock: recorded on paper, which was the
+               normal process then, so neither on time nor missed
+   Public holidays and days not rostered stay blank. Same thresholds as the tiles. */
+const AN_CAL_STATES={
+  ontime:   {label:'On time',            color:'#DCEBE1'},
+  late:     {label:'Clocked in late',    color:'#C45670'},
+  early:    {label:'Clocked out early',  color:'#C99A4E'},
+  missed:   {label:'Missed clock',       color:'#2D2426'},
+  planned:  {label:'Planned leave',      color:'#9FC3DE'},
+  unplanned:{label:'Unplanned leave',    color:'#2471A3'},
+  unrost:   {label:'Worked, not rostered',color:'#EFE6E8'},
+  paper:    {label:'Recorded on paper',  color:'#D9CFD1'},
+};
+function anPersonDays(empId, Ps, grace){
+  const id=String(empId), days=new Map();
+  const day=d=>{ if(!days.has(d)) days.set(d,{date:d,blocks:[],clocks:[],missed:[],leave:new Set(),rosterLeave:false,unrost:false}); return days.get(d); };
+  Ps.forEach(P=>{
+    P.rostered.forEach(x=>{ if(String(x.emp.id)!==id||x.date>=P.today) return; const o=day(x.date); o.blocks.push(`${String(x.shift.start_time).slice(0,5)}–${String(x.shift.end_time).slice(0,5)}`); if(x.onLeave) o.rosterLeave=true; });
+    P.rows.forEach(r=>{ const e=r.entry; if(String(r.emp.id)!==id||e.date>=P.today||r.isLeave) return;
+      if(!r.shift){ if(r.worked>0) day(e.date).unrost=true; return; }
+      // Worked with no clock before 11 Aug = the paper era, not a missed clock (see anKiosk).
+      if(!e.clockIn){ if(r.worked>0&&e.date<AN_SOLE_RECORD_FROM) day(e.date).paper=true; return; }
+      const inDev=timeToMin(e.clockIn)-timeToMin(r.shift.start_time), outDev=e.clockOut?timeToMin(e.clockOut)-timeToMin(r.shift.end_time):null;
+      day(e.date).clocks.push({inDev,outDev,clockIn:e.clockIn,clockOut:e.clockOut,late:inDev>=grace,early:outDev!=null&&-outDev>=grace}); });
+    const k=anKiosk(P);
+    k.noOut.forEach(e=>{ if(String(e.employeeId)===id) day(e.date).missed.push('no clock-out'); });
+    k.mgrAdded.forEach(e=>{ if(String(e.employeeId)===id) day(e.date).missed.push('typed in by a manager (no clock-in)'); });
+    k.noRecord.forEach(m=>{ if(String(m.employeeId)===id) day(m.date).missed.push(`rostered ${m.start}–${m.end}, no record`); });
+  });
+  const first=Ps[0].days[0], last=Ps[Ps.length-1].days[13], today=anToday();
+  _entries.forEach(e=>{ if(e.deleted||String(e.employeeId)!==id||e.date<first||e.date>last||e.date>=today) return; const lt=anLeaveOf(e); if(lt) day(e.date).leave.add(lt); });
+  const PLANNED=['annual_leave','long_service_leave'];
+  days.forEach(o=>{
+    const late=o.clocks.some(c=>c.late), early=o.clocks.some(c=>c.early);
+    const lv=[...o.leave].filter(t=>t!=='public_holiday');
+    o.state=o.missed.length?'missed':late?'late':early?'early':o.clocks.length?'ontime'
+      :lv.length?(lv.some(t=>!PLANNED.includes(t))?'unplanned':'planned')
+      :o.rosterLeave&&!o.leave.size?'planned':o.paper?'paper':o.unrost?'unrost':null;
+    o.alsoEarly=late&&early;
+  });
+  return days;
+}
+/* Full width (the Weekday patterns chart beside it was dropped 20 Oct 2026 — the calendar's
+   weekday rows already show the pattern; its counts now sit at the end of each row).
+   Squares grow to fill the space on short ranges and carry the day of the month when
+   there is room; months label the top. Hover is instant (anTip), not the browser's slow
+   title tooltip. Row totals count SHIFTS, like the tiles; the squares are days. */
+function anAttendanceCalendar(days, starts, grace, shifts){
+  const first=starts[0], last=anAddDays(starts[starts.length-1],13);
+  const f=new Date(first+'T12:00:00'); const mon=new Date(f); mon.setDate(f.getDate()-((f.getDay()+6)%7));
+  const l=new Date(last+'T12:00:00'); const weeks=Math.ceil(((l-mon)/86400000+1)/7);
+  const W=1000, L=40, SUM=300, T=24, gap=4;
+  /* Width fills the space: on a short range each day is a wide bar, on a long one a square.
+     Height is capped so the calendar never grows tall. */
+  const cw=Math.max(10,Math.min(120,Math.floor((W-L-SUM-12)/weeks)-gap)), ch=Math.min(40,cw);
+  const H=T+7*(ch+gap)+2, showNum=cw>=18&&ch>=16;
+  const today=anToday(), counts={};
+  const dark={late:1,missed:1,unplanned:1};
+  // Weekday totals from the shifts (same thresholds as the tiles).
+  const wd=[0,1,2,3,4,5,6].map(()=>({n:0,late:0,early:0}));
+  shifts.forEach(s=>{ const i=(new Date(s.date+'T12:00:00').getDay()+6)%7; wd[i].n++; if(s.inDev>=grace) wd[i].late++; if(s.outDev!=null&&-s.outDev>=grace) wd[i].early++; });
+  let s=`<svg class="an-chart an-cal" viewBox="0 0 ${W} ${H}" role="img" aria-label="Attendance calendar, one square per rostered day">`;
+  const gridR=L+weeks*(cw+gap);
+  // Fixed gap from the grid, fixed column widths — the table never drifts or misaligns.
+  // Day names repeated at the table's left edge, so a row can be read without tracking
+  // back across the grid on long ranges.
+  const colDay=gridR+18, colLate=colDay+78, colEarly=colLate+64, colShifts=colEarly+70;
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((d,i)=>{ const cy=T+i*(ch+gap)+ch/2+4;
+    s+=`<text x="${L-8}" y="${cy.toFixed(1)}" class="an-ax" text-anchor="end">${d}</text>`;
+    s+=`<text x="${colDay.toFixed(1)}" y="${cy.toFixed(1)}" class="an-ax">${d}</text>`;
+    // Row totals as an aligned table: Late · Early · Shifts, right-aligned, "–" for none.
+    const w=wd[i], num=(v,colour)=>v?`<tspan fill="${colour}" font-weight="800">${v}</tspan>`:'<tspan fill="#CDBFC2">–</tspan>';
+    [[colLate,num(w.late,'#C45670')],[colEarly,num(w.early,'#A07228')],[colShifts,w.n?`<tspan fill="#8A7A7D" font-weight="700">${w.n}</tspan>`:'<tspan fill="#CDBFC2">–</tspan>']]
+      .forEach(([x,v])=>{ s+=`<text x="${x.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="end" style="font-size:12.5px;font-family:Nunito,sans-serif;font-variant-numeric:tabular-nums">${v}</text>`; }); });
+  [[colLate,'Late','#C45670'],[colEarly,'Early','#A07228'],[colShifts,'Shifts','#8A7A7D']].forEach(([x,t,c])=>{
+    s+=`<text x="${x.toFixed(1)}" y="${T-9}" text-anchor="end" style="font-size:10.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;font-family:Nunito,sans-serif;fill:${c}">${t}</text>`; });
+  // Month labels at the column holding each 1st (and the first column), with a faint divider.
+  let lastMonth='';
+  for(let w=0;w<weeks;w++){ for(let d=0;d<7;d++){ const dt=new Date(mon); dt.setDate(mon.getDate()+w*7+d); const key=rbDateKey(dt);
+      if(key<first||key>last) continue; const m=key.slice(0,7);
+      if(m!==lastMonth){ const x=L+w*(cw+gap);
+        if(lastMonth) s+=`<line x1="${(x-gap/2).toFixed(1)}" x2="${(x-gap/2).toFixed(1)}" y1="${T-4}" y2="${H-2}" stroke="#E2D2D6" stroke-width="1"/>`;
+        s+=`<text x="${x.toFixed(1)}" y="${T-9}" class="an-ax" style="font-size:12px;fill:#2D2426">${dt.toLocaleDateString('en-AU',{month:'short'})}</text>`; lastMonth=m; }
+      break; } }
+  for(let w=0;w<weeks;w++) for(let d=0;d<7;d++){
+    const dt=new Date(mon); dt.setDate(mon.getDate()+w*7+d); const key=rbDateKey(dt);
+    if(key<first||key>last) continue;
+    const x=L+w*(cw+gap), y=T+d*(ch+gap), o=days.get(key);
+    const early=key<AN_SOLE_RECORD_FROM, num=dt.getDate();
+    if(!o||!o.state){
+      s+=`<rect x="${x}" y="${y}" width="${cw}" height="${ch}" rx="4" fill="none" stroke="#F0E4E7"${key>=today?' stroke-dasharray="2 2"':''}/>`;
+      if(showNum) s+=`<text x="${(x+cw/2).toFixed(1)}" y="${(y+ch/2+4).toFixed(1)}" text-anchor="middle" style="font-size:${Math.min(12,ch*0.38).toFixed(1)}px;fill:#CDBFC2;font-weight:600;pointer-events:none">${num}</text>`;
+      continue;
+    }
+    counts[o.state]=(counts[o.state]||0)+1;
+    const st=AN_CAL_STATES[o.state];
+    const bits=[anDateShort(key)];
+    if(o.blocks.length) bits.push('Rostered '+o.blocks.join(', '));
+    o.clocks.forEach(c=>bits.push(`Clocked ${c.clockIn}–${c.clockOut||'no clock-out'}`));
+    bits.push(o.state==='late'&&o.alsoEarly?'Clocked in late, and clocked out early':o.state==='missed'?'Missed clock: '+o.missed.join('; '):st.label);
+    if(o.missed.length&&o.state!=='missed') bits.push('Missed clock: '+o.missed.join('; '));
+    if(o.leave.size) bits.push('Leave: '+[...o.leave].map(formatLeaveType).join(', '));
+    else if(o.rosterLeave&&o.state==='planned') bits.push('Marked as leave on the roster (no leave entry)');
+    if(early) bits.push('Before 11 Aug 2026 — may be incomplete');
+    const tip=escHtml(bits.join('\n'));
+    s+=`<rect x="${x}" y="${y}" width="${cw}" height="${ch}" rx="4" fill="${st.color}"${o.state==='unrost'?' stroke="#D9C4C8"':''}${early?' opacity="0.55"':''} data-tip="${tip}" aria-label="${tip}"/>`;
+    if(showNum) s+=`<text x="${(x+cw/2).toFixed(1)}" y="${(y+ch/2+4).toFixed(1)}" text-anchor="middle" style="font-size:${Math.min(12,ch*0.38).toFixed(1)}px;fill:${dark[o.state]?'#fff':'#2D2426'};font-weight:700;pointer-events:none"${early?' opacity="0.7"':''}>${num}</text>`;
+  }
+  s+='</svg>';
+  const legend=Object.entries(AN_CAL_STATES).filter(([k])=>counts[k]||['ontime','late','early','missed'].includes(k))
+    .map(([k,v])=>`<span><span class="an-sw" style="background:${v.color};${k==='unrost'?'border:1px solid #D9C4C8;':''}"></span>${escHtml(v.label)} <span class="an-flat">${counts[k]||0}</span></span>`).join('');
+  const note=starts.some(st=>st<AN_SOLE_RECORD_FROM)?`<div class="an-shade-note"><span class="an-shade-key" style="opacity:0.55;background:#9C8C8F;border-color:#9C8C8F" aria-hidden="true"></span>Faded: days before 11 Aug 2026, when Running Well became the only record of hours — may be incomplete.</div>`:'';
+  anTipInit();
+  return s+`<div class="an-legend">${legend}</div><div class="an-shade-note">Squares are days — a day shows its worst event, so the legend counts can be lower than the tiles. The totals at the end of each row count shifts, like the tiles.</div>`+note;
+}
+/* One shared instant tooltip for any element with data-tip inside Analytics. Delegated
+   once on document, so re-rendering a report never stacks listeners. */
+function anTipInit(){
+  if(anTipInit.done) return; anTipInit.done=true;
+  const tip=document.createElement('div'); tip.id='an-tip'; tip.setAttribute('role','tooltip'); document.body.appendChild(tip);
+  const move=e=>{ const pad=14, w=tip.offsetWidth, h=tip.offsetHeight;
+    let x=e.clientX+pad, y=e.clientY+pad; if(x+w>innerWidth-8) x=e.clientX-w-pad; if(y+h>innerHeight-8) y=e.clientY-h-pad;
+    tip.style.left=x+'px'; tip.style.top=y+'px'; };
+  document.addEventListener('mouseover',e=>{ const t=e.target.closest&&e.target.closest('#tab-analytics [data-tip]'); if(!t){ tip.classList.remove('show'); return; } tip.textContent=t.getAttribute('data-tip'); tip.classList.add('show'); move(e); });
+  document.addEventListener('mousemove',e=>{ if(tip.classList.contains('show')) move(e); });
+}
+
 function anRenderPeople(){
   const r=AN_REPORTS.find(x=>x.id==='people');
   const staff=_emps.filter(e=>anInScope(e)).sort((a,b)=>anName(a).localeCompare(anName(b)));
@@ -10542,14 +10710,17 @@ function anRenderPeople(){
     ${tile('Missed clocks',isMgr?'—':String(me.noOut+me.mgrAdded+me.noRecord),isMgr?line('managers do not clock'):line(`${ofN(me.noOut+me.mgrAdded+me.noRecord,me.rShifts,me.rate.misses||0)}`)+vs(me.rate.misses,typ('misses'),pctT),isMgr?'':`${me.noOut} with no clock-out · ${me.mgrAdded} typed in by a manager (no clock-in) · ${me.noRecord} rostered with no record at all`)}
     ${tile('Leave taken',`${lv.planned+lv.unplanned}<span class="an-tv-unit"> day${lv.planned+lv.unplanned===1?'':'s'}</span>`,bul(`Planned: ${lv.planned}${lv.plannedTxt?` (${lv.plannedTxt})`:''}`)+bul(`Unplanned: ${lv.unplanned}${lv.unplannedTxt?` (${lv.unplannedTxt})`:''}`),'Planned: annual and long service leave. Unplanned: personal, compassionate and unpaid leave. Public holidays are not counted.')}
   </div>`;
-  if(starts.length>1){
-    const labels=starts.map(anShortPeriod), n=starts.length;
-    const c1=anBars(labels,me.per.map(p=>p.diff),{shade,fmt:v=>(v>0?'+':'')+v.toFixed(1),aria:'Hours over or under roster for '+anName(emp)+' per pay period',colorFor:v=>v>=0?'#8B2535':'#3A6B4F'});
-    const c2=isMgr?anEmpty('Managers do not clock, so there is nothing to show here.')
-      :anStack(labels,[{label:'Clocked in late',color:'#D4899A',values:me.per.map(p=>p.lateIn)},{label:'Missed clocks',color:'#2D2426',values:me.per.map(p=>p.misses)}],{shade,aria:'Late clock-ins and missed clocks for '+anName(emp)+' per pay period'})
-        +anLegend([{label:'Clocked in late',color:'#D4899A'},{label:'Missed clocks',color:'#2D2426'}]);
-    h+=`<div class="an-two">${anChartCard('Net hours vs roster','Worked minus rostered hours, per pay period (Tue–Mon). Late starts and late finishes cancel out. Completed days only.',c1+anShadeNote(shade))}${anChartCard('Late clock-ins and missed clocks','Shifts, per pay period (Tue–Mon).',c2+(isMgr?'':anShadeNote(shade)))}</div>`;
-    if(n>=6) h+=`<div class="an-foot">Bars are counts, so a pay period with fewer shifts will look better than it is — the rates in the table below allow for that.</div>`;
+  /* Patterns, not totals — the tiles already give the totals. A: attendance calendar, day
+     by day, with weekday totals at the end of each row. Net hours stays in the table:
+     it nets late starts against late finishes. */
+  if(isMgr){
+    h+=anChartCard('Clock times','',anEmpty('Managers do not clock, so there are no clock times to chart.'));
+  } else {
+    const grace=GRACE_BY_ROLE[emp.role]??10;
+    const sh=anPersonShifts(_anPeopleId,Ps);
+    const dmap=anPersonDays(_anPeopleId,Ps,grace);
+    const cA=[...dmap.values()].some(o=>o.state)?anAttendanceCalendar(dmap,starts,grace,sh):anEmpty('Nothing rostered or worked in this range yet.');
+    h+=anChartCard('Attendance calendar','One square per rostered day — weeks across, weekdays down. Hover a square for the times.',cA);
   }
   const cnt=(n,base)=>base>0?`${n} of ${base} · ${(n/base*100).toFixed(0)}%`:'—';
   const row=(label,mine,t,note)=>`<tr><td>${label}</td><td class="n"><strong>${mine}</strong></td><td class="n">${t}</td><td class="an-flat">${note||''}</td></tr>`;
