@@ -1782,7 +1782,9 @@
   .an-segb { border:none; background:transparent; border-radius:8px; padding:0.4rem 0.85rem; font-family:'Nunito',sans-serif; font-size:0.76rem; font-weight:700; color:var(--muted); cursor:pointer; }
   .an-segb.on { background:var(--burgundy); color:#fff; }
   .an-notice { background:var(--warning-lt); color:#7a5418; border:1.5px solid #F0DDB8; border-radius:var(--radius-sm); padding:0.6rem 0.9rem; font-size:0.76rem; font-weight:600; }
-  .an-tiles { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:0.85rem; }
+  /* Five across on a desktop; reflows rather than squeezing when a tile would be too narrow
+     for its value ("+13.30 hours" on one line needs ~9.5rem). */
+  .an-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr)); gap:0.85rem; }
   .an-tiles-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .an-tiles-4 { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .an-tile { display:flex; flex-direction:column; gap:0.3rem; padding:0.95rem 1rem 0.85rem; text-align:left; font-family:'Nunito',sans-serif; color:inherit; cursor:pointer; }
@@ -1836,7 +1838,10 @@
   .an-hbar span { display:block; height:100%; border-right:1.5px solid #fff; }
   .an-hbar-total { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
   .an-typ { display:block; margin-top:0.15rem; }
-  .an-tv-unit { font-family:'Nunito',sans-serif; font-size:0.85rem; font-weight:700; color:var(--muted); }
+  .an-bul { padding-left:0.75rem; text-indent:-0.75rem; }
+  .an-bul::before { content:'•'; display:inline-block; width:0.75rem; text-indent:0; }
+  .an-tv-unit { font-family:'Nunito',sans-serif; font-size:0.85rem; font-weight:700; color:var(--muted); white-space:nowrap; }
+  .an-tv { white-space:nowrap; }
   .an-people-ctl { display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; }
   .an-people-head { display:flex; align-items:center; gap:0.9rem; flex-wrap:wrap; }
   .an-shade-note { display:flex; align-items:flex-start; gap:0.45rem; font-size:0.7rem; color:var(--muted); font-weight:600; margin-top:0.5rem; line-height:1.45; }
@@ -10507,13 +10512,15 @@ function anRenderPeople(){
   // Own line under the tile's detail line — the group comparison never shares a line.
   // Short on the tile — the group is in the header card just above, and spelled out in
   // the detail table's column; the hover says it in full.
-  const vs=(v,t,fmt)=>`<span class="an-flat an-typ" title="Typical for ${escHtml(gl)} over the same range (median)">Typical: ${t==null?'—':escHtml(fmt(t))}</span>`;
+  const vs=(v,t,fmt)=>`<span class="an-flat an-typ an-bul" title="Typical for ${escHtml(gl)} over the same range (median)">Typical: ${t==null?'—':escHtml(fmt(t))}</span>`;
   const pct1=v=>v==null?'—':(v>0?'+':'')+v.toFixed(1)+'%';
   // "3 of 18 shifts (17%)" — the count leads; the % is for the group comparison.
   const ofN=(n,base,pctv)=>base>0?`of ${base} shift${base===1?'':'s'} (${pctv.toFixed(0)}%)`:'no clocked shifts';
   const pctT=t=>t==null?'—':t.toFixed(0)+'%';
   const tile=(label,value,sub,title)=>`<div class="an-card an-tile static"${title?` title="${escHtml(title)}"`:''}><span class="an-tl">${label}</span><span class="an-tv">${value}</span><span class="an-td">${sub}</span></div>`;
+  // line: continues the big number ("of 12 shifts"), no bullet. bul: a separate fact, bulleted.
   const line=t=>`<span class="an-flat an-typ">${t}</span>`;
+  const bul=t=>`<span class="an-flat an-typ an-bul">${t}</span>`;
   /* Leave by DAYS and by kind. Planned = annual and long service; unplanned = personal,
      compassionate and unpaid — the kind that says most about how someone is going.
      A public holiday is not a choice anyone made, so it is not counted. No group
@@ -10529,11 +10536,11 @@ function anRenderPeople(){
     return {planned:sum(PLANNED),unplanned:sum(UNPLANNED),plannedTxt:txt(PLANNED),unplannedTxt:txt(UNPLANNED)};
   })();
   h+=`<div class="an-tiles">
-    ${tile('Clocked in late',isMgr?'—':String(me.lateIn),isMgr?line('managers do not clock'):line(`${ofN(me.lateIn,me.rShifts,me.rate.lateIn||0)}`)+(me.lateIn?line(`${anMins(me.lateInMin).replace(/<[^>]+>/g,'')} in total`):'')+(me.lateBoth?line(`<strong>${me.lateBoth} of them stayed late</strong>`):'')+vs(me.rate.lateIn,typ('lateIn'),pctT))}
-    ${tile('Clocked out early',isMgr?'—':String(me.earlyOut),isMgr?line('managers do not clock'):line(`${ofN(me.earlyOut,me.rShifts,me.rate.earlyOut||0)}`)+(me.earlyOut?line(`${anMins(me.earlyOutMin).replace(/<[^>]+>/g,'')} in total`):'')+vs(me.rate.earlyOut,typ('earlyOut'),pctT))}
-    ${tile('Paid extra time',me.extraMin?'+'+anH(me.extraMin/60)+'h':'0h',line(`${me.extraShifts} of ${me.rShifts} shift${me.rShifts===1?'':'s'} (${(me.rate.extra||0).toFixed(0)}%)`)+vs(me.rate.extra,typ('extra'),pctT),'Hours paid outside the rostered start and finish, at the usual pay category — not an overtime rate. Not netted against late starts.')}
+    ${tile('Clocked in late',isMgr?'—':String(me.lateIn),isMgr?line('managers do not clock'):line(`${ofN(me.lateIn,me.rShifts,me.rate.lateIn||0)}`)+(me.lateIn?bul(`${anMins(me.lateInMin).replace(/<[^>]+>/g,'')} in total`):'')+vs(me.rate.lateIn,typ('lateIn'),pctT))}
+    ${tile('Clocked out early',isMgr?'—':String(me.earlyOut),isMgr?line('managers do not clock'):line(`${ofN(me.earlyOut,me.rShifts,me.rate.earlyOut||0)}`)+(me.earlyOut?bul(`${anMins(me.earlyOutMin).replace(/<[^>]+>/g,'')} in total`):'')+vs(me.rate.earlyOut,typ('earlyOut'),pctT))}
+    ${tile('Paid extra time',(me.extraMin?'+'+anH(me.extraMin/60):'0')+'<span class="an-tv-unit"> hours</span>',line(`${me.extraShifts} of ${me.rShifts} shift${me.rShifts===1?'':'s'} (${(me.rate.extra||0).toFixed(0)}%)`)+vs(me.rate.extra,typ('extra'),pctT),'Hours paid outside the rostered start and finish, at the usual pay category — not an overtime rate. Not netted against late starts.')}
     ${tile('Missed clocks',isMgr?'—':String(me.noOut+me.mgrAdded+me.noRecord),isMgr?line('managers do not clock'):line(`${ofN(me.noOut+me.mgrAdded+me.noRecord,me.rShifts,me.rate.misses||0)}`)+vs(me.rate.misses,typ('misses'),pctT),isMgr?'':`${me.noOut} with no clock-out · ${me.mgrAdded} typed in by a manager (no clock-in) · ${me.noRecord} rostered with no record at all`)}
-    ${tile('Leave taken',`${lv.planned+lv.unplanned}<span class="an-tv-unit"> day${lv.planned+lv.unplanned===1?'':'s'}</span>`,line(`Planned: ${lv.planned}${lv.plannedTxt?` (${lv.plannedTxt})`:''}`)+line(`Unplanned: ${lv.unplanned}${lv.unplannedTxt?` (${lv.unplannedTxt})`:''}`),'Planned: annual and long service leave. Unplanned: personal, compassionate and unpaid leave. Public holidays are not counted.')}
+    ${tile('Leave taken',`${lv.planned+lv.unplanned}<span class="an-tv-unit"> day${lv.planned+lv.unplanned===1?'':'s'}</span>`,bul(`Planned: ${lv.planned}${lv.plannedTxt?` (${lv.plannedTxt})`:''}`)+bul(`Unplanned: ${lv.unplanned}${lv.unplannedTxt?` (${lv.unplannedTxt})`:''}`),'Planned: annual and long service leave. Unplanned: personal, compassionate and unpaid leave. Public holidays are not counted.')}
   </div>`;
   if(starts.length>1){
     const labels=starts.map(anShortPeriod), n=starts.length;
