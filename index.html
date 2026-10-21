@@ -1814,6 +1814,9 @@
   .an-tbl td { padding:0.7rem 1rem; border-bottom:1px solid rgba(234,217,220,0.7); color:var(--text); vertical-align:middle; }
   .an-tbl tr:last-child td { border-bottom:none; }
   .an-tbl .n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  /* .an-tbl td sets the text colour, which outranks a plain .an-bad/.an-good on the cell —
+     so differences in tables printed black. */
+  .an-tbl td.an-bad { color:var(--danger); } .an-tbl td.an-good { color:var(--success); } .an-tbl td.an-flat { color:var(--muted); }
   .an-tbl tr.an-total td { font-weight:800; background:var(--warm-white); border-top:1.5px solid var(--border); }
   .an-tbl tr.an-row-bad td { background:#FDF1EF; }
   .an-who { border:none; background:none; padding:0; font-family:'Nunito',sans-serif; font-size:inherit; font-weight:800; color:var(--burgundy); cursor:pointer; border-bottom:1.5px dotted var(--dusty); text-align:left; }
@@ -1839,6 +1842,10 @@
   .an-hbar span { display:block; height:100%; border-right:1.5px solid #fff; }
   .an-hbar-total { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
   .an-typ { display:block; margin-top:0.15rem; }
+  .an-reading { display:grid; grid-template-columns:repeat(auto-fit,minmax(16rem,1fr)); gap:1rem 2rem; align-items:start; }
+  .an-reading-big { font-family:'Lora',serif; font-size:1.9rem; font-weight:600; line-height:1.15; margin:0.15rem 0; }
+  .an-reading-row { display:flex; justify-content:space-between; gap:1rem; font-size:0.84rem; padding:0.28rem 0; border-bottom:1px solid rgba(234,217,220,0.7); max-width:22rem; }
+  .an-reading-row:last-child { border-bottom:none; }
   .an-team-wrap { overflow-x:auto; }
   .an-rowhl { fill:transparent; }
   .an-rowhl.on { fill:rgba(196,86,112,0.09); }
@@ -10121,11 +10128,13 @@ function anRenderPayCat(){
 }
 
 /* ── Roster forecast ── */
-function anForecast(P){
+/* before: only rostered days strictly before this date — the current period's "so far". */
+function anForecast(P, before){
   const byId=anEmpById();
   const leaveTypeFor=new Map(_entries.filter(e=>!e.deleted&&e.leaveType&&e.shiftId).map(e=>[String(e.shiftId),e.leaveType]));
   const proj={}; AN_KINDS.forEach(k=>proj[k.k]=0);
   P.rostered.forEach(r=>{
+    if(before&&r.date>=before) return;
     const s=r.shift, emp=r.emp;
     if(r.onLeave){
       const lt=leaveTypeFor.get(String(s.id))||'annual_leave';
@@ -10144,22 +10153,59 @@ function anForecast(P){
   });
   return proj;
 }
+/* The point of a forecast is the gap between it and what was paid, so that gap leads:
+   a headline reading (total over/under and the biggest category differences), then a
+   Difference column. A finished period compares the whole roster with what was paid; the
+   current one compares only the days already finished ("so far") — a half-paid period
+   against a full roster would read as a fake shortfall — with "Still to come" beside it;
+   a future period has nothing to compare. By person lives in Hours vs rostered (linked). */
 function anRenderForecast(){
   const r=AN_REPORTS.find(x=>x.id==='forecast');
   const P=anPeriod(getPayPeriodStart(_anPPOffset));
-  const proj=anForecast(P), paid=anKindTotals(P,true);
-  let h=anHead(r,'What the roster for this pay period would cost in hours, by category, if every block were worked exactly as rostered — beside what has actually been paid so far.');
-  if(!P.started) h+=`<div class="an-notice">This pay period has not started, so there is nothing paid yet — the forecast is the whole picture.</div>`;
+  const mode=!P.started?'future':(P.complete?'done':'current');
+  const projAll=anForecast(P), projCmp=mode==='current'?anForecast(P,P.today):projAll, paid=anKindTotals(P,true);
+  const sum=o=>AN_KINDS.reduce((a,k)=>a+o[k.k],0);
+  const tAll=sum(projAll), tCmp=sum(projCmp), tPaid=sum(paid);
+  const so=mode==='current'?' so far':'';
+  const link=`<button type="button" class="an-mini-btn" onclick="anShow('hours')" title="The same comparison for each person">See by person &#8250;</button>`;
+  let h=anHead(r,'What the roster would cost in hours, by category, if every block were worked exactly as rostered — against what was actually paid.',link);
+  if(mode==='future') h+=`<div class="an-notice">This pay period has not started, so nothing has been paid yet — the forecast is the whole picture.</div>`;
   else h+=anNotice(P);
-  const pt=AN_KINDS.reduce((a,k)=>a+proj[k.k],0), at=AN_KINDS.reduce((a,k)=>a+paid[k.k],0);
-  const bar=(vals,tot)=>`<div class="an-hbar">${AN_KINDS.map(k=>vals[k.k]>0?`<span style="width:${(vals[k.k]/Math.max(pt,at,1)*100).toFixed(2)}%;background:${k.color}" title="${escHtml(k.label)}: ${anH(vals[k.k])}h"></span>`:'').join('')}</div><div class="an-hbar-total">${anH(tot)}h</div>`;
-  h+=anChartCard(escHtml(anPeriodLabel(P.fnStart)),'Bar length is hours. Hover a block for its figure.',
-    `<div class="an-hbar-row"><div class="an-hbar-label">Rostered (forecast)</div>${bar(proj,pt)}</div><div class="an-hbar-row"><div class="an-hbar-label">Paid so far</div>${bar(paid,at)}</div>`+anLegend(AN_KINDS));
-  h+=anTable([{t:'Category'},{t:'Rostered (forecast)',n:1},{t:'Paid so far',n:1},{t:'Still to come',n:1}],
-    AN_KINDS.filter(k=>proj[k.k]>0||paid[k.k]>0).map(k=>`<tr><td><span class="an-sw" style="background:${k.color}"></span>${escHtml(k.label)}</td><td class="n">${anH(proj[k.k])}</td><td class="n">${anH(paid[k.k])}</td><td class="n">${anH(Math.max(0,proj[k.k]-paid[k.k]))}</td></tr>`)
-    .concat(pt||at?[`<tr class="an-total"><td>Total</td><td class="n">${anH(pt)}</td><td class="n">${anH(at)}</td><td class="n">${anH(Math.max(0,pt-at))}</td></tr>`]:[]),
-    {empty:'No roster for this pay period yet.'});
-  h+=`<div class="an-foot">"Still to come" is the forecast less what has been paid, floored at zero; it is a guide, not a promise — overruns and leave change it. Public holidays already marked are priced at the public holiday category. Blocks marked as leave are counted as leave.</div>`;
+  const sg=v=>{ const x=Math.round(v*100)/100; return (x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(2); };
+  const cls=v=>v>0.004?'an-bad':v<-0.004?'an-good':'an-flat';
+  if(mode!=='future'){
+    const d=tPaid-tCmp, pct=tCmp>0?d/tCmp*100:null;
+    const diffs=AN_KINDS.map(k=>({k,d:paid[k.k]-projCmp[k.k]})).filter(x=>Math.abs(x.d)>=0.05).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)).slice(0,3);
+    h+=`<div class="an-card an-pad an-reading">
+      <div><div class="an-tl">Paid vs rostered${so}</div>
+        <div class="an-reading-big ${cls(d)}">${sg(d)}<span class="an-tv-unit"> hours ${Math.abs(d)<0.005?'— on forecast':d>0?'over':'under'}${pct==null?'':` (${pct>0?'+':pct<0?'−':''}${Math.abs(pct).toFixed(1)}%)`}</span></div>
+        <div class="an-sub">Paid ${anH(tPaid)}h against ${anH(tCmp)}h rostered${so}.</div></div>
+      <div><div class="an-tl">Biggest differences</div>${diffs.length?diffs.map(x=>`<div class="an-reading-row"><span><span class="an-sw" style="background:${x.k.color}"></span>${escHtml(x.k.label)}</span><strong class="${cls(x.d)}">${sg(x.d)}h</strong></div>`).join(''):'<div class="an-sub">Every category within 0.05h of the forecast.</div>'}</div>
+    </div>`;
+  }
+  const max=Math.max(tCmp,tPaid,mode==='future'?tAll:0,1);
+  const bar=(vals,tot)=>`<div class="an-hbar">${AN_KINDS.map(k=>vals[k.k]>0?`<span style="width:${(vals[k.k]/max*100).toFixed(2)}%;background:${k.color}" title="${escHtml(k.label)}: ${anH(vals[k.k])}h"></span>`:'').join('')}</div><div class="an-hbar-total">${anH(tot)}h</div>`;
+  const bars=mode==='future'
+    ?`<div class="an-hbar-row"><div class="an-hbar-label">Rostered (forecast)</div>${bar(projAll,tAll)}</div>`
+    :`<div class="an-hbar-row"><div class="an-hbar-label">Rostered${so}</div>${bar(projCmp,tCmp)}</div><div class="an-hbar-row"><div class="an-hbar-label">Paid${so}</div>${bar(paid,tPaid)}</div>`;
+  h+=anChartCard(escHtml(anPeriodLabel(P.fnStart)),'Bar length is hours. Hover a block for its figure.',bars+anLegend(AN_KINDS));
+  const shown=AN_KINDS.filter(k=>projAll[k.k]>0||paid[k.k]>0);
+  let head, row, total;
+  if(mode==='future'){
+    head=[{t:'Category'},{t:'Rostered (forecast)',n:1}];
+    row=k=>`<td class="n">${anH(projAll[k.k])}</td>`; total=`<td class="n">${anH(tAll)}</td>`;
+  } else if(mode==='done'){
+    head=[{t:'Category'},{t:'Rostered (forecast)',n:1},{t:'Paid',n:1},{t:'Difference',n:1}];
+    row=k=>{ const d=paid[k.k]-projAll[k.k]; return `<td class="n">${anH(projAll[k.k])}</td><td class="n">${anH(paid[k.k])}</td><td class="n ${cls(d)}"><strong>${sg(d)}</strong></td>`; };
+    total=`<td class="n">${anH(tAll)}</td><td class="n">${anH(tPaid)}</td><td class="n ${cls(tPaid-tAll)}"><strong>${sg(tPaid-tAll)}</strong></td>`;
+  } else {
+    head=[{t:'Category'},{t:'Rostered so far',n:1},{t:'Paid so far',n:1},{t:'Difference so far',n:1},{t:'Still to come',n:1},{t:'Whole period',n:1}];
+    row=k=>{ const d=paid[k.k]-projCmp[k.k]; return `<td class="n">${anH(projCmp[k.k])}</td><td class="n">${anH(paid[k.k])}</td><td class="n ${cls(d)}"><strong>${sg(d)}</strong></td><td class="n">${anH(projAll[k.k]-projCmp[k.k])}</td><td class="n an-flat">${anH(projAll[k.k])}</td>`; };
+    total=`<td class="n">${anH(tCmp)}</td><td class="n">${anH(tPaid)}</td><td class="n ${cls(tPaid-tCmp)}"><strong>${sg(tPaid-tCmp)}</strong></td><td class="n">${anH(tAll-tCmp)}</td><td class="n">${anH(tAll)}</td>`;
+  }
+  h+=anTable(head,shown.map(k=>`<tr><td><span class="an-sw" style="background:${k.color}"></span>${escHtml(k.label)}</td>${row(k)}</tr>`)
+    .concat(shown.length?[`<tr class="an-total"><td>Total</td>${total}</tr>`]:[]),{empty:'No roster for this pay period yet.'});
+  h+=`<div class="an-foot">Difference is paid minus rostered: red means more was paid than rostered, green less.${mode==='current'?' "So far" counts only days already finished; "Still to come" is the roster for the days left.':''} The forecast prices each block as if it were worked exactly as rostered. Public holidays already marked are priced at the public holiday category; blocks marked as leave count as leave. For the same comparison by person, see Hours vs rostered.</div>`;
   return h;
 }
 
