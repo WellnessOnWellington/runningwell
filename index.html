@@ -1842,6 +1842,8 @@
   .an-hbar span { display:block; height:100%; border-right:1.5px solid #fff; }
   .an-hbar-total { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
   .an-typ { display:block; margin-top:0.15rem; }
+  .an-details summary { cursor:pointer; font-size:0.8rem; font-weight:800; color:var(--burgundy); padding:0.3rem 0.2rem; }
+  .an-details[open] summary { margin-bottom:0.6rem; }
   .an-reading { display:grid; grid-template-columns:repeat(auto-fit,minmax(16rem,1fr)); gap:1rem 2rem; align-items:start; }
   .an-reading-big { font-family:'Lora',serif; font-size:1.9rem; font-weight:600; line-height:1.15; margin:0.15rem 0; }
   .an-reading-row { display:flex; justify-content:space-between; gap:1rem; font-size:0.84rem; padding:0.28rem 0; border-bottom:1px solid rgba(234,217,220,0.7); max-width:22rem; }
@@ -10102,7 +10104,8 @@ function anLine(labels, values, opts={}){
   let seg=[]; const segs=[];
   values.forEach((v,i)=>{ if(use[i]) seg.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`); else { if(seg.length) segs.push(seg); seg=[]; } }); if(seg.length) segs.push(seg);
   segs.forEach(p=>{ if(p.length>1) s+=`<polyline points="${p.join(' ')}" fill="none" stroke="#8B2535" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`; });
-  values.forEach((v,i)=>{ if(!use[i]) return; const c=v>0.004?'#C0392B':v<-0.004?'#3A6B4F':'#8A7A7D', yy=y(v);
+  // opts.color: one colour for every point (a share, not a gain or loss).
+  values.forEach((v,i)=>{ if(!use[i]) return; const c=opts.color||(v>0.004?'#C0392B':v<-0.004?'#3A6B4F':'#8A7A7D'), yy=y(v);
     s+=`<circle cx="${x(i).toFixed(1)}" cy="${yy.toFixed(1)}" r="4.5" fill="#fff" stroke="${c}" stroke-width="2.5"><title>${escHtml(labels[i])}: ${escHtml(fmt(v))}</title></circle>`;
     // Below the point when negative — unless that would run into the date labels.
     const below=v<0&&yy+18<=H-24;  // date labels sit at H-10
@@ -10189,31 +10192,66 @@ function anRenderRvp(){
   return h+foot;
 }
 
-/* ── Hours by pay category ── */
+/* ── Hours by pay category ──
+   The wage mix of what was actually paid — how much went at penalty rates. (Plan against
+   actual is Rostered vs paid.) Reworked 21 Oct 2026: a headline reading, the penalty-rate
+   share as a 13-period line beside the stacked hours, cost-weighted hours, the exact MYOB
+   categories collapsed, a slimmer by-person table. Unpaid leave is not paid hours: it is
+   left out of every total and noted separately, as in Rostered vs paid.
+
+   Cost-weighted hours weight each paid hour by its loading against the person's OWN base
+   rate (Joel, 21 Oct 2026): evening 1.15 for receptionists and other non-nurses, 1.125 for
+   the nursing pool; Saturday 1.5, Sunday 2, public holiday worked 2.5 (from the MYOB
+   category names); ordinary and paid leave 1. It shows what the hours cost in base-rate
+   hours without any dollar figures. Not included: casual loading, annual leave loading. */
+const AN_WEIGHT={ordinary:1,saturday:1.5,sunday:2,ph:2.5,leave:1};
+function anWeightOf(kind, emp){ return kind==='evening'?(inNursingPool(emp)?1.125:1.15):(AN_WEIGHT[kind]??1); }
+function anMix(P){
+  const k={}; AN_KINDS.forEach(x=>k[x.k]=0);
+  let weighted=0, unpaid=0; const by=new Map();
+  P.rows.forEach(r=>{ if(r.entry.date>=P.today) return;
+    const id=String(r.emp.id); if(!by.has(id)) by.set(id,{emp:r.emp,group:r.group,ordinary:0,penalty:0,leave:0,weighted:0});
+    const o=by.get(id);
+    r.myob.forEach(x=>{ if(x.kind==='unpaid'){ unpaid+=x.hours; return; }
+      k[x.kind]+=x.hours; const w=x.hours*anWeightOf(x.kind,r.emp); weighted+=w; o.weighted+=w;
+      if(x.kind==='leave') o.leave+=x.hours; else if(AN_PENALTY_KINDS.includes(x.kind)) o.penalty+=x.hours; else o.ordinary+=x.hours; }); });
+  delete k.unpaid;
+  const total=Object.values(k).reduce((a,v)=>a+v,0), worked=AN_WORK_KINDS.reduce((a,x)=>a+k[x],0);
+  const pen=AN_PENALTY_KINDS.reduce((a,x)=>a+k[x],0);
+  return {k,total,worked,pen,penShare:worked>0?pen/worked*100:null,weighted,unpaid,people:[...by.values()]};
+}
 function anRenderPayCat(){
   const r=AN_REPORTS.find(x=>x.id==='paycat');
-  const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), P=Ps[5];
-  const kt=Ps.map(p=>anKindTotals(p));
-  let h=anHead(r,'Every paid hour, grouped by the payroll category it is exported under. Leave is included here.');
+  const starts=anRecentStarts(13), Ps=starts.map(s=>anPeriod(s)), M=Ps.map(anMix), P=Ps[12], m=M[12], pm=M[11];
+  const kinds=AN_KINDS.filter(x=>x.k!=='unpaid');
+  let h=anHead(r,'The mix of what was actually paid — how much went at penalty rates, and what that costs in base-rate hours. Unpaid leave is not counted.');
   h+=anNotice(P);
-  h+=anChartCard('Paid hours by category','Per pay period (Tue–Mon). Hover a block for its figure.',
-    anStack(starts.map(anShortPeriod),AN_KINDS.map(k=>({label:k.label,color:k.color,values:kt.map(t=>t[k.k])})),{shade:anShadeFor(starts),fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last six pay periods'})+anLegend(AN_KINDS)+anShadeNote(anShadeFor(starts)));
-  const t=kt[5], total=AN_KINDS.reduce((a,k)=>a+t[k.k],0), worked=AN_WORK_KINDS.reduce((a,k)=>a+t[k],0);
-  const kindRows=AN_KINDS.filter(k=>t[k.k]>0).map(k=>`<tr><td><span class="an-sw" style="background:${k.color}"></span>${escHtml(k.label)}</td><td class="n">${anH(t[k.k])}</td><td class="n">${anPct(total?t[k.k]/total*100:null,1)}</td><td class="n">${AN_WORK_KINDS.includes(k.k)?anPct(worked?t[k.k]/worked*100:null,1):'<span class="an-flat">—</span>'}</td></tr>`);
-  if(kindRows.length) kindRows.push(`<tr class="an-total"><td>Total</td><td class="n">${anH(total)}</td><td class="n">100%</td><td></td></tr>`);
-  h+=`<div class="an-two">`;
-  h+=`<div><div class="an-h2 an-tabletitle">By category · ${escHtml(anPeriodLabel(P.fnStart))}</div>`+anTable([{t:'Category'},{t:'Hours',n:1},{t:'Share of all',n:1},{t:'Share of worked',n:1}],kindRows)+`</div>`;
-  const cats={};
-  P.rows.forEach(r=>r.myob.forEach(x=>{ cats[x.cat]=(cats[x.cat]||0)+x.hours; }));
-  const catRows=Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${escHtml(c)}</td><td class="n">${anH(v)}</td></tr>`);
-  h+=`<div><div class="an-h2 an-tabletitle">Exact MYOB payroll categories</div>`+anTable([{t:'MYOB category'},{t:'Hours',n:1}],catRows)+`</div>`;
-  h+=`</div>`;
-  const byEmp=new Map();
-  P.rows.forEach(r=>{ const k=String(r.emp.id); if(!byEmp.has(k)){ const o={emp:r.emp,group:r.group}; AN_KINDS.forEach(x=>o[x.k]=0); byEmp.set(k,o); } const o=byEmp.get(k); r.myob.forEach(x=>o[x.kind]+=x.hours); });
-  const shown=AN_KINDS.filter(k=>t[k.k]>0);
-  const er=[...byEmp.values()].sort((a,b)=>anName(a.emp).localeCompare(anName(b.emp))).map(o=>`<tr><td>${anWho(o.emp)}</td>${shown.map(k=>`<td class="n">${o[k.k]>0?anH(o[k.k]):'<span class="an-flat">–</span>'}</td>`).join('')}<td class="n"><strong>${anH(shown.reduce((a,k)=>a+o[k.k],0))}</strong></td></tr>`);
-  h+=`<div class="an-h2 an-tabletitle">By person</div>`+anTable([{t:'Staff member'},...shown.map(k=>({t:escHtml(k.label),n:1})),{t:'Total',n:1}],er);
-  h+=`<div class="an-foot">Computed with the MYOB export's own functions over the same de-duplicated entries${P.collapsed?` (${P.collapsed} duplicate entr${P.collapsed===1?'y':'ies'} collapsed, as the export does)`:''}. The export itself only sends finalised rows; for an open period these figures include rows still waiting to be locked. Travel allowance is in the Travel km report.</div>`;
+  const dPts=(a,b)=>a==null||b==null?'':(Math.abs(a-b)<0.05?'<span class="an-flat">same as previous period</span>':`<span class="an-flat">${a>b?'▲':'▼'} ${Math.abs(a-b).toFixed(1)} pts vs previous period</span>`);
+  const top=kinds.filter(x=>m.k[x.k]>0).sort((a,b)=>m.k[b.k]-m.k[a.k]).slice(0,3);
+  h+=`<div class="an-card an-pad an-reading">
+    <div><div class="an-tl">Hours paid</div><div class="an-reading-big">${anH(m.total)}<span class="an-tv-unit"> hours</span></div>
+      <div class="an-sub">${dPts(null,null)}${m.unpaid>0.004?`Plus ${anH(m.unpaid)}h unpaid leave, not counted.`:'Worked hours and paid leave.'}</div></div>
+    <div><div class="an-tl">At penalty rates</div><div class="an-reading-big">${anPct(m.penShare)}<span class="an-tv-unit"> of worked hours</span></div>
+      <div class="an-sub">${anH(m.pen)}h evening, weekend or public holiday · ${dPts(m.penShare,pm.penShare)}</div></div>
+    <div><div class="an-tl">Cost-weighted hours</div><div class="an-reading-big">${anH(m.weighted)}<span class="an-tv-unit"> base-rate hours</span></div>
+      <div class="an-sub">${m.total>0?`${((m.weighted/m.total-1)*100).toFixed(1)}% more than the raw hours — the cost of the loadings`:''}</div></div>
+    <div><div class="an-tl">Largest categories</div>${top.map(x=>`<div class="an-reading-row"><span><span class="an-sw" style="background:${x.color}"></span>${escHtml(x.label)}</span><strong>${anPct(m.total?m.k[x.k]/m.total*100:null)}</strong></div>`).join('')}</div>
+  </div>`;
+  const shade=anShadeFor(starts);
+  const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
+  // Full width, one above the other: 13 periods side by side made both too small to read.
+  h+=`${anChartCard('Penalty-rate share','Evening, weekend and public holiday hours as a share of worked hours — about 6 months (13 pay periods).',anLine(starts.map(lab),M.map(x=>x.penShare||0),{shade,color:'#8B2535',fmt:v=>v.toFixed(0)+'%',aria:'Penalty-rate share of worked hours, last thirteen pay periods'})+anShadeNote(shade))}
+    ${anChartCard('Paid hours by category','Per pay period (Tue–Mon). Hover a block for its figure.',anStack(starts.map(lab),kinds.map(x=>({label:x.label,color:x.color,values:M.map(mm=>mm.k[x.k])})),{shade,fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last thirteen pay periods'})+anLegend(kinds))}`;
+  const rows=kinds.filter(x=>m.k[x.k]>0||pm.k[x.k]>0).map(x=>{ const d=m.k[x.k]-pm.k[x.k], w=x.k==='evening'?'1.125–1.15':(AN_WEIGHT[x.k]??1).toFixed(x.k==='ph'?1:(AN_WEIGHT[x.k]%1?1:0));
+    return `<tr><td><span class="an-sw" style="background:${x.color}"></span>${escHtml(x.label)}</td><td class="n">${anH(m.k[x.k])}</td><td class="n">${anPct(m.total?m.k[x.k]/m.total*100:null,1)}</td><td class="n an-flat">${Math.abs(d)<0.005?'–':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(2)}</td><td class="n an-flat">×${w}</td></tr>`; });
+  if(rows.length) rows.push(`<tr class="an-total"><td>Total</td><td class="n">${anH(m.total)}</td><td class="n">100%</td><td class="n an-flat">${(()=>{const d=m.total-pm.total; return Math.abs(d)<0.005?'–':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(2);})()}</td><td class="n">${anH(m.weighted)} <span class="an-flat">weighted</span></td></tr>`);
+  h+=`<div class="an-h2 an-tabletitle">By category · ${escHtml(anPeriodLabel(P.fnStart))}</div>`+anTable([{t:'Category'},{t:'Hours',n:1},{t:'Share',n:1},{t:'vs previous',n:1},{t:'Weight',n:1}],rows);
+  const ppl=m.people.filter(o=>o.ordinary+o.penalty+o.leave>0).sort((a,b)=>anName(a.emp).localeCompare(anName(b.emp)));
+  h+=`<div class="an-h2 an-tabletitle">By person</div>`+anTable([{t:'Staff member'},{t:'Group'},{t:'Ordinary',n:1},{t:'Penalty-rate',n:1},{t:'Paid leave',n:1},{t:'Total',n:1},{t:'Penalty %',n:1},{t:'Cost-weighted',n:1}],
+    ppl.map(o=>{ const t=o.ordinary+o.penalty+o.leave, wk=o.ordinary+o.penalty; return `<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(o.group)}</td><td class="n">${anH(o.ordinary)}</td><td class="n">${anH(o.penalty)}</td><td class="n">${anH(o.leave)}</td><td class="n"><strong>${anH(t)}</strong></td><td class="n">${anPct(wk>0?o.penalty/wk*100:null)}</td><td class="n">${anH(o.weighted)}</td></tr>`; }));
+  const cats={}; P.rows.forEach(rw=>{ if(rw.entry.date>=P.today) return; rw.myob.forEach(x=>{ if(x.kind==='unpaid') return; cats[x.cat]=(cats[x.cat]||0)+x.hours; }); });
+  h+=`<details class="an-details"><summary>Show the exact MYOB payroll categories</summary>`+anTable([{t:'MYOB category'},{t:'Hours',n:1}],Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${escHtml(c)}</td><td class="n">${anH(v)}</td></tr>`))+`</details>`;
+  h+=`<div class="an-foot">Computed with the MYOB export's own functions over the same de-duplicated entries${P.collapsed?` (${P.collapsed} duplicate entr${P.collapsed===1?'y':'ies'} collapsed, as the export does)`:''}. Cost-weighted hours weight each hour against the person's own base rate: evening ×1.15 (receptionists and others) or ×1.125 (nurses), Saturday ×1.5, Sunday ×2, public holiday worked ×2.5, ordinary and paid leave ×1. Casual loading and annual leave loading are not included. The export itself only sends finalised rows; for an open period these figures include rows still waiting to be locked.</div>`;
   return h;
 }
 
