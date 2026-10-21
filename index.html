@@ -9809,6 +9809,7 @@ function anPenaltyShare(P){
 
 /* Kiosk misses for one period. Each kind answers a different question:
      noOut      the kiosk took a clock-in and never a clock-out (fixed later or not)
+     forgotIn   a single tap at the end of the shift — forgot to clock in (anForgotIn)
      mgrAdded   worked time a manager typed in because there was no kiosk record at all
      noRecord   a rostered block with no entry of any kind — tsUnfinalisedForPeriod's
                 own `missing`, so this agrees with the MYOB export warning
@@ -9819,7 +9820,11 @@ function anKiosk(P){
   const byId=anEmpById();
   const past=P.inPeriod.filter(e=>e.date<P.today);
   const kioskRows=past.filter(e=>String(e.id).startsWith('T'));
-  const noOut=kioskRows.filter(e=>e.clockIn&&!e.clockOut);
+  // A single end-of-shift tap is a forgotten clock-in; it also has no clock-out, so it is
+  // counted once, as forgotIn, and kept out of noOut.
+  const forgotIn=kioskRows.filter(e=>anForgotIn(e,tsShiftForEntry(e,_rosterShifts)));
+  const fset=new Set(forgotIn.map(e=>String(e.id)));
+  const noOut=kioskRows.filter(e=>e.clockIn&&!e.clockOut&&!fset.has(String(e.id)));
   /* Before 11 Aug 2026 paper timesheets ran alongside the kiosk, so a shift typed in by
      a manager — or a rostered block with no entry — was the normal process, not a missed
      clock. Only from AN_SOLE_RECORD_FROM do those count. A kiosk clock-in with no
@@ -9841,8 +9846,8 @@ function anKiosk(P){
     groups.get(k).push(e);
   });
   const dupes=[...groups.values()].filter(g=>g.length>1);
-  return {taps:kioskRows.length, noOut, mgrAdded, noRecord, dupes,
-          total:noOut.length+mgrAdded.length+noRecord.length};
+  return {taps:kioskRows.length, noOut, forgotIn, mgrAdded, noRecord, dupes,
+          total:noOut.length+forgotIn.length+mgrAdded.length+noRecord.length};
 }
 
 /* Timesheet workload. "Untouched" asks whether the row WOULD auto-approve, with the
@@ -10064,7 +10069,7 @@ function anTeamCalendar(P){
     if(!any){ hidden++; return; }
     const sh=anPersonShifts(id,[P]);
     const late=sh.filter(s=>s.inDev>=grace&&!anIsMoved(s.inDev,s.outDev,grace)).length, early=sh.filter(s=>s.outDev!=null&&-s.outDev>=grace).length;
-    const missed=k.noOut.filter(e=>String(e.employeeId)===id).length+k.mgrAdded.filter(e=>String(e.employeeId)===id).length+k.noRecord.filter(m=>String(m.employeeId)===id).length;
+    const missed=k.forgotIn.filter(e=>String(e.employeeId)===id).length+k.noOut.filter(e=>String(e.employeeId)===id).length+k.mgrAdded.filter(e=>String(e.employeeId)===id).length+k.noRecord.filter(m=>String(m.employeeId)===id).length;
     rows.push({emp,group:staffGroupFor(emp),dm,late,early,missed});
   });
   if(!rows.length) return anEmpty('Nobody had anything rostered, worked or on leave in this pay period.');
@@ -10408,6 +10413,17 @@ function anRenderTravel(){
 
    Shifts typed in by a manager have no clock to judge and are left out; a missing
    clock-out leaves only the clock-in judged. Both are counted under Kiosk misses. */
+/* FORGOT TO CLOCK IN: the only clock-in lands within 30 min of the rostered finish or
+   after it, with no clock-out (or one within 15 min of it) — a single tap at the END of
+   the shift, which the kiosk records as the clock-in. Not lateness (it read as "8 hours
+   late"): a missed clock (Joel, 21 Oct 2026). Shifts of an hour or less are left alone —
+   there a clock-in near the finish is also near the start. One rule, used everywhere. */
+function anForgotIn(e, shift){
+  if(!e||!e.clockIn||!shift||!shift.start_time||!shift.end_time) return false;
+  const rs=timeToMin(shift.start_time), re=timeToMin(shift.end_time), ci=timeToMin(e.clockIn);
+  if(re-rs<=60||ci<re-30) return false;
+  return !e.clockOut||timeToMin(e.clockOut)-ci<15;
+}
 // inDev / outDev: minutes after the rostered start / finish (outDev null with no clock-out).
 function anIsMoved(inDev,outDev,g){ return inDev>=g&&outDev!=null&&outDev>=g; }
 function anOutside(P){
@@ -10418,6 +10434,7 @@ function anOutside(P){
     if(r.isLeave||!e.clockIn||e.date>=P.today||r.emp.role==='Manager') return;
     const o=get(r.emp);
     if(!r.shift){ o.unrost++; o.unrostH+=r.worked; o.items.push({e,what:'Not rostered',mins:Math.round(r.worked*60)}); return; }
+    if(anForgotIn(e,r.shift)) return; // a missed clock (anKiosk), not a judged clock time
     o.shifts++;
     const g=GRACE_BY_ROLE[r.emp.role]??10;
     const rs=timeToMin(r.shift.start_time), re=timeToMin(r.shift.end_time);
@@ -10643,18 +10660,20 @@ function anRenderKiosk(){
   let h=anHead(r,'Shifts where the kiosk did not produce a complete clock record. Completed days only. Use this to see whether kiosk fixes are working.');
   h+=anNotice(P);
   h+=`<div class="an-tiles an-tiles-4">
-    <div class="an-card an-tile static"><span class="an-tl">Kiosk clock records</span><span class="an-tv">${k.taps}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Forgot to clock in</span><span class="an-tv">${k.forgotIn.length}</span><span class="an-td">${anDelta(k.forgotIn.length,ks[4].forgotIn.length,'',false)}</span></div>
     <div class="an-card an-tile static"><span class="an-tl">No clock-out</span><span class="an-tv">${k.noOut.length}</span><span class="an-td">${anDelta(k.noOut.length,ks[4].noOut.length,'',false)}</span></div>
     <div class="an-card an-tile static"><span class="an-tl">Typed in by a manager</span><span class="an-tv">${k.mgrAdded.length}</span><span class="an-td">${anDelta(k.mgrAdded.length,ks[4].mgrAdded.length,'',false)}</span></div>
     <div class="an-card an-tile static"><span class="an-tl">Rostered, no record at all</span><span class="an-tv">${k.noRecord.length}</span><span class="an-td">${anDelta(k.noRecord.length,ks[4].noRecord.length,'',false)}</span></div>
   </div>`;
   h+=anChartCard('Kiosk misses per pay period','Pay periods (Tue–Mon).',anStack(starts.map(anShortPeriod),[
+    {label:'Forgot to clock in',color:'#E2C4CB',values:ks.map(x=>x.forgotIn.length)},
     {label:'No clock-out',color:'#D4899A',values:ks.map(x=>x.noOut.length)},
     {label:'Typed in by a manager',color:'#A63245',values:ks.map(x=>x.mgrAdded.length)},
     {label:'No record at all',color:'#2D2426',values:ks.map(x=>x.noRecord.length)}],{shade:anShadeFor(starts),aria:'Kiosk misses by kind, last six pay periods'})+anShadeNote(anShadeFor(starts))
-    +anLegend([{label:'No clock-out',color:'#D4899A'},{label:'Typed in by a manager',color:'#A63245'},{label:'No record at all',color:'#2D2426'}]));
+    +anLegend([{label:'Forgot to clock in',color:'#E2C4CB'},{label:'No clock-out',color:'#D4899A'},{label:'Typed in by a manager',color:'#A63245'},{label:'No record at all',color:'#2D2426'}]));
   const byId=anEmpById();
   const items=[];
+  k.forgotIn.forEach(e=>items.push({date:e.date,emp:byId.get(String(e.employeeId)),what:'Forgot to clock in',detail:`One tap at ${escHtml(e.clockIn)}, at the end of the shift — taken as the clock-in`}));
   k.noOut.forEach(e=>items.push({date:e.date,emp:byId.get(String(e.employeeId)),what:'No clock-out',detail:`In at ${escHtml(e.clockIn)}${e.finalEnd?' · finish set to '+escHtml(e.finalEnd):' · <strong>no finish time yet</strong>'}`}));
   k.mgrAdded.forEach(e=>items.push({date:e.date,emp:byId.get(String(e.employeeId)),what:'Typed in by a manager',detail:`${escHtml(e.finalStart||e.clockIn||'')}–${escHtml(e.finalEnd||e.clockOut||'')}${e.adjustedBy?' · by '+escHtml(e.adjustedBy):''}`}));
   k.noRecord.forEach(m=>items.push({date:m.date,emp:byId.get(String(m.employeeId)),what:'No record at all',detail:`Rostered ${escHtml(m.start)}–${escHtml(m.end)} (${m.hours.toFixed(2)}h) — <strong>not paid</strong>`}));
@@ -10734,7 +10753,7 @@ function anPersonHtml(empId){
   const diff=me.worked-me.rostered, pdiff=prev.worked-prev.rostered;
   const out=anOutside(P).find(o=>String(o.emp.id)===empId);
   const k=anKiosk(P);
-  const kn=k.noOut.filter(e=>String(e.employeeId)===empId).length+k.mgrAdded.filter(e=>String(e.employeeId)===empId).length+k.noRecord.filter(m=>String(m.employeeId)===empId).length;
+  const kn=k.forgotIn.filter(e=>String(e.employeeId)===empId).length+k.noOut.filter(e=>String(e.employeeId)===empId).length+k.mgrAdded.filter(e=>String(e.employeeId)===empId).length+k.noRecord.filter(m=>String(m.employeeId)===empId).length;
   const daySet=new Set(P.days);
   const reqs=(_requests||[]).filter(q=>String(q.initiatorId)===empId&&q.createdAt&&daySet.has(rbDateKey(new Date(q.createdAt))));
   const today=anToday(), horizon=anAddDays(today,90);
@@ -10842,7 +10861,7 @@ function anPeopleStats(starts){
   const by=new Map();
   const get=emp=>{ const k=String(emp.id); if(!by.has(k)){ const o={emp,group:staffGroupFor(emp),rostered:0,worked:0,leaveH:0,
       shifts:0,lateIn:0,lateInMin:0,earlyOut:0,earlyOutMin:0,lateOut:0,lateOutMin:0,earlyIn:0,moved:0,unrost:0,
-      noOut:0,mgrAdded:0,noRecord:0,clocked:0,changed:0,extraMin:0,extraShifts:0,extraBase:0,rShifts:0,kinds:{},per:starts.map(()=>({diff:0,lateIn:0,shifts:0,misses:0}))};
+      noOut:0,forgotIn:0,mgrAdded:0,noRecord:0,clocked:0,changed:0,extraMin:0,extraShifts:0,extraBase:0,rShifts:0,kinds:{},per:starts.map(()=>({diff:0,lateIn:0,shifts:0,misses:0}))};
       AN_KINDS.forEach(x=>o.kinds[x.k]=0); by.set(k,o);} return by.get(k); };
   _emps.forEach(e=>{ if(anInScope(e,'')) get(e); });
   Ps.forEach((P,i)=>{
@@ -10854,7 +10873,7 @@ function anPeopleStats(starts){
     anOutside(P).forEach(x=>{ const o=get(x.emp); ['shifts','lateIn','lateInMin','earlyOut','earlyOutMin','lateOut','lateOutMin','earlyIn','moved','unrost'].forEach(f=>o[f]+=x[f]); o.per[i].lateIn+=x.lateIn; o.per[i].shifts+=x.shifts; });
     const k=anKiosk(P);
     const hit=(id,f)=>{ const o=by.get(String(id)); if(o){ o[f]++; o.per[i].misses++; } };
-    k.noOut.forEach(e=>hit(e.employeeId,'noOut')); k.mgrAdded.forEach(e=>hit(e.employeeId,'mgrAdded')); k.noRecord.forEach(m=>hit(m.employeeId,'noRecord'));
+    k.noOut.forEach(e=>hit(e.employeeId,'noOut')); k.forgotIn.forEach(e=>hit(e.employeeId,'forgotIn')); k.mgrAdded.forEach(e=>hit(e.employeeId,'mgrAdded')); k.noRecord.forEach(m=>hit(m.employeeId,'noRecord'));
     P.rows.forEach(r=>{
       if(r.entry.date>=P.today) return;
       const o=by.get(String(r.emp.id)); if(!o) return;
@@ -10880,7 +10899,7 @@ function anPeopleStats(starts){
     o.rate={
       overPct: o.rostered>0?(o.worked-o.rostered)/o.rostered*100:null,
       lateIn: pct(o.lateIn), earlyIn: pct(o.earlyIn), earlyOut: pct(o.earlyOut), lateOut: pct(o.lateOut),
-      misses: pct(o.noOut+o.mgrAdded+o.noRecord),
+      misses: pct(o.noOut+o.forgotIn+o.mgrAdded+o.noRecord),
       changed: o.clocked>0?o.changed/o.clocked*100:null,
       extra: pct(o.extraShifts),
       penalty: worked>0?AN_PENALTY_KINDS.reduce((a,k)=>a+o.kinds[k],0)/worked*100:null,
@@ -10917,6 +10936,7 @@ function anPersonShifts(empId, Ps){
   Ps.forEach(P=>P.rows.forEach(r=>{
     const e=r.entry;
     if(String(r.emp.id)!==String(empId)||r.isLeave||!e.clockIn||!r.shift||e.date>=P.today||r.emp.role==='Manager') return;
+    if(anForgotIn(e,r.shift)) return;
     const rs=timeToMin(r.shift.start_time), re=timeToMin(r.shift.end_time);
     out.push({date:e.date, inDev:timeToMin(e.clockIn)-rs, outDev:e.clockOut?timeToMin(e.clockOut)-re:null,
       clockIn:e.clockIn, clockOut:e.clockOut, rStart:String(r.shift.start_time).slice(0,5), rEnd:String(r.shift.end_time).slice(0,5)});
@@ -10960,11 +10980,13 @@ function anPersonDays(empId, Ps, grace, kiosks){
       if(!r.shift){ if(r.worked>0) day(e.date).unrost=true; return; }
       // Worked with no clock before 11 Aug = the paper era, not a missed clock (see anKiosk).
       if(!e.clockIn){ if(r.worked>0&&e.date<AN_SOLE_RECORD_FROM) day(e.date).paper=true; return; }
+      if(anForgotIn(e,r.shift)) return; // listed as a missed clock, not judged as a clock time
       const inDev=timeToMin(e.clockIn)-timeToMin(r.shift.start_time), outDev=e.clockOut?timeToMin(e.clockOut)-timeToMin(r.shift.end_time):null;
       const mv=anIsMoved(inDev,outDev,grace);
       day(e.date).clocks.push({inDev,outDev,clockIn:e.clockIn,clockOut:e.clockOut,moved:mv,late:inDev>=grace&&!mv,early:outDev!=null&&-outDev>=grace}); });
     // kiosks: anKiosk per P, precomputed by a caller drawing many people (team calendar).
     const k=kiosks?kiosks[Ps.indexOf(P)]:anKiosk(P);
+    k.forgotIn.forEach(e=>{ if(String(e.employeeId)===id) day(e.date).missed.push(`forgot to clock in — one tap at ${e.clockIn}, the end of the shift`); });
     k.noOut.forEach(e=>{ if(String(e.employeeId)===id) day(e.date).missed.push('no clock-out'); });
     k.mgrAdded.forEach(e=>{ if(String(e.employeeId)===id) day(e.date).missed.push('typed in by a manager (no clock-in)'); });
     k.noRecord.forEach(m=>{ if(String(m.employeeId)===id) day(m.date).missed.push(`rostered ${m.start}–${m.end}, no record`); });
@@ -11135,7 +11157,7 @@ function anRenderPeople(){
     ${tile('Clocked in late',isMgr?'—':String(me.lateIn),isMgr?line('managers do not clock'):line(`${ofN(me.lateIn,me.rShifts,me.rate.lateIn||0)}`)+(me.lateIn?bul(`${anMins(me.lateInMin).replace(/<[^>]+>/g,'')} in total`):'')+vs(me.rate.lateIn,typ('lateIn'),pctT))}
     ${tile('Clocked out early',isMgr?'—':String(me.earlyOut),isMgr?line('managers do not clock'):line(`${ofN(me.earlyOut,me.rShifts,me.rate.earlyOut||0)}`)+(me.earlyOut?bul(`${anMins(me.earlyOutMin).replace(/<[^>]+>/g,'')} in total`):'')+vs(me.rate.earlyOut,typ('earlyOut'),pctT))}
     ${tile('Paid extra time',(me.extraMin?'+'+anH(me.extraMin/60):'0')+'<span class="an-tv-unit"> hours</span>',line(`${me.extraShifts} of ${me.rShifts} shift${me.rShifts===1?'':'s'} (${(me.rate.extra||0).toFixed(0)}%)`)+vs(me.rate.extra,typ('extra'),pctT),'Hours paid outside the rostered start and finish, at the usual pay category — not an overtime rate. Not netted against late starts.')}
-    ${tile('Missed clocks',isMgr?'—':String(me.noOut+me.mgrAdded+me.noRecord),isMgr?line('managers do not clock'):line(`${ofN(me.noOut+me.mgrAdded+me.noRecord,me.rShifts,me.rate.misses||0)}`)+vs(me.rate.misses,typ('misses'),pctT),isMgr?'':`${me.noOut} with no clock-out · ${me.mgrAdded} typed in by a manager (no clock-in) · ${me.noRecord} rostered with no record at all`)}
+    ${tile('Missed clocks',isMgr?'—':String(me.noOut+me.forgotIn+me.mgrAdded+me.noRecord),isMgr?line('managers do not clock'):line(`${ofN(me.noOut+me.forgotIn+me.mgrAdded+me.noRecord,me.rShifts,me.rate.misses||0)}`)+vs(me.rate.misses,typ('misses'),pctT),isMgr?'':`${me.forgotIn} forgot to clock in (one tap at the end) · ${me.noOut} with no clock-out · ${me.mgrAdded} typed in by a manager (no clock-in) · ${me.noRecord} rostered with no record at all`)}
     ${tile('Leave taken',`${lv.planned+lv.unplanned}<span class="an-tv-unit"> day${lv.planned+lv.unplanned===1?'':'s'}</span>`,bul(`Planned: ${lv.planned}${lv.plannedTxt?` (${lv.plannedTxt})`:''}`)+bul(`Unplanned: ${lv.unplanned}${lv.unplannedTxt?` (${lv.unplannedTxt})`:''}`),'Planned: annual and long service leave. Unplanned: personal, compassionate and unpaid leave. Public holidays are not counted.')}
   </div>`;
   /* Patterns, not totals — the tiles already give the totals. A: attendance calendar, day
@@ -11167,7 +11189,7 @@ function anRenderPeople(){
     row('Clocked out late',cnt(me.lateOut,me.rShifts),fp(typ('lateOut')),me.lateOut?`${anMins(me.lateOutMin).replace(/<[^>]+>/g,'')} in total`:''),
     row('Moved shifts',cnt(me.moved,me.rShifts),'','late in and late out on the same shift — usually the roster was not updated; not counted as late'),
     row('Unrostered shifts',String(me.unrost),'',''),
-    row('Missed clocks',cnt(me.noOut+me.mgrAdded+me.noRecord,me.rShifts),fp(typ('misses')),`${me.noOut} no clock-out, ${me.mgrAdded} typed in, ${me.noRecord} no record`),
+    row('Missed clocks',cnt(me.noOut+me.forgotIn+me.mgrAdded+me.noRecord,me.rShifts),fp(typ('misses')),`${me.forgotIn} forgot to clock in, ${me.noOut} no clock-out, ${me.mgrAdded} typed in, ${me.noRecord} no record`),
     row('Times changed by a manager',fp(me.rate.changed),fp(typ('changed')),`of clocked shifts · ${me.changed} of ${me.clocked}`),
   );
   rows.push(row('Penalty-rate share',fp(me.rate.penalty),fp(typ('penalty')),'of worked hours'));
