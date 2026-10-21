@@ -10067,7 +10067,7 @@ function anTeamCalendar(P){
 let _anRvpBy='person';
 function anSetRvpBy(v){ _anRvpBy=v; anRender(); }
 function anRvpMode(P){ return !P.started?'future':(P.complete?'done':'current'); }
-function anRvp(P){
+function anRvp(P, opts={}){
   const mode=anRvpMode(P), before=mode==='current'?P.today:null;
   const inWin=d=>!before||d<before;
   const unpaidShift=new Set(_entries.filter(e=>!e.deleted&&e.shiftId&&anLeaveOf(e)==='unpaid_leave').map(e=>String(e.shiftId)));
@@ -10077,7 +10077,7 @@ function anRvp(P){
   const cat={}; AN_KINDS.forEach(k=>cat[k.k]=0);
   if(mode!=='future') P.rows.forEach(r=>{ if(!inWin(r.entry.date)) return; const o=get(r.emp);
     r.myob.forEach(x=>{ if(x.kind==='unpaid') return; o.paid+=x.hours; if(x.kind==='leave') o.leave+=x.hours; cat[x.kind]+=x.hours; }); });
-  const proj=anForecast(P,before||undefined), projAll=mode==='current'?anForecast(P):proj;
+  const proj=opts.noCategories?{}:anForecast(P,before||undefined), projAll=opts.noCategories?{}:(mode==='current'?anForecast(P):proj);
   delete cat.unpaid; delete proj.unpaid; delete projAll.unpaid;
   const people=[...by.values()].filter(o=>o.rostered>0||o.paid>0);
   const tR=people.reduce((a,o)=>a+o.rostered,0), tP=people.reduce((a,o)=>a+o.paid,0);
@@ -10085,23 +10085,37 @@ function anRvp(P){
 }
 function anSg(v){ const x=Math.round(v*100)/100; return (x>0?'+':x<0?'−':'')+Math.abs(x).toFixed(2); }
 function anDiffCls(v){ return v>0.004?'an-bad':v<-0.004?'an-good':'an-flat'; }
-/* Paired columns per pay period: rostered (light) and paid (dark), difference above. */
-function anPairBars(labels, a, b, opts={}){
-  const W=600, H=230, L=48, R=10, T=26, B=30, ph=H-T-B, n=labels.length, slot=(W-L-R)/Math.max(1,n), bw=Math.min(26,slot*0.3);
-  const max=Math.max(1,...a,...b), y=v=>T+ph-v/max*ph;
+/* Line chart around a zero line — one point per period, coloured by sign, the figure
+   beside each point (above when positive, below when negative). opts.skip[i] leaves a
+   point out (e.g. a future period with nothing paid), breaking the line there. */
+function anLine(labels, values, opts={}){
+  // Extra room at the bottom so a negative point's label fits under it, clear of the dates.
+  const W=600, H=opts.height||240, L=48, R=14, T=24, B=48, ph=H-T-B;
+  const fmt=opts.fmt||(v=>String(Math.round(v)));
+  const use=values.map((v,i)=>!(opts.skip&&opts.skip[i]));
+  const vs=values.filter((_,i)=>use[i]);
+  const vmax=Math.max(0,...vs), vmin=Math.min(0,...vs), span=(vmax-vmin)||1;
+  const n=labels.length, slot=(W-L-R)/Math.max(1,n), x=i=>L+i*slot+slot/2, y=v=>T+(vmax-v)/span*ph;
   let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
-  if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return; s+=`<rect x="${(L+i*slot+3).toFixed(1)}" y="2" width="${(slot-6).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}/>`; });
-  [0,0.5,1].forEach(f=>{ const yy=T+ph*(1-f); s+=`<line x1="${L}" x2="${W-R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#F0E4E7"/><text x="${L-6}" y="${(yy+4).toFixed(1)}" class="an-ax" text-anchor="end">${Math.round(max*f)}h</text>`; });
-  labels.forEach((lab,i)=>{ const cx=L+i*slot+slot/2;
-    if(a[i]>0) s+=`<rect x="${(cx-bw-1).toFixed(1)}" y="${y(a[i]).toFixed(1)}" width="${bw}" height="${(T+ph-y(a[i])).toFixed(1)}" rx="3" fill="#E2C4CB"><title>Rostered: ${anH(a[i])}h</title></rect>`;
-    if(b[i]>0) s+=`<rect x="${(cx+1).toFixed(1)}" y="${y(b[i]).toFixed(1)}" width="${bw}" height="${(T+ph-y(b[i])).toFixed(1)}" rx="3" fill="#8B2535"><title>Paid: ${anH(b[i])}h</title></rect>`;
-    if(b[i]>0){ const d=b[i]-a[i]; s+=`<text x="${cx.toFixed(1)}" y="${(Math.min(y(a[i]),y(b[i]))-7).toFixed(1)}" class="an-val" text-anchor="middle" style="fill:${d>0.004?'#C0392B':d<-0.004?'#3A6B4F':'#8A7A7D'}">${anSg(d)}h</text>`; }
-    s+=`<text x="${cx.toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
-  return s+'</svg>'+anLegend([{label:'Rostered',color:'#E2C4CB'},{label:'Paid',color:'#8B2535'}]);
+  if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return; s+=`<rect x="${(L+i*slot+2).toFixed(1)}" y="2" width="${(slot-4).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}/>`; });
+  [...new Set([vmax,0,vmin])].forEach(g=>{ s+=`<line x1="${L}" x2="${W-R}" y1="${y(g).toFixed(1)}" y2="${y(g).toFixed(1)}" stroke="${g===0?'#D9C4C8':'#F0E4E7'}" stroke-width="${g===0?1.5:1}"/><text x="${L-6}" y="${(y(g)+4).toFixed(1)}" class="an-ax" text-anchor="end">${escHtml(fmt(g))}</text>`; });
+  let seg=[]; const segs=[];
+  values.forEach((v,i)=>{ if(use[i]) seg.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`); else { if(seg.length) segs.push(seg); seg=[]; } }); if(seg.length) segs.push(seg);
+  segs.forEach(p=>{ if(p.length>1) s+=`<polyline points="${p.join(' ')}" fill="none" stroke="#8B2535" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`; });
+  values.forEach((v,i)=>{ if(!use[i]) return; const c=v>0.004?'#C0392B':v<-0.004?'#3A6B4F':'#8A7A7D', yy=y(v);
+    s+=`<circle cx="${x(i).toFixed(1)}" cy="${yy.toFixed(1)}" r="4.5" fill="#fff" stroke="${c}" stroke-width="2.5"><title>${escHtml(labels[i])}: ${escHtml(fmt(v))}</title></circle>`;
+    // Below the point when negative — unless that would run into the date labels.
+    const below=v<0&&yy+18<=H-24;  // date labels sit at H-10
+    s+=`<text x="${x(i).toFixed(1)}" y="${(below?yy+18:yy-10).toFixed(1)}" class="an-val" text-anchor="middle" style="fill:${c}">${escHtml(fmt(v))}</text>`; });
+  labels.forEach((lab,i)=>{ s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  return s+'</svg>';
 }
 function anRenderRvp(){
   const r=AN_REPORTS.find(x=>x.id==='hours');
-  const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), X=Ps.map(anRvp), cur=X[5], prev=X[4];
+  const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), X=Ps.map((p,i)=>anRvp(p,{noCategories:i<5})), cur=X[5], prev=X[4];
+  // By pay period looks back about six months (13 pay periods), difference only, as a line (Joel, 21 Oct).
+  const tStarts=_anRvpBy==='period'?anRecentStarts(13):null;
+  const TX=tStarts?tStarts.map(s=>anRvp(anPeriod(s),{noCategories:true})):null;
   const so=cur.mode==='current'?' so far':'';
   const views=[['person','By person'],['group','By staff group'],['category','By pay category'],['period','By pay period']];
   const seg=`<div class="an-seg" role="group" aria-label="View">${views.map(([v,l])=>`<button type="button" class="an-segb${_anRvpBy===v?' on':''}" onclick="anSetRvpBy('${v}')">${l}</button>`).join('')}</div>`;
@@ -10113,23 +10127,28 @@ function anRenderRvp(){
     let items;
     if(_anRvpBy==='category') items=AN_KINDS.filter(k=>k.k!=='unpaid').map(k=>({label:k.label,color:k.color,d:(cur.cat[k.k]||0)-(cur.proj[k.k]||0)}));
     else if(_anRvpBy==='group'){ const g={}; cur.people.forEach(o=>{ const k=o.group||'—'; g[k]=(g[k]||0)+o.paid-o.rostered; }); items=Object.entries(g).map(([k,d])=>({label:AN_GROUP_LABELS[k]||k,color:AN_GROUP_COLORS[k],d})); }
-    else if(_anRvpBy==='period') items=X.map((x,i)=>({label:anPeriodLabel(starts[i]),d:x.diff})).filter((_,i)=>X[i].mode!=='future');
+    else if(_anRvpBy==='period') items=TX.map((x,i)=>({label:anPeriodLabel(tStarts[i]),d:x.diff})).filter((_,i)=>TX[i].mode!=='future');
     else items=cur.people.map(o=>({label:anName(o.emp),color:AN_GROUP_COLORS[o.group],d:o.paid-o.rostered}));
     items=items.filter(x=>Math.abs(x.d)>=0.05).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)).slice(0,3);
     h+=`<div class="an-card an-pad an-reading">
       <div><div class="an-tl">Paid vs rostered${so}</div>
         <div class="an-reading-big ${anDiffCls(cur.diff)}">${anSg(cur.diff)}<span class="an-tv-unit"> hours ${Math.abs(cur.diff)<0.005?'— on roster':cur.diff>0?'over':'under'}${cur.pct==null?'':` (${cur.pct>0?'+':cur.pct<0?'−':''}${Math.abs(cur.pct).toFixed(1)}%)`}</span></div>
         <div class="an-sub">Paid ${anH(cur.tP)}h against ${anH(cur.tR)}h rostered${so}.</div></div>
-      <div><div class="an-tl">Biggest differences${_anRvpBy==='period'?' (last 6 pay periods)':''}</div>${items.length?items.map(x=>`<div class="an-reading-row"><span>${x.color?`<span class="an-sw" style="background:${x.color}"></span>`:''}${escHtml(x.label)}</span><strong class="${anDiffCls(x.d)}">${anSg(x.d)}h</strong></div>`).join(''):'<div class="an-sub">Everything within 0.05h of the roster.</div>'}</div>
+      <div><div class="an-tl">Biggest differences${_anRvpBy==='period'?' (last 13 pay periods)':''}</div>${items.length?items.map(x=>`<div class="an-reading-row"><span>${x.color?`<span class="an-sw" style="background:${x.color}"></span>`:''}${escHtml(x.label)}</span><strong class="${anDiffCls(x.d)}">${anSg(x.d)}h</strong></div>`).join(''):'<div class="an-sub">Everything within 0.05h of the roster.</div>'}</div>
     </div>`;
   }
   const foot=`<div class="an-foot">Difference is paid minus rostered: red means more was paid than rostered, green less. Leave is counted on both sides; unpaid leave on neither.${cur.mode==='current'?' "So far" counts only days already finished.':''} Only staff currently active are counted, the same as the MYOB export.</div>`;
   const cell=(d)=>`<td class="n ${anDiffCls(d)}"><strong>${anSg(d)}</strong></td>`;
   if(_anRvpBy==='period'){
-    const shade=anShadeFor(starts);
-    h+=anChartCard('Rostered vs paid, by pay period','Last 6 pay periods (Tue–Mon). Difference above each pair.',anPairBars(starts.map(anShortPeriod),X.map(x=>x.tR),X.map(x=>x.tP),{shade,aria:'Rostered and paid hours, last six pay periods'})+anShadeNote(shade));
+    /* About six months — 13 pay periods — of the DIFFERENCE alone: one bar per period
+       around zero, so the trend reads at a glance. Rostered and paid stay in the table. */
+    const shade=anShadeFor(tStarts);
+    const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
+    const vals=TX.map(x=>x.mode==='future'?0:x.diff);
+    h+=anChartCard('Paid minus rostered, by pay period','About 6 months — 13 pay periods (Tue–Mon). Above the line: paid more than rostered; below: less.',
+      anLine(tStarts.map(lab),vals,{shade,skip:TX.map(x=>x.mode==='future'),fmt:v=>(v>0?'+':v<0?'−':'')+(Math.abs(v)>=10?Math.abs(v).toFixed(0):Math.abs(v).toFixed(1))+'h',aria:'Paid minus rostered hours, last thirteen pay periods'})+anShadeNote(shade));
     h+=anTable([{t:'Pay period'},{t:'Rostered',n:1},{t:'Paid',n:1},{t:'Difference',n:1},{t:'%',n:1},{t:'Finalised'}],
-      X.map((x,i)=>`<tr><td><strong>${escHtml(anPeriodLabel(starts[i]))}</strong>${x.mode==='current'?' <span class="an-flat">(so far)</span>':''}</td><td class="n">${anH(x.tR)}</td><td class="n">${x.mode==='future'?'<span class="an-flat">–</span>':anH(x.tP)}</td>${x.mode==='future'?'<td class="n an-flat">–</td><td class="n an-flat">–</td>':cell(x.diff)+`<td class="n ${anDiffCls(x.diff)}">${x.pct==null?'—':(x.pct>0?'+':x.pct<0?'−':'')+Math.abs(x.pct).toFixed(1)+'%'}</td>`}<td>${x.P.finalised?'Yes':'<span class="an-flat">No</span>'}</td></tr>`).reverse());
+      TX.map((x,i)=>`<tr><td><strong>${escHtml(anPeriodLabel(tStarts[i]))}</strong>${x.mode==='current'?' <span class="an-flat">(so far)</span>':''}</td><td class="n">${anH(x.tR)}</td><td class="n">${x.mode==='future'?'<span class="an-flat">–</span>':anH(x.tP)}</td>${x.mode==='future'?'<td class="n an-flat">–</td><td class="n an-flat">–</td>':cell(x.diff)+`<td class="n ${anDiffCls(x.diff)}">${x.pct==null?'—':(x.pct>0?'+':x.pct<0?'−':'')+Math.abs(x.pct).toFixed(1)+'%'}</td>`}<td>${x.P.finalised?'Yes':'<span class="an-flat">No</span>'}</td></tr>`).reverse());
     return h+foot;
   }
   if(_anRvpBy==='category'){
