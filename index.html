@@ -9984,6 +9984,35 @@ function anStack(labels, series, opts={}){
   anTipInit();
   return s+'</svg>';
 }
+/* Small multiples: one strip of columns per series, stacked vertically on a shared date
+   axis and ONE shared scale, so every series reads on its own baseline and strips compare
+   directly. Counts are printed while they fit (13 columns or fewer); the column hover
+   carries every figure and the total at any range. */
+function anMulti(labels, series, opts={}){
+  const W=600, L=72, R=10, T=8, S=opts.strip||46, G=12, B=anAxisB(labels);
+  const n=labels.length, slot=(W-L-R)/Math.max(1,n), bw=Math.min(40,slot*0.6);
+  const H=T+series.length*(S+G)-G+B, max=Math.max(1,...series.flatMap(se=>se.values)), k=(S-12)/max;
+  const fmt=opts.fmt||(v=>String(Math.round(v))), skip=opts.skip||[];
+  let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
+  if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return;
+    s+=`<rect x="${(L+i*slot+3).toFixed(1)}" y="2" width="${(slot-6).toFixed(1)}" height="${H-B+2}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}></rect>`; });
+  series.forEach((se,si)=>{
+    const top=T+si*(S+G), base=top+S;
+    s+=`<text x="${L-8}" y="${(base-4).toFixed(1)}" class="an-ax an-ax-m" text-anchor="end">${escHtml(se.label)}</text>`;
+    s+=`<line x1="${L}" x2="${W-R}" y1="${base}" y2="${base}" stroke="#D9C4C8"/>`;
+    se.values.forEach((v,i)=>{ if(skip[i]||!(v>0)) return;
+      const x=L+i*slot+(slot-bw)/2, hh=Math.max(2,v*k);
+      s+=`<rect x="${x.toFixed(1)}" y="${(base-hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="3" fill="${se.color}"/>`;
+      if(n<=13) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(base-hh-3).toFixed(1)}" class="an-ax" text-anchor="middle">${escHtml(fmt(v))}</text>`; });
+  });
+  labels.forEach((lab,i)=>{ s+=anAxisAt(labels,i,L+i*slot+slot/2,H,slot); });
+  labels.forEach((lab,i)=>{ if(skip[i]) return;
+    const tot=series.reduce((a,se)=>a+(se.values[i]||0),0);
+    const lines=[(opts.tipLabels?opts.tipLabels[i]:lab)+' · '+fmt(tot)+(opts.unit?' '+opts.unit:'')].concat(series.map(se=>`${se.label}: ${fmt(se.values[i]||0)}`));
+    s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T}" width="${slot.toFixed(1)}" height="${(H-B-T).toFixed(1)}" data-tip="${escHtml(lines.join('\n'))}"/>`; });
+  anTipInit();
+  return s+'</svg>';
+}
 function anLegend(items){ return `<div class="an-legend">${items.map(i=>`<span><span class="an-sw" style="background:${i.color}"></span>${escHtml(i.label)}</span>`).join('')}</div>`; }
 function anChartCard(title, sub, body, link){
   return `<section class="an-card an-pad"><div class="an-chhead"><div><div class="an-h2">${title}</div>${sub?`<div class="an-sub">${sub}</div>`:''}</div>${link||''}</div>${body}</section>`;
@@ -10859,32 +10888,119 @@ function anRenderLeave(){
   return h;
 }
 
-/* ── Requests & swaps ── */
+/* ── Requests & swaps ──
+   Reworked 21 Oct 2026. Status is read through reqDisplayStatus — the stored status is a
+   cache the expiry sweep refreshes only on a manager login, so a lapsed swap can still be
+   stored as waiting for the colleague. Waiting-now looks across all periods: an open
+   request does not stop mattering when its period ends. Time to decision is split by who
+   was being waited on — colleague (raised → their answer) and manager (the colleague's
+   answer, or raising, → the decision); an auto-handover ('none') is not a colleague answer. */
+const AN_REQ_TYPES=['leave','swap','giveaway','pickup'];
+const AN_REQ_LABEL={leave:'Leave',swap:'Swap',giveaway:'Give away',pickup:'Pick up'};
+const AN_REQ_COLORS={leave:'#3A6B4F',swap:'#2471A3',giveaway:'#A07228',pickup:'#C45670'};
+function anReqScoped(){ const byId=anEmpById(); return (_requests||[]).filter(q=>q.createdAt&&anInScope(byId.get(String(q.initiatorId)))); }
+function anReqRaisedIn(reqs,P){ const ds=new Set(P.days); return reqs.filter(q=>ds.has(rbDateKey(new Date(q.createdAt)))); }
+function anReqWhat(q,noWith){
+  if(q.type==='leave') return `${escHtml(formatLeaveType(q.leaveType))}, ${escHtml(anDateShort(q.leaveStartDate))}${q.leaveEndDate&&q.leaveEndDate!==q.leaveStartDate?' – '+escHtml(anDateShort(q.leaveEndDate)):''}`;
+  const d=q.initiatorShiftDate?escHtml(anDateShort(q.initiatorShiftDate)):'', t=q.initiatorShiftStart?` ${escHtml(String(q.initiatorShiftStart).slice(0,5))}–${escHtml(String(q.initiatorShiftEnd||'').slice(0,5))}`:'';
+  if(q.type==='pickup') return `Cover shift, ${d}${t}`;
+  return `${d}${t}${q.colleagueName&&!noWith?' · with '+escHtml(q.colleagueName):''}`;
+}
+function anReqWaits(reqs){
+  const peer=[], mgr=[];
+  reqs.forEach(q=>{
+    const c=new Date(q.createdAt);
+    const answered=q.peerResponseAt&&(q.peerResponse==='accepted'||q.peerResponse==='declined');
+    if(answered) peer.push((new Date(q.peerResponseAt)-c)/3600000);
+    if(q.managerDecidedAt&&q.managerDecision!=='revoked'){ const from=q.peerResponseAt?new Date(q.peerResponseAt):c; mgr.push((new Date(q.managerDecidedAt)-from)/3600000); }
+  });
+  const med=a=>{ a=a.filter(v=>v>=0); if(!a.length) return null; const s=a.slice().sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  return {peer:med(peer), mgr:med(mgr), nPeer:peer.length, nMgr:mgr.length};
+}
+function anFmtWait(hh){ return hh==null?'—':(hh<1?'under 1 h':hh<48?hh.toFixed(0)+' h':(hh/24).toFixed(1)+' days'); }
 function anRenderRequests(){
   const r=AN_REPORTS.find(x=>x.id==='requests');
-  const P=anPeriod(getPayPeriodStart(_anPPOffset));
-  const daySet=new Set(P.days), byId=anEmpById();
-  const reqs=(_requests||[]).filter(q=>q.createdAt&&daySet.has(rbDateKey(new Date(q.createdAt)))&&anInScope(byId.get(String(q.initiatorId))));
-  let h=anHead(r,'Requests raised in this pay period, by when they were raised. Time to decision runs from raising to the last decision on it (colleague or manager).');
-  const types=['leave','swap','giveaway','pickup'], tl={leave:'Leave',swap:'Swap',giveaway:'Give away',pickup:'Pick up'};
-  const med=a=>{ if(!a.length) return null; const s=a.slice().sort((x,y)=>x-y); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
-  const fmtWait=hh=>hh==null?'—':(hh<48?hh.toFixed(0)+' h':(hh/24).toFixed(1)+' days');
-  const rows=types.map(ty=>{
+  const today=anToday(), byId=anEmpById();
+  const P=anPeriod(getPayPeriodStart(_anPPOffset)), Pp=anPeriod(getPayPeriodStart(_anPPOffset-1));
+  const all=anReqScoped(), reqs=anReqRaisedIn(all,P), prev=anReqRaisedIn(all,Pp);
+  const st=q=>reqDisplayStatus(q);
+  const decided=reqs.filter(q=>['approved','declined','expired'].includes(st(q))), appr=decided.filter(q=>st(q)==='approved').length;
+  const W=anReqWaits(reqs);
+  // Waiting now — every open request, whenever it was raised.
+  const open=all.filter(q=>String(st(q)).startsWith('pending')).sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)));
+  const ageD=q=>Math.floor((Date.now()-new Date(q.createdAt))/864e5);
+  const sig=q=>[q.type,q.initiatorId,q.colleagueId||'',q.initiatorShiftDate||q.leaveStartDate||'',q.initiatorShiftStart||'',q.leaveEndDate||''].join('|');
+  const firstOf=new Map(); all.slice().sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt))).forEach(q=>{ if(!firstOf.has(sig(q))) firstOf.set(sig(q),q.id); });
+  const isDup=q=>firstOf.get(sig(q))!==q.id;
+  const days=n=>`${n} day${n===1?'':'s'}`;
+  let h=anHead(r,'Leave, swap, give-away and cover pick-up requests. Tiles and the type table cover requests raised in the selected pay period; Waiting now covers every open request.');
+  h+=anNotice(P);
+  h+=`<div class="an-tiles an-tiles-4">
+    <div class="an-card an-tile static"><span class="an-tl">Raised this period</span><span class="an-tv">${reqs.length}</span><span class="an-td">${anDelta(reqs.length,prev.length,'',null)}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Approved</span><span class="an-tv">${appr}<span class="an-tv-unit"> of ${decided.length} decided</span></span><span class="an-td an-flat">${decided.length?Math.round(appr/decided.length*100)+'% · ':''}expired counts as not approved</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Waiting now</span><span class="an-tv ${open.some(q=>ageD(q)>=7)?'an-bad':''}">${open.length}</span><span class="an-td an-flat">${open.length?`oldest ${days(ageD(open[0]))} · any period`:'nothing waiting'}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Time to decision</span><span class="an-tv" style="font-size:1.2rem">${anFmtWait(W.peer)} <span class="an-tv-unit">colleague</span></span><span class="an-tv" style="font-size:1.2rem">${anFmtWait(W.mgr)} <span class="an-tv-unit">manager</span></span><span class="an-td an-flat">medians, this period</span></div>
+  </div>`;
+  // Trend — raised per period, by type
+  const starts=anTrendStarts(), per=starts.map(s=>anReqRaisedIn(all,anPeriod(s)));
+  const shade=anShadeFor(starts);
+  // Small multiples, not a stack: counts are small and patchy, and the questions are per type.
+  h+=anChartCard('Requests raised per pay period',anTrendDesc(starts)+'. One row per type, all on the same scale. Hover a period for its figures and total.',
+    anMulti(starts.map(anTrendLab),AN_REQ_TYPES.map(t=>({label:AN_REQ_LABEL[t],color:AN_REQ_COLORS[t],values:per.map(p=>p.filter(q=>q.type===t).length)})),{shade,skip:anTrendNoData(starts),unit:'requests',tipLabels:starts.map(anPeriodLabel),aria:'Requests raised per pay period, one row per type'})
+    +anShadeNote(shade),anTrendSeg());
+  // Waiting now
+  h+=`<div class="an-h2 an-tabletitle">Waiting now</div>`+anTable([{t:'Raised'},{t:'Raised by'},{t:'Type'},{t:'What'},{t:'Waiting on'},{t:'Waiting',n:1},{t:''}],
+    open.map(q=>{
+      const emp=byId.get(String(q.initiatorId)), on=st(q)==='pending_peer'?(byId.get(String(q.colleagueId))?anWho(byId.get(String(q.colleagueId))):escHtml(q.colleagueName||'Colleague')):'Manager';
+      const sd=reqShiftDateOf(q), flags=[];
+      if(sd&&sd<=today) flags.push('<span class="an-pill bad">Shift already passed</span>');
+      if(isDup(q)) flags.push('<span class="an-pill warn">Duplicate</span>');
+      return `<tr${flags.length?' class="an-row-bad"':''}><td>${escHtml(new Date(q.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'}))}</td><td>${emp?anWho(emp):escHtml(q.initiatorName||'')}</td><td>${AN_REQ_LABEL[q.type]||escHtml(q.type)}</td><td>${anReqWhat(q,st(q)==='pending_peer')}</td><td>${on}</td><td class="n">${days(ageD(q))}</td><td>${flags.join(' ')}</td></tr>`;
+    }),{empty:'Nothing is waiting on anyone.'});
+  // Over the trend range: who takes shifts on, and how colleagues answer.
+  const inRange=all.filter(q=>rbDateKey(new Date(q.createdAt))>=starts[0]);
+  const rangeLbl=escHtml(AN_TRENDS[_anTrend].label);
+  const pp=new Map(), get=id=>{ const e=byId.get(String(id)); if(!anInScope(e)) return null; const k=String(id); if(!pp.has(k)) pp.set(k,{emp:e,pick:0,gin:0,gout:0,swap:0}); return pp.get(k); };
+  inRange.filter(q=>st(q)==='approved').forEach(q=>{
+    if(q.type==='pickup'){ const o=get(q.initiatorId); if(o) o.pick++; }
+    if(q.type==='giveaway'){ const a=get(q.initiatorId), b=get(q.colleagueId); if(a) a.gout++; if(b) b.gin++; }
+    if(q.type==='swap'){ const a=get(q.initiatorId), b=get(q.colleagueId); if(a) a.swap++; if(b) b.swap++; }
+  });
+  const nz=v=>v?String(v):'<span class="an-flat">–</span>';
+  const xs=[...pp.values()].sort((a,b)=>(b.pick+b.gin)-(a.pick+a.gin)||b.swap-a.swap||anName(a.emp).localeCompare(anName(b.emp)));
+  h+=`<div class="an-h2 an-tabletitle">Who takes on extra shifts · last ${rangeLbl}</div>`+anTable([{t:'Staff member'},{t:'Group'},{t:'Taken on',n:1},{t:'Cover',n:1},{t:'Given to them',n:1},{t:'Given away',n:1},{t:'Swaps',n:1}],
+    xs.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(staffGroupFor(o.emp))}</td><td class="n"><strong>${nz(o.pick+o.gin)}</strong></td><td class="n">${nz(o.pick)}</td><td class="n">${nz(o.gin)}</td><td class="n">${nz(o.gout)}</td><td class="n">${nz(o.swap)}</td></tr>`),
+    {empty:'No approved pick-ups, give-aways or swaps in this range.'});
+  // Colleague responses — swaps and give-aways put to a colleague.
+  const cr=new Map();
+  inRange.filter(q=>(q.type==='swap'||q.type==='giveaway')&&q.colleagueId&&!isDup(q)).forEach(q=>{
+    const e=byId.get(String(q.colleagueId)); if(!anInScope(e)) return;
+    const k=String(e.id); if(!cr.has(k)) cr.set(k,{emp:e,asked:0,acc:0,dec:0,none:0,wait:0,hrs:[]});
+    const o=cr.get(k); o.asked++;
+    if(q.peerResponse==='accepted'){ o.acc++; if(q.peerResponseAt) o.hrs.push((new Date(q.peerResponseAt)-new Date(q.createdAt))/3600000); }
+    else if(q.peerResponse==='declined'){ o.dec++; if(q.peerResponseAt) o.hrs.push((new Date(q.peerResponseAt)-new Date(q.createdAt))/3600000); }
+    else if(st(q)==='pending_peer') o.wait++;
+    else o.none++;
+  });
+  const med=a=>{ if(!a.length) return null; const s=a.slice().sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  const crs=[...cr.values()].sort((a,b)=>(b.none+b.wait)-(a.none+a.wait)||b.asked-a.asked||anName(a.emp).localeCompare(anName(b.emp)));
+  h+=`<div class="an-h2 an-tabletitle">Colleague responses · last ${rangeLbl}</div>`+anTable([{t:'Asked'},{t:'Group'},{t:'Requests',n:1},{t:'Accepted',n:1},{t:'Declined',n:1},{t:'No answer',n:1},{t:'Waiting',n:1},{t:'Answers in',n:1}],
+    crs.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(staffGroupFor(o.emp))}</td><td class="n">${o.asked}</td><td class="n">${nz(o.acc)}</td><td class="n">${nz(o.dec)}</td><td class="n${o.none?' an-bad':''}">${nz(o.none)}</td><td class="n${o.wait?' an-bad':''}">${nz(o.wait)}</td><td class="n">${anFmtWait(med(o.hrs))}</td></tr>`),
+    {empty:'No swaps or give-aways were put to a colleague in this range.'});
+  // By type, then every request — folded away.
+  const rows=AN_REQ_TYPES.map(ty=>{
     const q=reqs.filter(x=>x.type===ty); if(!q.length) return '';
-    const c=s=>q.filter(x=>x.status===s).length;
-    const waits=q.map(x=>{ const d=x.managerDecidedAt||x.peerResponseAt; return d?(new Date(d)-new Date(x.createdAt))/3600000:null; }).filter(v=>v!=null&&v>=0);
-    const open=q.filter(x=>String(x.status).startsWith('pending')).length;
-    return `<tr><td><strong>${tl[ty]}</strong></td><td class="n">${q.length}</td><td class="n">${c('approved')}</td><td class="n">${c('declined')}</td><td class="n">${c('expired')}</td><td class="n">${c('revoked')}</td><td class="n">${open}</td><td class="n">${fmtWait(med(waits))}</td></tr>`;
+    const c=s=>q.filter(x=>st(x)===s).length, w=anReqWaits(q);
+    return `<tr><td><strong>${AN_REQ_LABEL[ty]}</strong></td><td class="n">${q.length}</td><td class="n">${c('approved')}</td><td class="n">${c('declined')}</td><td class="n">${c('expired')}</td><td class="n">${c('revoked')}</td><td class="n">${q.filter(x=>String(st(x)).startsWith('pending')).length}</td><td class="n">${anFmtWait(w.peer)}</td><td class="n">${anFmtWait(w.mgr)}</td></tr>`;
   }).filter(Boolean);
-  h+=anTable([{t:'Type'},{t:'Raised',n:1},{t:'Approved',n:1},{t:'Declined',n:1},{t:'Expired',n:1},{t:'Revoked',n:1},{t:'Still open',n:1},{t:'Median time to decision',n:1}],rows,{empty:'No requests raised in this pay period.'});
+  h+=`<div class="an-h2 an-tabletitle">By type · this period</div>`+anTable([{t:'Type'},{t:'Raised',n:1},{t:'Approved',n:1},{t:'Declined',n:1},{t:'Expired',n:1},{t:'Revoked',n:1},{t:'Open',n:1},{t:'Colleague',n:1},{t:'Manager',n:1}],rows,{empty:'No requests raised in this pay period.'});
   const sl={approved:'Approved',declined:'Declined',expired:'Expired',revoked:'Revoked',pending_peer:'Waiting for colleague',pending_manager:'Waiting for manager'};
   const list=reqs.slice().sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).map(q=>{
     const emp=byId.get(String(q.initiatorId));
-    const what=q.type==='leave'?`${escHtml(formatLeaveType(q.leaveType))}, ${escHtml(anDateShort(q.leaveStartDate))}${q.leaveEndDate&&q.leaveEndDate!==q.leaveStartDate?' – '+escHtml(anDateShort(q.leaveEndDate)):''}`
-      :`${escHtml(q.initiatorShiftDate?anDateShort(q.initiatorShiftDate):'')}${q.colleagueName?' · with '+escHtml(q.colleagueName):''}`;
-    return `<tr><td>${escHtml(new Date(q.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'}))}</td><td>${emp?anWho(emp):escHtml(q.initiatorName||'')}</td><td>${tl[q.type]||escHtml(q.type)}</td><td>${what}</td><td>${escHtml(sl[q.status]||q.status)}</td></tr>`;
+    return `<tr><td>${escHtml(new Date(q.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'}))}</td><td>${emp?anWho(emp):escHtml(q.initiatorName||'')}</td><td>${AN_REQ_LABEL[q.type]||escHtml(q.type)}</td><td>${anReqWhat(q)}</td><td>${escHtml(sl[st(q)]||st(q))}</td></tr>`;
   });
-  h+=`<div class="an-h2 an-tabletitle">Every request this period</div>`+anTable([{t:'Raised'},{t:'Raised by'},{t:'Type'},{t:'What'},{t:'Status'}],list,{empty:'No requests raised in this pay period.'});
+  if(list.length) h+=`<details class="an-details an-cover-rest"><summary>Every request raised this period (${list.length})</summary>`+anTable([{t:'Raised'},{t:'Raised by'},{t:'Type'},{t:'What'},{t:'Status'}],list)+`</details>`;
+  h+=`<div class="an-foot">Colleague (time to answer): raising to the colleague's accept or decline; <em>Answers in</em> is that person's median. Manager (time to decide): from the colleague's answer (or from raising, for leave and pick-ups) to the manager's decision. <em>No answer</em>: the request expired or was handed to the manager without the colleague responding. <em>Duplicate</em>: the same request raised again by the same person — usually a double tap; counted once in Colleague responses. Taken on = cover shifts picked up + shifts given to them by a colleague.</div>`;
   return h;
 }
 
