@@ -1850,6 +1850,17 @@
   .an-reading-row { display:flex; justify-content:space-between; gap:1rem; font-size:0.84rem; padding:0.28rem 0; border-bottom:1px solid rgba(234,217,220,0.7); max-width:22rem; }
   .an-reading-row:last-child { border-bottom:none; }
   .an-team-wrap { overflow-x:auto; }
+  .an-hl { display:flex; flex-direction:column; gap:0.3rem; }
+  .an-hl-row { display:grid; grid-template-columns:8rem 1fr 3rem 3rem 1rem; gap:0.75rem; align-items:center; width:100%; border:none; background:transparent; border-radius:8px; padding:0.35rem 0.4rem; font-family:'Nunito',sans-serif; font-size:0.82rem; color:var(--text); cursor:pointer; text-align:left; }
+  .an-hl-row:hover:not(:disabled), .an-hl-row.on { background:var(--blush-lt); }
+  .an-hl-row:disabled { cursor:default; opacity:0.6; }
+  .an-hl-label { font-weight:700; color:var(--charcoal); }
+  .an-hl-track { height:18px; background:var(--warm-white); border-radius:5px; overflow:hidden; }
+  .an-hl-bar { display:block; height:100%; border-radius:5px; min-width:2px; }
+  .an-hl-n { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
+  .an-hl-p { color:var(--muted); font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+  .an-hl-chev { color:var(--muted); }
+  .an-hl-detail { margin-top:0.9rem; }
   .an-seg-sm { padding:0.15rem; }
   .an-seg-sm .an-segb { padding:0.25rem 0.6rem; font-size:0.7rem; }
   .an-colhit { fill:transparent; cursor:default; }
@@ -10448,6 +10459,8 @@ function anLines(labels, series, opts={}){
    early rates (shared 3m · 6m · 12m range), a "how late" breakdown over the same range,
    and the person table sorted by most late. Moved shifts (late in and late out together)
    are counted on their own and are not lateness. Staff groups: the Staff filter above. */
+let _anLateBucket=null;
+function anSetLateBucket(i){ _anLateBucket=_anLateBucket===i?null:i; anRender(); }
 function anRenderOutside(){
   const r=AN_REPORTS.find(x=>x.id==='outside');
   const P=anPeriod(getPayPeriodStart(_anPPOffset)), Pp=anPeriod(getPayPeriodStart(_anPPOffset-1));
@@ -10477,12 +10490,29 @@ function anRenderOutside(){
     anLines(starts.map(anTrendLab),[{label:'Clocked in late',color:'#C45670',values:lateR},{label:'Clocked out early',color:'#A07228',values:earlyR,dash:true}],
       {shade,skip:nd.map((x,i)=>x||bases[i]===0),minMax:10,fmt:v=>v.toFixed(0)+'%',tipLabels:starts.map(anPeriodLabel),
        tipFmt:(v,i,se)=>`${se.label==='Clocked in late'?cnt(outs[i],'lateIn'):cnt(outs[i],'earlyOut')} of ${bases[i]} shifts (${v.toFixed(1)}%)`,aria:'Late clock-ins and early clock-outs as a share of shifts, by pay period'})+anShadeNote(shade),anTrendSeg());
-  // How late — every late clock-in over the same range (moved shifts excluded).
-  const buckets=[[0,15,'Under 15m'],[15,30,'15–30m'],[30,60,'30–60m'],[60,1e9,'Over 1 hour']], bc=buckets.map(()=>0);
-  outs.forEach((o,i)=>{ if(nd[i]) return; o.forEach(x=>x.items.forEach(it=>{ if(it.what!=='Clocked in late') return; const b=buckets.findIndex(([a,z])=>it.mins>=a&&it.mins<z); if(b>=0) bc[b]++; })); });
-  const totalLate=bc.reduce((a,v)=>a+v,0);
-  h+=anChartCard('How late',`Every late clock-in over the same ${AN_TRENDS[_anTrend].label} (${totalLate}), by how far past the roster. Lots of small slips and a few big ones call for different conversations.`,
-    totalLate?anBars(buckets.map(b=>b[2]),bc,{fmt:v=>String(Math.round(v)),aria:'Late clock-ins by how late',colorFor:(v,i)=>['#E2C4CB','#D4899A','#C45670','#8B2535'][i]}):anEmpty('No late clock-ins in this range.'),anTrendSeg());
+  /* How late — every late clock-in over the same range (moved shifts excluded), as
+     horizontal rows; click a row to list the clock-ins in it (Joel, 21 Oct). The long ones
+     are often a roster time that was wrong rather than real lateness, which a list lets a
+     manager check in a minute. */
+  const buckets=[[0,15,'Under 15 min'],[15,30,'15–30 min'],[30,60,'30–60 min'],[60,1e9,'Over 1 hour']], bl=buckets.map(()=>[]);
+  outs.forEach((o,i)=>{ if(nd[i]) return; o.forEach(x=>x.items.forEach(it=>{ if(it.what!=='Clocked in late') return; const b=buckets.findIndex(([a,z])=>it.mins>=a&&it.mins<z); if(b>=0) bl[b].push({emp:x.emp,e:it.e,mins:it.mins}); })); });
+  const totalLate=bl.reduce((a,v)=>a+v.length,0), maxB=Math.max(1,...bl.map(v=>v.length));
+  const colours=['#E2C4CB','#D4899A','#C45670','#8B2535'];
+  let hl='';
+  if(totalLate){
+    hl=`<div class="an-hl">${buckets.map((b,i)=>{ const n=bl[i].length, on=_anLateBucket===i;
+      return `<button type="button" class="an-hl-row${on?' on':''}" onclick="anSetLateBucket(${i})" ${n?'':'disabled'} aria-expanded="${on}" title="${n?(on?'Hide':'Show')+' these late clock-ins':'None'}">
+        <span class="an-hl-label">${b[2]}</span><span class="an-hl-track"><span class="an-hl-bar" style="width:${(n/maxB*100).toFixed(1)}%;background:${colours[i]}"></span></span>
+        <span class="an-hl-n">${n}</span><span class="an-hl-p">${(n/totalLate*100).toFixed(0)}%</span><span class="an-hl-chev" aria-hidden="true">${n?(on?'▾':'▸'):''}</span></button>`; }).join('')}</div>`;
+    if(_anLateBucket!=null&&bl[_anLateBucket]&&bl[_anLateBucket].length){
+      const list=bl[_anLateBucket].slice().sort((a,b)=>b.mins-a.mins);
+      hl+=`<div class="an-hl-detail"><div class="an-h2 an-tabletitle">${escHtml(buckets[_anLateBucket][2])} late · ${list.length}</div>`+anTable([{t:'Date'},{t:'Staff member'},{t:'Rostered'},{t:'Clocked'},{t:'Late by',n:1}],
+        list.map(x=>{ const sh=tsShiftForEntry(x.e,_rosterShifts); return `<tr><td><strong>${escHtml(anDateShort(x.e.date))}</strong></td><td>${anWho(x.emp)}</td><td class="mono">${sh?escHtml(String(sh.start_time).slice(0,5)+'–'+String(sh.end_time).slice(0,5)):'—'}</td><td class="mono">${escHtml(x.e.clockIn||'')}–${escHtml(x.e.clockOut||'no clock-out')}</td><td class="n"><strong>${anMins(x.mins).replace(/<[^>]+>/g,'')}</strong></td></tr>`; }))+
+        `<div class="an-foot">A late clock-in of an hour or more with a clock-out near the rostered finish is usually real lateness; with a clock-out well after it, check whether the roster time was right.</div></div>`;
+    }
+  }
+  h+=anChartCard('How late',`Every late clock-in over the same ${AN_TRENDS[_anTrend].label} (${totalLate}), by how far past the roster. Click a row to see who and when.`,
+    totalLate?hl:anEmpty('No late clock-ins in this range.'),anTrendSeg());
   // Table — this pay period, most late first.
   const list=cur.filter(o=>o.lateIn||o.earlyIn||o.earlyOut||o.lateOut||o.moved||o.unrost).sort((a,b)=>b.lateIn-a.lateIn||b.lateInMin-a.lateInMin||b.earlyOut-a.earlyOut);
   // Per person, out of that person's rostered shifts on completed days, not leave.
