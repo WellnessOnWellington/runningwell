@@ -10312,11 +10312,14 @@ function anForecast(P, before){
 /* ── Travel km ── */
 function anRenderTravel(){
   const r=AN_REPORTS.find(x=>x.id==='travel');
-  const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), P=Ps[5];
+  // About six months (13 pay periods) as a line, matching the other trend charts (21 Oct).
+  const starts=anRecentStarts(13), Ps=starts.map(s=>anPeriod(s)), P=Ps[12];
   const km=Ps.map(p=>p.rows.reduce((a,x)=>a+x.travelKm,0));
+  const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
+  const shade=anShadeFor(starts);
   let h=anHead(r,'Kilometres claimed at the clinic-travel prompt, exported to MYOB as "Travelling Allowance per KLM".');
   h+=anNotice(P);
-  h+=anChartCard('Kilometres per pay period','Pay periods (Tue–Mon).',anBars(starts.map(anShortPeriod),km,{shade:anShadeFor(starts),fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last six pay periods'})+anShadeNote(anShadeFor(starts)));
+  h+=anChartCard('Kilometres per pay period','About 6 months (13 pay periods, Tue–Mon).',anLine(starts.map(lab),km,{shade,color:'#8B2535',fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last thirteen pay periods'})+anShadeNote(shade));
   const by=new Map();
   P.rows.filter(x=>x.travelKm>0).forEach(x=>{ const k=String(x.emp.id); if(!by.has(k)) by.set(k,{emp:x.emp,km:0,trips:0}); const o=by.get(k); o.km+=x.travelKm; o.trips++; });
   const rows=[...by.values()].sort((a,b)=>b.km-a.km).map(o=>`<tr><td>${anWho(o.emp)}</td><td class="n">${o.trips}</td><td class="n"><strong>${o.km.toFixed(1)}</strong></td></tr>`);
