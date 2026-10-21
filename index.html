@@ -1845,6 +1845,7 @@
   .an-details summary { cursor:pointer; font-size:0.8rem; font-weight:800; color:var(--burgundy); padding:0.3rem 0.2rem; }
   .an-details[open] summary { margin-bottom:0.6rem; }
   .an-reading { display:grid; grid-template-columns:repeat(auto-fit,minmax(16rem,1fr)); gap:1rem 2rem; align-items:start; }
+  .an-reading-big.an-reading-lead { font-size:2.4rem; color:var(--burgundy); }
   .an-reading-big { font-family:'Lora',serif; font-size:1.9rem; font-weight:600; line-height:1.15; margin:0.15rem 0; }
   .an-reading-row { display:flex; justify-content:space-between; gap:1rem; font-size:0.84rem; padding:0.28rem 0; border-bottom:1px solid rgba(234,217,220,0.7); max-width:22rem; }
   .an-reading-row:last-child { border-bottom:none; }
@@ -10220,6 +10221,29 @@ function anMix(P){
   const pen=AN_PENALTY_KINDS.reduce((a,x)=>a+k[x],0);
   return {k,total,worked,pen,penShare:worked>0?pen/worked*100:null,weighted,unpaid,people:[...by.values()]};
 }
+/* Two series with different units on one chart: a (hours, left axis, charcoal, labelled
+   above each point) and b (percent, right axis, burgundy, labelled below). The hours axis
+   does not start at zero — the movement is the point and the axis says where it starts. */
+function anDualLine(labels, a, b, opts={}){
+  const W=600, H=opts.height||250, L=52, R=44, T=26, B=30, ph=H-T-B;
+  const n=labels.length, slot=(W-L-R)/Math.max(1,n), x=i=>L+i*slot+slot/2;
+  const aMin=Math.min(...a), aMax=Math.max(...a), pad=Math.max(1,(aMax-aMin)*0.15);
+  const a0=Math.max(0,Math.floor((aMin-pad)/10)*10), a1=Math.ceil((aMax+pad)/10)*10;
+  const b1=Math.max(10,Math.ceil(Math.max(...b)*1.25/5)*5);
+  const ya=v=>T+(a1-v)/((a1-a0)||1)*ph, yb=v=>T+(b1-v)/b1*ph;
+  let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
+  if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return; s+=`<rect x="${(L+i*slot+2).toFixed(1)}" y="2" width="${(slot-4).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}/>`; });
+  [0,0.5,1].forEach(f=>{ const yy=T+ph*(1-f);
+    s+=`<line x1="${L}" x2="${W-R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#F0E4E7"/>`;
+    s+=`<text x="${L-6}" y="${(yy+4).toFixed(1)}" class="an-ax" text-anchor="end" style="fill:#2D2426">${Math.round(a0+(a1-a0)*f)}h</text>`;
+    s+=`<text x="${W-R+6}" y="${(yy+4).toFixed(1)}" class="an-ax" style="fill:#8B2535">${Math.round(b1*f)}%</text>`; });
+  const line=(vals,y,c,dash)=>`<polyline points="${vals.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="2.2" stroke-linejoin="round"${dash?' stroke-dasharray="5 4"':''}/>`;
+  s+=line(b,yb,'#8B2535',true)+line(a,ya,'#2D2426',false);
+  b.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${yb(v).toFixed(1)}" r="3.5" fill="#fff" stroke="#8B2535" stroke-width="2"><title>${escHtml(labels[i])}: ${v.toFixed(0)}% at penalty rates</title></circle><text x="${x(i).toFixed(1)}" y="${(yb(v)+16).toFixed(1)}" class="an-val" text-anchor="middle" style="fill:#8B2535;font-size:10px">${v.toFixed(0)}%</text>`; });
+  a.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${ya(v).toFixed(1)}" r="4" fill="#2D2426"><title>${escHtml(labels[i])}: ${anH(v)} cost-weighted hours</title></circle><text x="${x(i).toFixed(1)}" y="${(ya(v)-9).toFixed(1)}" class="an-val" text-anchor="middle">${Math.round(v)}</text>`; });
+  labels.forEach((lab,i)=>{ s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  return s+'</svg>'+`<div class="an-legend"><span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="#2D2426" stroke-width="2.2"/><circle cx="11" cy="5" r="3.5" fill="#2D2426"/></svg> Cost-weighted hours (left axis)</span><span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="#8B2535" stroke-width="2.2" stroke-dasharray="5 4"/><circle cx="11" cy="5" r="3" fill="#fff" stroke="#8B2535" stroke-width="2"/></svg> Penalty-rate share (right axis)</span></div>`;
+}
 function anRenderPayCat(){
   const r=AN_REPORTS.find(x=>x.id==='paycat');
   const starts=anRecentStarts(13), Ps=starts.map(s=>anPeriod(s)), M=Ps.map(anMix), P=Ps[12], m=M[12], pm=M[11];
@@ -10228,19 +10252,21 @@ function anRenderPayCat(){
   h+=anNotice(P);
   const dPts=(a,b)=>a==null||b==null?'':(Math.abs(a-b)<0.05?'<span class="an-flat">same as previous period</span>':`<span class="an-flat">${a>b?'▲':'▼'} ${Math.abs(a-b).toFixed(1)} pts vs previous period</span>`);
   const top=kinds.filter(x=>m.k[x.k]>0).sort((a,b)=>m.k[b.k]-m.k[a.k]).slice(0,3);
+  const dH=(a,b)=>Math.abs(a-b)<0.005?'<span class="an-flat">same as previous period</span>':`<span class="an-flat">${a>b?'▲':'▼'} ${Math.abs(a-b).toFixed(1)}h vs previous period</span>`;
+  // Cost-weighted hours lead: it is the closest thing here to staff cost (Joel, 21 Oct 2026).
   h+=`<div class="an-card an-pad an-reading">
+    <div><div class="an-tl">Cost-weighted hours</div><div class="an-reading-big an-reading-lead">${anH(m.weighted)}<span class="an-tv-unit"> base-rate hours</span></div>
+      <div class="an-sub">${dH(m.weighted,pm.weighted)}<br>${m.total>0?`${((m.weighted/m.total-1)*100).toFixed(1)}% above the raw hours — the cost of the loadings`:''}</div></div>
     <div><div class="an-tl">Hours paid</div><div class="an-reading-big">${anH(m.total)}<span class="an-tv-unit"> hours</span></div>
-      <div class="an-sub">${dPts(null,null)}${m.unpaid>0.004?`Plus ${anH(m.unpaid)}h unpaid leave, not counted.`:'Worked hours and paid leave.'}</div></div>
+      <div class="an-sub">${dH(m.total,pm.total)}<br>${m.unpaid>0.004?`Plus ${anH(m.unpaid)}h unpaid leave, not counted.`:'Worked hours and paid leave.'}</div></div>
     <div><div class="an-tl">At penalty rates</div><div class="an-reading-big">${anPct(m.penShare)}<span class="an-tv-unit"> of worked hours</span></div>
-      <div class="an-sub">${anH(m.pen)}h evening, weekend or public holiday · ${dPts(m.penShare,pm.penShare)}</div></div>
-    <div><div class="an-tl">Cost-weighted hours</div><div class="an-reading-big">${anH(m.weighted)}<span class="an-tv-unit"> base-rate hours</span></div>
-      <div class="an-sub">${m.total>0?`${((m.weighted/m.total-1)*100).toFixed(1)}% more than the raw hours — the cost of the loadings`:''}</div></div>
+      <div class="an-sub">${dPts(m.penShare,pm.penShare)}<br>${anH(m.pen)}h evening, weekend or public holiday</div></div>
     <div><div class="an-tl">Largest categories</div>${top.map(x=>`<div class="an-reading-row"><span><span class="an-sw" style="background:${x.color}"></span>${escHtml(x.label)}</span><strong>${anPct(m.total?m.k[x.k]/m.total*100:null)}</strong></div>`).join('')}</div>
   </div>`;
   const shade=anShadeFor(starts);
   const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
   // Full width, one above the other: 13 periods side by side made both too small to read.
-  h+=`${anChartCard('Penalty-rate share','Evening, weekend and public holiday hours as a share of worked hours — about 6 months (13 pay periods).',anLine(starts.map(lab),M.map(x=>x.penShare||0),{shade,color:'#8B2535',fmt:v=>v.toFixed(0)+'%',aria:'Penalty-rate share of worked hours, last thirteen pay periods'})+anShadeNote(shade))}
+  h+=`${anChartCard('Cost-weighted hours and penalty-rate share','About 6 months (13 pay periods). Cost-weighted hours track staff cost in base-rate hours; the dashed line shows how much of the worked time was at penalty rates — so you can see whether a rise in cost came from more hours or from more penalty hours.',anDualLine(starts.map(lab),M.map(x=>x.weighted),M.map(x=>x.penShare||0),{shade,aria:'Cost-weighted hours and penalty-rate share, last thirteen pay periods'})+anShadeNote(shade))}
     ${anChartCard('Paid hours by category','Per pay period (Tue–Mon). Hover a block for its figure.',anStack(starts.map(lab),kinds.map(x=>({label:x.label,color:x.color,values:M.map(mm=>mm.k[x.k])})),{shade,fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last thirteen pay periods'})+anLegend(kinds))}`;
   const rows=kinds.filter(x=>m.k[x.k]>0||pm.k[x.k]>0).map(x=>{ const d=m.k[x.k]-pm.k[x.k], w=x.k==='evening'?'1.125–1.15':(AN_WEIGHT[x.k]??1).toFixed(x.k==='ph'?1:(AN_WEIGHT[x.k]%1?1:0));
     return `<tr><td><span class="an-sw" style="background:${x.color}"></span>${escHtml(x.label)}</td><td class="n">${anH(m.k[x.k])}</td><td class="n">${anPct(m.total?m.k[x.k]/m.total*100:null,1)}</td><td class="n an-flat">${Math.abs(d)<0.005?'–':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(2)}</td><td class="n an-flat">×${w}</td></tr>`; });
