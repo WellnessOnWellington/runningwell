@@ -1827,6 +1827,10 @@
   .an-pill { display:inline-block; font-size:0.66rem; font-weight:800; border-radius:30px; padding:0.15rem 0.55rem; background:var(--blush-lt); color:var(--muted); white-space:nowrap; }
   .an-pill.ok { background:var(--success-lt); color:var(--success); }
   .an-pill.bad { background:#FBE3E0; color:var(--danger); }
+  .an-pill.warn { background:#FBF0DC; color:#A07228; }
+  .an-pill.ok.soft { background:transparent; box-shadow:inset 0 0 0 1px var(--success); }
+  .an-by { font-size:0.74rem; color:var(--muted); margin-left:0.3rem; }
+  .an-cover-rest { margin-top:1rem; }
   .an-empty { padding:1.5rem; text-align:center; color:var(--muted); font-size:0.8rem; font-weight:600; }
   .an-foot { font-size:0.7rem; color:var(--muted); font-weight:500; line-height:1.55; padding:0 0.2rem; max-width:900px; }
   .an-div { display:flex; flex-direction:column; gap:0.35rem; }
@@ -10008,7 +10012,7 @@ function anRenderOverview(){
   const extra=Ps.map(anExtraTime), base=Ps.map(anRosterShifts);
   const outs=Ps.map(p=>anOutside(p)), late=outs.map(o=>o.reduce((a,x)=>a+x.lateIn,0)), early=outs.map(o=>o.reduce((a,x)=>a+x.earlyOut,0));
   const ks=Ps.map(p=>anKiosk(p).total), unpl=Ps.map(anUnplannedDays);
-  const cover=anCoverRows(_anGroup).filter(r=>r.expected&&!r.cover).length;
+  const cover=anCoverRows(_anGroup).filter(r=>r.status==='none'||r.status==='part').length;
   // Cost-weighted hours — the closest thing here to staff cost (see anMix for the weights).
   const weighted=Ps.map(p=>anMix(p).weighted);
   const line=t=>`<span class="an-flat an-typ">${t}</span>`, bul=t=>`<span class="an-flat an-typ an-bul">${t}</span>`;
@@ -10028,7 +10032,7 @@ function anRenderOverview(){
     ${tile('paycat','Cost-weighted hours',h0(weighted[5])+unit('hours'),line(`${paid[5]>0?((weighted[5]/paid[5]-1)*100).toFixed(1):'0.0'}% above hours paid — the loadings`)+bul(dH(weighted[5],weighted[4],null)),trend(weighted))}
     ${tile('paycat','Hours paid',h0(paid[5])+unit('hours'),line('worked and paid leave')+bul(dH(paid[5],paid[4],null)),trend(paid))}
     ${tile('hours','Paid extra time','+'+h1(extra[5].hours)+unit('hours'),line(`over ${extra[5].shifts} of ${base[5]} shifts`)+bul(dH(extra[5].hours,extra[4].hours,false)),trend(extra.map(x=>x.hours)))}
-    ${tile('cover','Leave without cover',String(cover),line('annual leave blocks with no cover shift')+bul('next 6 weeks'))}
+    ${tile('cover','Leave without cover',String(cover),line('annual leave days with no cover')+bul('next 6 weeks'))}
     ${tile('outside','Clocked in late',String(late[5]),line(ofN(late[5],base[5]))+bul(anDelta(late[5],late[4],'',false)),trend(late))}
     ${tile('outside','Clocked out early',String(early[5]),line(ofN(early[5],base[5]))+bul(anDelta(early[5],early[4],'',false)),trend(early))}
     ${tile('kiosk','Missed clocks',String(ks[5]),line(ofN(ks[5],base[5]))+bul(anDelta(ks[5],ks[4],'',false)),trend(ks))}
@@ -10544,41 +10548,127 @@ function anRenderOutside(){
 }
 
 /* ── Leave cover check ── */
+/* Cover status is read from the roster as it stands, not only from the cover_for_shift_id
+   link: approving a pick-up deletes the cover row and the link with it (applyRosterWriteback,
+   pickup branch), so a link-only check reports picked-up cover as missing. Order matters —
+   each pick-up and each rostered shift is claimed by one leave day at most:
+     open      cover row still on the roster, waiting for someone
+     picked    an approved pick-up, same date, same group, covering the whole span
+     part      approved pick-up(s) covering only part of the span
+     probably  someone in the same group rostered for exactly the same hours, no pick-up on
+               record (a manager rostering them directly). Worded "probably": it can't be proved
+     none      nothing found
+   Public holidays are left out — the clinic is shut, there is nothing to cover. */
 function anCoverRows(group=_anGroup){
   const today=anToday(), end=anAddDays(today,42), byId=anEmpById();
   const leaveTypeFor=new Map(_entries.filter(e=>!e.deleted&&e.leaveType&&e.shiftId).map(e=>[String(e.shiftId),e.leaveType]));
   const leaveIds=new Set(leaveTypeFor.keys());
+  const isLeave=s=>s.on_leave||leaveIds.has(String(s.id));
   const out=[];
   _rosterShifts.forEach(s=>{
     if(s.date<=today||s.date>end||s.is_day_off||!s.start_time) return;
-    if(!s.on_leave&&!leaveIds.has(String(s.id))) return;
+    if(!isLeave(s)) return;
+    const lt=leaveTypeFor.get(String(s.id))||null;
+    if(lt==='public_holiday') return;
     const emp=byId.get(String(s.employee_id));
     if(!anInScope(emp,group)) return;
-    const lt=leaveTypeFor.get(String(s.id))||null;
     const g=staffGroupFor(emp);
     const cover=_rosterShifts.find(c=>String(c.cover_for_shift_id)===String(s.id))||null;
-    out.push({shift:s,emp,group:g,leaveType:lt,cover,expected:lt==='annual_leave'&&!!AUTO_COVER_ENABLED[g]});
+    out.push({shift:s,emp,group:g,leaveType:lt,cover,expected:lt==='annual_leave'&&!!AUTO_COVER_ENABLED[g],status:'na',by:null,covered:null});
   });
-  return out.sort((a,b)=>a.shift.date.localeCompare(b.shift.date)||String(a.shift.start_time).localeCompare(String(b.shift.start_time)));
+  out.sort((a,b)=>a.shift.date.localeCompare(b.shift.date)||String(a.shift.start_time).localeCompare(String(b.shift.start_time)));
+  const span=s=>[timeToMin(String(s.start_time).slice(0,5)),timeToMin(String(s.end_time).slice(0,5))];
+  const usedReq=new Set(), usedShift=new Set();
+  const pickups=(_requests||[]).filter(r=>r.type==='pickup'&&r.status==='approved'&&r.initiatorShiftStart&&r.initiatorShiftEnd);
+  const need=out.filter(x=>x.expected);
+  need.forEach(x=>{ if(x.cover){ x.status='open'; usedShift.add(String(x.cover.id)); } });
+  // Exact pick-ups first, so a partial one never takes a span another day matches exactly.
+  [true,false].forEach(exactPass=>need.forEach(x=>{
+    if(x.status!=='na') return;
+    const [a,b]=span(x.shift);
+    const hits=pickups.filter(r=>!usedReq.has(r.id)&&r.initiatorShiftDate===x.shift.date
+      &&staffGroupFor(byId.get(String(r.initiatorId)))===x.group).map(r=>{
+        const [c,d]=span({start_time:r.initiatorShiftStart,end_time:r.initiatorShiftEnd});
+        return {r,c,d,ov:Math.max(0,Math.min(b,d)-Math.max(a,c))};
+      }).filter(h=>h.ov>0&&(!exactPass||h.c===a&&h.d===b));
+    if(!hits.length) return;
+    const pick=exactPass?hits.slice(0,1):hits;
+    pick.forEach(h=>{
+      usedReq.add(h.r.id);
+      const sh=_rosterShifts.find(s=>!usedShift.has(String(s.id))&&String(s.employee_id)===String(h.r.initiatorId)&&s.date===x.shift.date
+        &&span(s)[0]===h.c&&span(s)[1]===h.d);
+      if(sh) usedShift.add(String(sh.id));
+    });
+    const got=Math.min(b-a,pick.reduce((t,h)=>t+h.ov,0));
+    x.by=pick.map(h=>byId.get(String(h.r.initiatorId))).filter(Boolean);
+    if(!x.by.length) x.by=null;
+    x.status=got>=b-a?'picked':'part';
+    if(x.status==='part') x.covered=pick.map(h=>`${String(h.r.initiatorShiftStart).slice(0,5)}–${String(h.r.initiatorShiftEnd).slice(0,5)}`).join(', ');
+  }));
+  need.forEach(x=>{
+    if(x.status!=='na') return;
+    const [a,b]=span(x.shift);
+    const sh=_rosterShifts.find(s=>!usedShift.has(String(s.id))&&s.date===x.shift.date&&String(s.employee_id)!==String(x.shift.employee_id)
+      &&!s.is_day_off&&s.start_time&&!isLeave(s)&&span(s)[0]===a&&span(s)[1]===b
+      &&(()=>{ const e=byId.get(String(s.employee_id)); return !!e&&!e.is_placeholder&&staffGroupFor(e)===x.group; })());
+    if(sh){ usedShift.add(String(sh.id)); x.status='probably'; x.by=[byId.get(String(sh.employee_id))]; }
+    else x.status='none';
+  });
+  return out;
+}
+// Back-to-back days (a weekend between counts as back-to-back) for one person, with the
+// same leave and the same cover status, collapse into one range.
+function anCoverRanges(rows){
+  const sorted=rows.slice().sort((a,b)=>anName(a.emp).localeCompare(anName(b.emp))||a.shift.date.localeCompare(b.shift.date));
+  const key=x=>[x.status,x.leaveType,(x.by||[]).map(e=>e.id).join(','),x.covered||''].join('|');
+  const out=[];
+  sorted.forEach(x=>{
+    const last=out[out.length-1], d=x.shift.date;
+    const next=last&&(anAddDays(last.to,1)===d||new Date(d+'T12:00:00').getDay()===1&&(anAddDays(last.to,3)===d||anAddDays(last.to,2)===d));
+    if(last&&last.emp===x.emp&&last.key===key(x)&&next&&last.to!==d){ last.to=d; last.days.push(x); return; }
+    if(last&&last.emp===x.emp&&last.key===key(x)&&last.to===d){ last.days.push(x); return; }
+    out.push({emp:x.emp,group:x.group,leaveType:x.leaveType,status:x.status,by:x.by,covered:x.covered,key:key(x),from:d,to:d,days:[x]});
+  });
+  return out.sort((a,b)=>a.from.localeCompare(b.from)||anName(a.emp).localeCompare(anName(b.emp)));
 }
 function anRenderCover(){
   const r=AN_REPORTS.find(x=>x.id==='cover');
   const rows=anCoverRows();
-  const exp=rows.filter(x=>x.expected), missing=exp.filter(x=>!x.cover), withCover=rows.filter(x=>x.cover);
+  const need=rows.filter(x=>x.expected), cnt=s=>need.filter(x=>x.status===s).length;
+  const picked=cnt('picked'), probably=cnt('probably'), open=cnt('open'), none=cnt('none'), part=cnt('part');
   const roles=Object.keys(AUTO_COVER_ENABLED).filter(k=>AUTO_COVER_ENABLED[k]);
-  let h=anHead(r,`Leave booked for the next six weeks (from tomorrow), and whether the roster holds a cover shift for it. Auto-cover is switched on for: <strong>${roles.length?escHtml(roles.map(x=>AN_GROUP_LABELS[x]||x).join(', ')):'nobody'}</strong>, annual leave only.`);
-  h+=`<div class="an-tiles an-tiles-3">
-    <div class="an-card an-tile static"><span class="an-tl">Leave blocks, next 6 weeks</span><span class="an-tv">${rows.length}</span></div>
-    <div class="an-card an-tile static"><span class="an-tl">Should have a cover shift</span><span class="an-tv">${exp.length}</span><span class="an-td an-flat">annual leave in an auto-cover group</span></div>
-    <div class="an-card an-tile static"><span class="an-tl">…and have none</span><span class="an-tv ${missing.length?'an-bad':''}">${missing.length}</span><span class="an-td an-flat">${withCover.length} block${withCover.length===1?'':'s'} have a cover shift</span></div>
+  const days=n=>`${n} day${n===1?'':'s'}`, du=n=>`<span class="an-tv-unit"> day${n===1?'':'s'}</span>`;
+  let h=anHead(r,`Annual leave booked for the next six weeks (from tomorrow), and whether someone is rostered to cover it. Auto-cover is switched on for: <strong>${roles.length?escHtml(roles.map(x=>AN_GROUP_LABELS[x]||x).join(', ')):'nobody'}</strong>. Public holidays are left out.`);
+  h+=`<div class="an-tiles an-tiles-4">
+    <div class="an-card an-tile static"><span class="an-tl">Needs cover</span><span class="an-tv">${need.length}${du(need.length)}</span><span class="an-td an-flat">annual leave in an auto-cover group</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Covered</span><span class="an-tv">${picked+probably}${du(picked+probably)}</span><span class="an-td an-flat">${picked} picked up · ${probably} probably covered</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Waiting for pick-up</span><span class="an-tv">${open}${du(open)}</span><span class="an-td an-flat">cover shift offered to staff</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">No cover</span><span class="an-tv ${none+part?'an-bad':''}">${none+part}${du(none+part)}</span><span class="an-td an-flat">${part?`including ${part} only partly covered`:'nothing on the roster'}</span></div>
   </div>`;
-  const tr=rows.map(x=>{
-    const s=x.shift;
-    const st=x.cover?'<span class="an-pill ok">Cover shift on roster</span>':(x.expected?'<span class="an-pill bad">No cover shift</span>':'<span class="an-pill">Not covered automatically</span>');
-    return `<tr${x.expected&&!x.cover?' class="an-row-bad"':''}><td><strong>${escHtml(anDateShort(s.date))}</strong></td><td>${anWho(x.emp)}</td><td>${anGroupDot(x.group)}</td><td class="mono">${escHtml(String(s.start_time).slice(0,5))}–${escHtml(String(s.end_time).slice(0,5))}</td><td>${escHtml(x.leaveType?formatLeaveType(x.leaveType):'Not in')}</td><td>${st}</td></tr>`;
-  });
-  h+=anTable([{t:'Date'},{t:'Staff member'},{t:'Group'},{t:'Rostered'},{t:'Leave'},{t:'Cover'}],tr,{empty:'No leave on the roster for the next six weeks.'});
-  h+=`<div class="an-foot">A cover shift someone has already picked up no longer points back at the leave it covers, so a covered block can show here as having none — check the roster before acting. Leave approved for dates that had no roster yet writes nothing to the roster, so it cannot appear here at all.</div>`;
+  const names=by=>(by||[]).map(e=>anWho(e)).join(', ');
+  const pill=x=>({
+    open:'<span class="an-pill">Waiting for pick-up</span>',
+    picked:`<span class="an-pill ok">Picked up</span> <span class="an-by">by ${names(x.by)}</span>`,
+    probably:`<span class="an-pill ok soft">Probably covered</span> <span class="an-by">${names(x.by)}, same hours</span>`,
+    part:`<span class="an-pill warn">Partly covered</span> <span class="an-by">${names(x.by)} ${escHtml(x.covered||'')}</span>`,
+    none:'<span class="an-pill bad">No cover</span>'})[x.status]||'';
+  const hours=x=>{ const s=new Set(x.days.map(d=>`${String(d.shift.start_time).slice(0,5)}–${String(d.shift.end_time).slice(0,5)}`)); return s.size===1?[...s][0]:'varies'; };
+  const when=x=>escHtml(anDateShort(x.from))+(x.to!==x.from?' – '+escHtml(anDateShort(x.to)):'');
+  const ranges=anCoverRanges(need);
+  h+=anTable([{t:'When'},{t:'Staff member'},{t:'Group'},{t:'Rostered'},{t:'Days',n:1},{t:'Cover'}],
+    ranges.map(x=>`<tr${x.status==='none'||x.status==='part'?' class="an-row-bad"':''}><td><strong>${when(x)}</strong></td><td>${anWho(x.emp)}</td><td>${anGroupDot(x.group)}</td><td class="mono">${escHtml(hours(x))}</td><td class="n">${x.days.length}</td><td>${pill(x)}</td></tr>`),
+    {empty:roles.length?'No annual leave needing cover in the next six weeks.':'Auto-cover is switched off for every group.'});
+  // Everything else on leave: one quiet line per group, the detail folded away.
+  const rest=rows.filter(x=>!x.expected);
+  if(rest.length){
+    const byG={}; rest.forEach(x=>{ byG[x.group]=(byG[x.group]||0)+1; });
+    const line=Object.entries(byG).map(([g,n])=>`${escHtml(AN_GROUP_LABELS[g]||g)}: ${days(n)}`).join(' · ');
+    h+=`<details class="an-details an-cover-rest"><summary>Other leave, not covered automatically — ${line}</summary>`
+      +anTable([{t:'When'},{t:'Staff member'},{t:'Group'},{t:'Leave'},{t:'Days',n:1}],
+        anCoverRanges(rest).map(x=>`<tr><td><strong>${when(x)}</strong></td><td>${anWho(x.emp)}</td><td>${anGroupDot(x.group)}</td><td>${escHtml(x.leaveType?formatLeaveType(x.leaveType):'Not in')}</td><td class="n">${x.days.length}</td></tr>`))
+      +`</details>`;
+  }
+  h+=`<div class="an-foot"><em>Picked up</em>: an approved pick-up on that date covering the rostered hours. <em>Probably covered</em>: someone in the same group is rostered for exactly the same hours, with no pick-up on record — usually a manager rostering them directly; check the roster if it matters. Each pick-up or rostered shift is matched to one leave day only. Leave approved for dates that had no roster yet writes nothing to the roster, so it cannot appear here at all.</div>`;
   return h;
 }
 
