@@ -1839,6 +1839,12 @@
   .an-hbar span { display:block; height:100%; border-right:1.5px solid #fff; }
   .an-hbar-total { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
   .an-typ { display:block; margin-top:0.15rem; }
+  .an-team-wrap { overflow-x:auto; }
+  .an-rowhl { fill:transparent; }
+  .an-rowhl.on { fill:rgba(196,86,112,0.09); }
+  .an-team { min-width:760px; }
+  .an-team .an-team-name { font-size:12.5px; font-weight:700; fill:var(--burgundy); font-family:'Nunito',sans-serif; cursor:pointer; }
+  .an-team .an-team-name:hover { text-decoration:underline; }
   #an-tip { position:fixed; z-index:400; pointer-events:none; display:none; max-width:280px; background:var(--charcoal); color:#fff; font-family:'Nunito',sans-serif; font-size:0.74rem; font-weight:600; line-height:1.45; padding:0.5rem 0.65rem; border-radius:8px; white-space:pre-line; box-shadow:0 6px 20px rgba(40,20,30,0.25); }
   #an-tip.show { display:block; }
   .an-cal [data-tip] { cursor:default; }
@@ -9958,18 +9964,88 @@ function anRenderOverview(){
     ${tile('cover','Leave without cover',String(cover),line('annual leave blocks with no cover shift')+bul('next 6 weeks'))}
     ${tile('requests','Requests waiting',String(waiting.length),waiting.length?line('for a colleague or a manager')+bul(`oldest ${oldest} day${oldest===1?'':'s'}`):line('nothing waiting'))}
   </div>`;
-  const labels=starts.map(anShortPeriod);
-  const shade=anShadeFor(starts);
-  // Was "Hours worked over roster" — netted, the flaw the tiles dropped. Paid extra time instead.
-  const c1=anBars(labels,extra.map(x=>x.hours),{shade,fmt:v=>v.toFixed(0)+'h',aria:'Paid extra time, last six pay periods',
-    colorFor:(v,i)=>i===5?'#8B2535':'#D4899A'});
-  const kt=Ps.map(p=>anKindTotals(p));
-  const c2=anStack(labels,AN_KINDS.filter(k=>AN_WORK_KINDS.includes(k.k)).map(k=>({label:k.label,color:k.color,values:kt.map(t=>t[k.k])})),{shade,percent:true,aria:'Share of worked hours by pay category, last six pay periods'});
-  h+=`<div class="an-two">
-    ${anChartCard('Paid extra time','Hours paid outside the rostered start and finish, per pay period (Tue–Mon). Not netted against late starts.',c1+anShadeNote(shade),anOpenLink('hours'))}
-    ${anChartCard('Worked hours by pay category','Share of worked hours, per pay period (Tue–Mon). Leave not included.',c2+anLegend(AN_KINDS.filter(k=>AN_WORK_KINDS.includes(k.k)))+anShadeNote(shade),anOpenLink('paycat'))}
-  </div>`;
+  /* One chart: the team calendar for the selected pay period. Replaced Paid extra time per
+     period (its tile's trend line, bigger) and worked hours by pay category (follows the
+     roster, not behaviour; still in its own report). */
+  h+=anChartCard('Team calendar',escHtml(anPeriodLabel(P.fnStart))+' · one row per person, one column per day. Reading down a column is that day\'s staffing.',anTeamCalendar(P));
   return h;
+}
+
+/* Team calendar — the Overview's one chart (21 Oct 2026). Rows are people, columns the 14
+   days of the selected pay period, cells the People calendar's states. It answers what the
+   tiles cannot: WHO, and WHICH DAYS — reading down a column is a day's staffing.
+   Decisions (Joel, 21 Oct): only people with something in the period (rostered, worked or
+   leave), the rest counted in a note; managers left out unless filtered to (they do not
+   clock); the Cover Required placeholder left out; grouped by staff group then name;
+   colour only, dates in the headings; Late · Early · Missed at the row end (shifts); an
+   "On leave" count per day along the bottom; a name or cell opens that person's quick
+   look for the same pay period. Leave already booked on days still to come is shown, so
+   the bottom row works as a staffing forecast for the current period. */
+function anTeamCalendar(P){
+  const today=anToday(), days=P.days;
+  const PLANNED=['annual_leave','long_service_leave'];
+  const emps=_emps.filter(e=>anInScope(e)&&(e.role!=='Manager'||_anGroup==='Manager'))
+    .sort((a,b)=>(staffGroupFor(a)||'').localeCompare(staffGroupFor(b)||'')||anName(a).localeCompare(anName(b)));
+  const k=anKiosk(P);
+  const rows=[]; let hidden=0;
+  emps.forEach(emp=>{
+    const grace=GRACE_BY_ROLE[emp.role]??10, id=String(emp.id);
+    const dm=anPersonDays(id,[P],grace,[k]);
+    // Leave booked on days not yet reached (anPersonDays stops at today).
+    _entries.forEach(e=>{ if(e.deleted||String(e.employeeId)!==id||e.date<today||!days.includes(e.date)) return; const lt=anLeaveOf(e); if(!lt||lt==='public_holiday') return;
+      if(!dm.has(e.date)) dm.set(e.date,{date:e.date,blocks:[],clocks:[],missed:[],leave:new Set(),future:true});
+      const o=dm.get(e.date); o.leave.add(lt); o.future=true; o.state=PLANNED.includes(lt)&&o.state!=='unplanned'?'planned':'unplanned'; });
+    const any=[...dm.values()].some(o=>o.state);
+    if(!any){ hidden++; return; }
+    const sh=anPersonShifts(id,[P]);
+    const late=sh.filter(s=>s.inDev>=grace).length, early=sh.filter(s=>s.outDev!=null&&-s.outDev>=grace).length;
+    const missed=k.noOut.filter(e=>String(e.employeeId)===id).length+k.mgrAdded.filter(e=>String(e.employeeId)===id).length+k.noRecord.filter(m=>String(m.employeeId)===id).length;
+    rows.push({emp,group:staffGroupFor(emp),dm,late,early,missed});
+  });
+  if(!rows.length) return anEmpty('Nobody had anything rostered, worked or on leave in this pay period.');
+  const W=1000, L=170, SUM=210, HEAD=36, gap=3, rowH=24, grpH=22;
+  const cw=Math.floor((W-L-SUM)/14)-gap;
+  const colX=i=>L+i*(cw+gap);
+  const colLate=L+14*(cw+gap)+70, colEarly=colLate+62, colMissed=colEarly+66;
+  // Lay out rows with a heading before each staff group.
+  const layout=[]; let y=HEAD, lastG=null;
+  rows.forEach(r=>{ if(r.group!==lastG){ layout.push({head:r.group,y}); y+=grpH; lastG=r.group; } layout.push({row:r,y}); y+=rowH; });
+  const footY=y+8, H=footY+26;
+  let s=`<svg class="an-chart an-cal an-team" viewBox="0 0 ${W} ${H}" role="img" aria-label="Team calendar for the pay period, one row per person">`;
+  days.forEach((d,i)=>{ const dt=new Date(d+'T12:00:00'), wd=dt.getDay(), x=colX(i);
+    if(wd===0||wd===6) s+=`<rect x="${x-1.5}" y="${HEAD-4}" width="${cw+3}" height="${footY-HEAD+2}" fill="#FAF4F5"/>`;
+    s+=`<text x="${(x+cw/2).toFixed(1)}" y="13" text-anchor="middle" class="an-ax">${dt.toLocaleDateString('en-AU',{weekday:'short'})}</text><text x="${(x+cw/2).toFixed(1)}" y="27" text-anchor="middle" style="font-size:12px;font-weight:800;fill:#2D2426;font-family:Nunito,sans-serif">${dt.getDate()}</text>`; });
+  [[colLate,'Late','#C45670'],[colEarly,'Early','#A07228'],[colMissed,'Missed','#2D2426']].forEach(([x,t,c])=>{ s+=`<text x="${x}" y="27" text-anchor="end" style="font-size:10.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;font-family:Nunito,sans-serif;fill:${c}">${t}</text>`; });
+  const leaveCount=days.map(()=>0);
+  layout.forEach(it=>{
+    if(it.head!==undefined){ s+=`<text x="4" y="${it.y+15}" style="font-size:10px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;font-family:Nunito,sans-serif;fill:#8A7A7D">${escHtml(AN_GROUP_LABELS[it.head]||it.head||'Other')}</text><line x1="4" x2="${W-4}" y1="${it.y+20}" y2="${it.y+20}" stroke="#F0E4E7"/>`; return; }
+    const r=it.row, id=escHtml(String(r.emp.id)), cy=it.y+rowH/2+4, open=`onclick="anOpenPerson('${id}')"`, rk=`data-row="${id}"`;
+    s+=`<rect class="an-rowhl" ${rk} x="2" y="${it.y}" width="${W-4}" height="${rowH-1}" rx="5"/>`;
+    s+=`<text x="12" y="${cy}" class="an-team-name" ${open} ${rk}>${escHtml(anName(r.emp))}</text>`;
+    days.forEach((d,i)=>{ const x=colX(i), o=r.dm.get(d), yy=it.y+2, hh=rowH-5;
+      if(!o||!o.state){ s+=`<rect x="${x}" y="${yy}" width="${cw}" height="${hh}" rx="3" fill="none" stroke="#F3EAEC"${d>=today?' stroke-dasharray="2 2"':''} ${rk}/>`; return; }
+      if(o.state==='planned'||o.state==='unplanned') leaveCount[i]++;
+      const st=AN_CAL_STATES[o.state];
+      const bits=[anName(r.emp)+' — '+anDateShort(d)];
+      if(o.blocks.length) bits.push('Rostered '+o.blocks.join(', '));
+      o.clocks.forEach(c=>bits.push(`Clocked ${c.clockIn}–${c.clockOut||'no clock-out'}`));
+      bits.push(o.state==='late'&&o.alsoEarly?'Clocked in late, and clocked out early':o.state==='missed'?'Missed clock: '+o.missed.join('; '):st.label+(o.future?' (booked)':''));
+      if(o.leave.size&&!['planned','unplanned'].includes(o.state)) bits.push('Leave: '+[...o.leave].map(formatLeaveType).join(', '));
+      else if(o.leave.size) bits.push([...o.leave].map(formatLeaveType).join(', '));
+      bits.push('Click for the quick look');
+      const tip=escHtml(bits.join('\n'));
+      s+=`<rect x="${x}" y="${yy}" width="${cw}" height="${hh}" rx="3" fill="${st.color}"${o.state==='unrost'?' stroke="#D9C4C8"':''}${o.future?' opacity="0.6"':''} data-tip="${tip}" aria-label="${tip}" ${open} ${rk} style="cursor:pointer"/>`; });
+    const num=(v,c)=>v?`<tspan fill="${c}" font-weight="800">${v}</tspan>`:'<tspan fill="#CDBFC2">–</tspan>';
+    [[colLate,num(r.late,'#C45670')],[colEarly,num(r.early,'#A07228')],[colMissed,num(r.missed,'#2D2426')]].forEach(([x,v])=>{ s+=`<text x="${x}" y="${cy}" text-anchor="end" ${rk} style="font-size:12.5px;font-family:Nunito,sans-serif;font-variant-numeric:tabular-nums">${v}</text>`; });
+  });
+  s+=`<line x1="${L}" x2="${colX(13)+cw}" y1="${footY-4}" y2="${footY-4}" stroke="#E2D2D6"/><text x="${L-10}" y="${footY+12}" text-anchor="end" class="an-ax" style="font-size:11px;fill:#2471A3;font-weight:800">On leave</text>`;
+  days.forEach((d,i)=>{ s+=`<text x="${(colX(i)+cw/2).toFixed(1)}" y="${footY+12}" text-anchor="middle" style="font-size:12px;font-family:Nunito,sans-serif;font-weight:800;fill:${leaveCount[i]?'#2471A3':'#CDBFC2'}">${leaveCount[i]||'–'}</text>`; });
+  s+='</svg>';
+  const counts={}; rows.forEach(r=>r.dm.forEach(o=>{ if(o.state) counts[o.state]=(counts[o.state]||0)+1; }));
+  const legend=Object.entries(AN_CAL_STATES).filter(([k2])=>counts[k2]||['ontime','late','early','missed'].includes(k2))
+    .map(([k2,v])=>`<span><span class="an-sw" style="background:${v.color};${k2==='unrost'?'border:1px solid #D9C4C8;':''}"></span>${escHtml(v.label)}</span>`).join('');
+  anTipInit();
+  return `<div class="an-team-wrap">${s}</div><div class="an-legend">${legend}</div><div class="an-shade-note">Click a name or a day for that person's quick look. Late · Early · Missed count shifts, like the tiles.${P.complete?'':' Days still to come are dashed; leave already booked on them is shown faded.'}${hidden?` ${hidden} staff with nothing rostered, worked or on leave this period are not shown.`:''}</div>`;
 }
 
 /* ── Hours vs rostered ── */
@@ -10576,7 +10652,7 @@ const AN_CAL_STATES={
   unrost:   {label:'Worked, not rostered',color:'#EFE6E8'},
   paper:    {label:'Recorded on paper',  color:'#D9CFD1'},
 };
-function anPersonDays(empId, Ps, grace){
+function anPersonDays(empId, Ps, grace, kiosks){
   const id=String(empId), days=new Map();
   const day=d=>{ if(!days.has(d)) days.set(d,{date:d,blocks:[],clocks:[],missed:[],leave:new Set(),rosterLeave:false,unrost:false}); return days.get(d); };
   Ps.forEach(P=>{
@@ -10587,7 +10663,8 @@ function anPersonDays(empId, Ps, grace){
       if(!e.clockIn){ if(r.worked>0&&e.date<AN_SOLE_RECORD_FROM) day(e.date).paper=true; return; }
       const inDev=timeToMin(e.clockIn)-timeToMin(r.shift.start_time), outDev=e.clockOut?timeToMin(e.clockOut)-timeToMin(r.shift.end_time):null;
       day(e.date).clocks.push({inDev,outDev,clockIn:e.clockIn,clockOut:e.clockOut,late:inDev>=grace,early:outDev!=null&&-outDev>=grace}); });
-    const k=anKiosk(P);
+    // kiosks: anKiosk per P, precomputed by a caller drawing many people (team calendar).
+    const k=kiosks?kiosks[Ps.indexOf(P)]:anKiosk(P);
     k.noOut.forEach(e=>{ if(String(e.employeeId)===id) day(e.date).missed.push('no clock-out'); });
     k.mgrAdded.forEach(e=>{ if(String(e.employeeId)===id) day(e.date).missed.push('typed in by a manager (no clock-in)'); });
     k.noRecord.forEach(m=>{ if(String(m.employeeId)===id) day(m.date).missed.push(`rostered ${m.start}–${m.end}, no record`); });
@@ -10630,13 +10707,15 @@ function anAttendanceCalendar(days, starts, grace, shifts){
   // Day names repeated at the table's left edge, so a row can be read without tracking
   // back across the grid on long ranges.
   const colDay=gridR+18, colLate=colDay+78, colEarly=colLate+64, colShifts=colEarly+70;
+  // Row highlight bands first (behind everything); anTipInit lights the hovered row's band.
+  for(let i=0;i<7;i++) s+=`<rect class="an-rowhl" data-row="${i}" x="2" y="${(T+i*(ch+gap)-gap/2).toFixed(1)}" width="${W-4}" height="${ch+gap}" rx="5"/>`;
   ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((d,i)=>{ const cy=T+i*(ch+gap)+ch/2+4;
-    s+=`<text x="${L-8}" y="${cy.toFixed(1)}" class="an-ax" text-anchor="end">${d}</text>`;
-    s+=`<text x="${colDay.toFixed(1)}" y="${cy.toFixed(1)}" class="an-ax">${d}</text>`;
+    s+=`<text x="${L-8}" y="${cy.toFixed(1)}" class="an-ax" text-anchor="end" data-row="${i}">${d}</text>`;
+    s+=`<text x="${colDay.toFixed(1)}" y="${cy.toFixed(1)}" class="an-ax" data-row="${i}">${d}</text>`;
     // Row totals as an aligned table: Late · Early · Shifts, right-aligned, "–" for none.
     const w=wd[i], num=(v,colour)=>v?`<tspan fill="${colour}" font-weight="800">${v}</tspan>`:'<tspan fill="#CDBFC2">–</tspan>';
     [[colLate,num(w.late,'#C45670')],[colEarly,num(w.early,'#A07228')],[colShifts,w.n?`<tspan fill="#8A7A7D" font-weight="700">${w.n}</tspan>`:'<tspan fill="#CDBFC2">–</tspan>']]
-      .forEach(([x,v])=>{ s+=`<text x="${x.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="end" style="font-size:12.5px;font-family:Nunito,sans-serif;font-variant-numeric:tabular-nums">${v}</text>`; }); });
+      .forEach(([x,v])=>{ s+=`<text x="${x.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="end" data-row="${i}" style="font-size:12.5px;font-family:Nunito,sans-serif;font-variant-numeric:tabular-nums">${v}</text>`; }); });
   [[colLate,'Late','#C45670'],[colEarly,'Early','#A07228'],[colShifts,'Shifts','#8A7A7D']].forEach(([x,t,c])=>{
     s+=`<text x="${x.toFixed(1)}" y="${T-9}" text-anchor="end" style="font-size:10.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;font-family:Nunito,sans-serif;fill:${c}">${t}</text>`; });
   // Month labels at the column holding each 1st (and the first column), with a faint divider.
@@ -10653,7 +10732,7 @@ function anAttendanceCalendar(days, starts, grace, shifts){
     const x=L+w*(cw+gap), y=T+d*(ch+gap), o=days.get(key);
     const early=key<AN_SOLE_RECORD_FROM, num=dt.getDate();
     if(!o||!o.state){
-      s+=`<rect x="${x}" y="${y}" width="${cw}" height="${ch}" rx="4" fill="none" stroke="#F0E4E7"${key>=today?' stroke-dasharray="2 2"':''}/>`;
+      s+=`<rect x="${x}" y="${y}" width="${cw}" height="${ch}" rx="4" fill="none" stroke="#F0E4E7"${key>=today?' stroke-dasharray="2 2"':''} data-row="${d}"/>`;
       if(showNum) s+=`<text x="${(x+cw/2).toFixed(1)}" y="${(y+ch/2+4).toFixed(1)}" text-anchor="middle" style="font-size:${Math.min(12,ch*0.38).toFixed(1)}px;fill:#CDBFC2;font-weight:600;pointer-events:none">${num}</text>`;
       continue;
     }
@@ -10668,7 +10747,7 @@ function anAttendanceCalendar(days, starts, grace, shifts){
     else if(o.rosterLeave&&o.state==='planned') bits.push('Marked as leave on the roster (no leave entry)');
     if(early) bits.push('Before 11 Aug 2026 — may be incomplete');
     const tip=escHtml(bits.join('\n'));
-    s+=`<rect x="${x}" y="${y}" width="${cw}" height="${ch}" rx="4" fill="${st.color}"${o.state==='unrost'?' stroke="#D9C4C8"':''}${early?' opacity="0.55"':''} data-tip="${tip}" aria-label="${tip}"/>`;
+    s+=`<rect x="${x}" y="${y}" width="${cw}" height="${ch}" rx="4" fill="${st.color}"${o.state==='unrost'?' stroke="#D9C4C8"':''}${early?' opacity="0.55"':''} data-tip="${tip}" aria-label="${tip}" data-row="${d}"/>`;
     if(showNum) s+=`<text x="${(x+cw/2).toFixed(1)}" y="${(y+ch/2+4).toFixed(1)}" text-anchor="middle" style="font-size:${Math.min(12,ch*0.38).toFixed(1)}px;fill:${dark[o.state]?'#fff':'#2D2426'};font-weight:700;pointer-events:none"${early?' opacity="0.7"':''}>${num}</text>`;
   }
   s+='</svg>';
@@ -10686,7 +10765,15 @@ function anTipInit(){
   const move=e=>{ const pad=14, w=tip.offsetWidth, h=tip.offsetHeight;
     let x=e.clientX+pad, y=e.clientY+pad; if(x+w>innerWidth-8) x=e.clientX-w-pad; if(y+h>innerHeight-8) y=e.clientY-h-pad;
     tip.style.left=x+'px'; tip.style.top=y+'px'; };
-  document.addEventListener('mouseover',e=>{ const t=e.target.closest&&e.target.closest('#tab-analytics [data-tip]'); if(!t){ tip.classList.remove('show'); return; } tip.textContent=t.getAttribute('data-tip'); tip.classList.add('show'); move(e); });
+  /* Row highlight for the calendars: anything carrying data-row lights that row's band
+     (.an-rowhl) in its own chart, so a row can be read straight across. */
+  let lit=[];
+  const light=e=>{ const el=e.target.closest&&e.target.closest('.an-cal [data-row]');
+    const row=el?el.getAttribute('data-row'):null, svg=el?el.closest('svg'):null;
+    if(lit.length&&lit[0].svg===svg&&lit[0].row===row) return;
+    lit.forEach(x=>x.el.classList.remove('on')); lit=[];
+    if(svg) svg.querySelectorAll('.an-rowhl').forEach(b=>{ if(b.getAttribute('data-row')===row){ b.classList.add('on'); lit.push({el:b,svg,row}); } }); };
+  document.addEventListener('mouseover',e=>{ light(e); const t=e.target.closest&&e.target.closest('#tab-analytics [data-tip]'); if(!t){ tip.classList.remove('show'); return; } tip.textContent=t.getAttribute('data-tip'); tip.classList.add('show'); move(e); });
   document.addEventListener('mousemove',e=>{ if(tip.classList.contains('show')) move(e); });
 }
 
