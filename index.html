@@ -1836,6 +1836,13 @@
   .an-pill.ok.soft { background:transparent; box-shadow:inset 0 0 0 1px var(--success); }
   .an-by { font-size:0.74rem; color:var(--muted); margin-left:0.3rem; }
   .an-cover-rest { margin-top:1rem; }
+  .an-split { display:flex; height:30px; border-radius:8px; overflow:hidden; gap:2px; margin:0.4rem 0 0.8rem; }
+  .an-split span { display:block; min-width:3px; }
+  .an-split span:hover { filter:brightness(0.92); }
+  .an-split-key { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:0.35rem 1rem; font-size:0.78rem; }
+  .an-split-key > div { display:flex; align-items:center; gap:0.45rem; }
+  .an-split-key strong { margin-left:auto; }
+  .an-split-key .an-flat { min-width:2.4rem; text-align:right; }
   .an-rangebar { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin:1.6rem 0 0.2rem; padding-bottom:0.5rem; border-bottom:1.5px solid var(--border); }
   .an-rangebar-d { font-weight:600; color:var(--muted); }
   .an-notice.an-notice-bad { background:#FDF1EF; color:#8B2535; border-color:#F2C9C2; margin-bottom:1rem; }
@@ -9882,14 +9889,14 @@ function anKiosk(P){
      the complete one is what gets paid). An incomplete record only counts when nothing on
      the same shift is complete, and then once per shift. */
   const forgot=e=>anForgotIn(e,tsShiftForEntry(e,_rosterShifts));
-  const bad=e=>!!e.clockIn&&(!e.clockOut||forgot(e));
-  const counts=e=>{ const g=groups.get(gkey(e)); if(g.some(x=>x.clockIn&&x.clockOut&&!forgot(x))) return false;
+  const bad=e=>!!e.clockIn&&(!anClockOutOf(e)||forgot(e));
+  const counts=e=>{ const g=groups.get(gkey(e)); if(g.some(x=>x.clockIn&&anClockOutOf(x)&&!forgot(x))) return false;
     return g.filter(bad)[0]===e; };
   // A single end-of-shift tap is a forgotten clock-in; it also has no clock-out (or one a
   // few minutes later), so it is counted once, as forgotIn, and kept out of noOut.
   const forgotIn=kioskRows.filter(e=>bad(e)&&counts(e)&&forgot(e));
   const fset=new Set(forgotIn.map(e=>String(e.id)));
-  const noOut=kioskRows.filter(e=>e.clockIn&&!e.clockOut&&counts(e)&&!fset.has(String(e.id)));
+  const noOut=kioskRows.filter(e=>e.clockIn&&!anClockOutOf(e)&&counts(e)&&!fset.has(String(e.id)));
   /* Before 11 Aug 2026 paper timesheets ran alongside the kiosk, so a shift typed in by
      a manager — or a rostered block with no entry — was the normal process, not a missed
      clock. Only from AN_SOLE_RECORD_FROM do those count. A kiosk clock-in with no
@@ -9913,15 +9920,43 @@ function anKiosk(P){
           total:noOut.length+forgotIn.length+mgrAdded.length+noRecord.length};
 }
 
-/* Timesheet workload. "Untouched" asks whether the row WOULD auto-approve, with the
-   lock set aside — every past row is locked by now, and tsIsAutoApproved answers
-   false for any locked row, which would make every finished period read 0%. */
+/* Timesheet workload — what happened to every clocked shift (reworked 21 Oct 2026).
+     auto    would auto-approve, never edited — no manager work. Asked with the lock set
+             aside: every past row is locked by now, and tsIsAutoApproved answers false for
+             any locked row, which would make every finished period read 0%.
+     asis    flagged, approved without an edit
+     missed  a missed clock set by hand — no clock-out, or a forgotten clock-in (anForgotIn):
+             fixing those to the roster is the process, not a judgement call
+     kept    edited, but paid exactly as clocked (usually extra time approved)
+     more    paid more than clocked (by over 2 min) — e.g. left early, paid to the roster
+     less    paid less than clocked (by over 2 min)
+   "Times changed by a manager" used to lump the last four together; two thirds were
+   'kept', which changed nothing. Paid and clocked are compared as spans (finish − start),
+   so a break deduction does not count either way. */
+const AN_TS_OUTCOMES=[
+  {k:'auto',  label:'Auto-approved',          color:'#B7CBBE'},
+  {k:'asis',  label:'Approved as it stood',   color:'#7FA58C'},
+  {k:'kept',  label:'Kept the clocked times', color:'#3A6B4F'},
+  {k:'missed',label:'Missed clock fixed',     color:'#D4899A'},
+  {k:'more',  label:'Paid more than clocked', color:'#C0392B'},
+  {k:'less',  label:'Paid less than clocked', color:'#2471A3'}];
+// One manager, however their name was typed ("Sue Mckellar" / "Sue McKellar").
+function anMgrKey(n){ return String(n||'Not recorded').trim().toLowerCase().replace(/\s+/g,' '); }
 function anWorkload(P){
   const clocked=P.rows.filter(r=>!r.isLeave&&r.entry.clockIn&&r.shift&&r.emp.role!=='Manager'&&r.entry.date<P.today);
-  const untouched=clocked.filter(r=>!r.entry.manuallyAdjusted&&tsIsAutoApproved({...r.entry,locked:false},r.shift));
-  const adjusted=clocked.filter(r=>r.entry.manuallyAdjusted);
-  const byMgr={};
-  adjusted.forEach(r=>{ const n=r.entry.adjustedBy||'Not recorded'; byMgr[n]=(byMgr[n]||0)+1; });
+  const t=s=>timeToMin(String(s).slice(0,5));
+  const rows=clocked.map(r=>{
+    const e=r.entry, o={r,kind:'auto',diff:0,fin:null,by:e.adjustedBy||null};
+    if(!e.manuallyAdjusted){ o.kind=tsIsAutoApproved({...e,locked:false},r.shift)?'auto':'asis'; return o; }
+    if(!anClockOutOf(e)||anForgotIn(e,r.shift)){ o.kind='missed'; return o; }
+    const fin=resolveFinalTimes(e,r.shift,r.emp); o.fin=fin;
+    if(!fin.finalStart||!fin.finalEnd){ o.kind='kept'; return o; }
+    const d=(t(fin.finalEnd)-t(fin.finalStart))-(t(e.clockOut)-t(e.clockIn));
+    o.diff=d; o.kind=d>2?'more':d<-2?'less':'kept';
+    return o;
+  });
+  const count={}; AN_TS_OUTCOMES.forEach(x=>count[x.k]=rows.filter(o=>o.kind===x.k).length);
+  const mins=k=>rows.filter(o=>o.kind===k).reduce((a,o)=>a+Math.abs(o.diff),0);
   const fin=anFinalisation(P.fnStart);
   let lag=null;
   if(fin){
@@ -9929,8 +9964,9 @@ function anWorkload(P){
     const fdLocal=new Date(rbDateKey(fd)+'T12:00:00');
     lag=Math.round((fdLocal-end)/86400000);
   }
-  return {clocked:clocked.length, untouched:untouched.length, adjusted, byMgr,
-          pct:clocked.length?untouched.length/clocked.length*100:null, fin, lag};
+  const needed=clocked.length-count.auto;
+  return {clocked:clocked.length, rows, count, needed, moreMins:mins('more'), lessMins:mins('less'),
+          pct:clocked.length?needed/clocked.length*100:null, fin, lag};
 }
 
 /* ── formatting & small charts ── */
@@ -10522,6 +10558,14 @@ function anForgotIn(e, shift){
   return !e.clockOut||timeToMin(e.clockOut)-ci<15;
 }
 // inDev / outDev: minutes after the rostered start / finish (outDev null with no clock-out).
+/* The real clock-out, or null. A "clock-out" under 15 minutes after the clock-in is a
+   second tap at arrival, not a departure (found 21 Oct 2026: 11:42–11:42, paid to 20:30,
+   read as leaving 8 hours early and as a manager paying 8h 48m beyond the clock). Same
+   15 minutes as anForgotIn uses for two taps at the end. */
+function anClockOutOf(e){
+  if(!e||!e.clockOut||!e.clockIn) return null;
+  return timeToMin(e.clockOut)-timeToMin(e.clockIn)<15?null:e.clockOut;
+}
 function anIsMoved(inDev,outDev,g){ return inDev>=g&&outDev!=null&&outDev>=g; }
 function anOutside(P){
   const by=new Map();
@@ -10535,7 +10579,7 @@ function anOutside(P){
     o.shifts++;
     const g=GRACE_BY_ROLE[r.emp.role]??10;
     const rs=timeToMin(r.shift.start_time), re=timeToMin(r.shift.end_time);
-    const ci=timeToMin(e.clockIn), co=e.clockOut?timeToMin(e.clockOut):null;
+    const ci=timeToMin(e.clockIn), co=anClockOutOf(e)?timeToMin(e.clockOut):null;
     /* MOVED SHIFT: late in AND late out on the same shift — the same hours worked later,
        usually a shift changed without the roster being updated. Counted on its own and
        LEFT OUT of late-in and late-out (Joel, 21 Oct 2026): it is a roster-keeping issue
@@ -11129,23 +11173,62 @@ function anRenderKiosk(){
 }
 
 /* ── Timesheet workload ── */
+function anHMs(m){ m=Math.round(m); return `${Math.floor(m/60)}h ${String(m%60).padStart(2,'0')}m`; }
 function anRenderWorkload(){
   const r=AN_REPORTS.find(x=>x.id==='workload');
-  const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), P=Ps[5], wl=Ps.map(anWorkload), w=wl[5];
-  let h=anHead(r,'How much manager work each pay period took. "No changes" means the clocked times fell inside the grace period and nobody edited them.');
+  const today=anToday();
+  const P=anPeriod(getPayPeriodStart(_anPPOffset)), Pp=anPeriod(getPayPeriodStart(_anPPOffset-1));
+  const w=anWorkload(P), wp=anWorkload(Pp);
+  const pTxt=anRangeTxt(P.fnStart,anAddDays(P.fnStart,13));
+  let h=anHead(r,'What happened to every clocked shift before it was paid — and where pay differs from the clock. The tiles and lists cover the selected pay period; everything under the range heading covers the range ending with it.');
   h+=anNotice(P);
-  const finTxt=w.fin?`${escHtml(new Date(w.fin.finalized_at).toLocaleDateString('en-AU',{day:'numeric',month:'short'}))}`:(P.complete?'Not yet':'Period still open');
+  const finTxt=w.fin?escHtml(new Date(w.fin.finalized_at).toLocaleDateString('en-AU',{day:'numeric',month:'short'})):(P.complete?'Not yet':'Period still open');
   const lagTxt=w.lag==null?'':(w.lag<=0?'before the period ended':`${w.lag} day${w.lag===1?'':'s'} after the period ended`);
+  const sh=n=>`${n} shift${n===1?'':'s'}`;
   h+=`<div class="an-tiles an-tiles-4">
-    <div class="an-card an-tile static"><span class="an-tl">Approved with no changes</span><span class="an-tv">${anPct(w.pct)}</span><span class="an-td">${anDelta(w.pct,wl[4].pct,'pts',true)}</span></div>
-    <div class="an-card an-tile static"><span class="an-tl">Clocked shifts</span><span class="an-tv">${w.clocked}</span></div>
-    <div class="an-card an-tile static"><span class="an-tl">Times changed by a manager</span><span class="an-tv">${w.adjusted.length}</span><span class="an-td">${anDelta(w.adjusted.length,wl[4].adjusted.length,'',false)}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Needed a manager</span><span class="an-tv">${w.needed}<span class="an-tv-unit"> of ${w.clocked} shifts${w.pct==null?'':` (${w.pct.toFixed(0)}%)`}</span></span><span class="an-td">${w.pct==null||wp.pct==null?'<span class="an-flat">no previous period</span>':anDelta(w.pct,wp.pct,'pts',false)}<br><span class="an-flat">${pTxt}</span></span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Paid more than clocked</span><span class="an-tv ${w.count.more?'an-bad':''}">${w.count.more}<span class="an-tv-unit"> ${w.count.more===1?'shift':'shifts'}</span></span><span class="an-td an-flat">+${anHMs(w.moreMins)} beyond the clock<br>previous period: ${sh(wp.count.more)}, +${anHMs(wp.moreMins)}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Paid less than clocked</span><span class="an-tv">${w.count.less}<span class="an-tv-unit"> ${w.count.less===1?'shift':'shifts'}</span></span><span class="an-td an-flat">−${anHMs(w.lessMins)} against the clock<br>previous period: ${sh(wp.count.less)}</span></div>
     <div class="an-card an-tile static"><span class="an-tl">Finalised</span><span class="an-tv an-tv-sm">${finTxt}</span><span class="an-td an-flat">${w.fin?escHtml(lagTxt)+(w.fin.finalized_by?' · by '+escHtml(w.fin.finalized_by):''):''}</span></div>
   </div>`;
-  h+=anChartCard('Approved with no changes','Share of clocked shifts, per pay period (Tue–Mon).',anBars(starts.map(anShortPeriod),wl.map(x=>x.pct==null?0:x.pct),{shade:anShadeFor(starts),fmt:v=>Math.round(v)+'%',aria:'Share of clocked shifts approved with no changes, last six pay periods',colorFor:(v,i)=>i===5?'#3A6B4F':'#9DBBA8'})+anShadeNote(anShadeFor(starts)));
-  const mgrRows=Object.entries(w.byMgr).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`<tr><td>${escHtml(n)}</td><td class="n">${c}</td></tr>`);
-  h+=`<div class="an-two"><div><div class="an-h2 an-tabletitle">Times changed, by manager</div>${anTable([{t:'Manager'},{t:'Shifts changed',n:1}],mgrRows,{empty:'No times were changed by hand.'})}</div>
-    <div><div class="an-h2 an-tabletitle">Timesheet audit entries</div><div id="an-wl-audit">${anEmpty('Loading…')}</div></div></div>`;
+  // Every clocked shift, by what happened to it — one bar.
+  const tot=Math.max(1,w.clocked);
+  h+=anChartCard('What happened to each clocked shift',`${pTxt} · ${w.clocked} clocked shifts (managers left out). Hover a part for its count.`,
+    w.clocked?`<div class="an-split">${AN_TS_OUTCOMES.filter(x=>w.count[x.k]).map(x=>`<span style="flex:${w.count[x.k]};background:${x.color}" data-tip="${escHtml(`${x.label}: ${w.count[x.k]} of ${w.clocked} (${(w.count[x.k]/tot*100).toFixed(0)}%)`)}"></span>`).join('')}</div>
+      <div class="an-split-key">${AN_TS_OUTCOMES.map(x=>`<div><span class="an-sw" style="background:${x.color}"></span><span>${escHtml(x.label)}</span><strong>${w.count[x.k]}</strong><span class="an-flat">${(w.count[x.k]/tot*100).toFixed(0)}%</span></div>`).join('')}</div>`:anEmpty('No clocked shifts in this pay period yet.'));
+  // Paid more / less — the judgement calls, listed.
+  const byId=anEmpById(), hm=m=>minToTimeStr(Math.max(0,Math.round(m)));
+  const pl=w.rows.filter(o=>o.kind==='more'||o.kind==='less').sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff));
+  h+=`<div class="an-h2 an-tabletitle">Paid more or less than clocked · ${pTxt}</div>`+anTable([{t:'Date'},{t:'Staff member'},{t:'Rostered'},{t:'Clocked'},{t:'Paid'},{t:'Difference',n:1},{t:'Changed by'}],
+    pl.map(o=>{ const e=o.r.entry, s=o.r.shift; return `<tr><td><strong>${escHtml(anDateShort(e.date))}</strong></td><td>${anWho(o.r.emp)}</td><td class="mono">${escHtml(String(s.start_time).slice(0,5))}–${escHtml(String(s.end_time).slice(0,5))}</td><td class="mono">${escHtml(e.clockIn)}–${escHtml(e.clockOut)}</td><td class="mono">${escHtml(o.fin.finalStart)}–${escHtml(o.fin.finalEnd)}</td><td class="n ${o.diff>0?'an-bad':''}">${o.diff>0?'+':'−'}${hm(Math.abs(o.diff))}</td><td>${escHtml(o.by||'Not recorded')}</td></tr>`; }),
+    {empty:'Every edited shift was paid as clocked.'});
+  h+=`<details class="an-details an-cover-rest"><summary>Timesheet audit log · ${pTxt}</summary><div id="an-wl-audit">${anEmpty('Loading…')}</div></details>`;
+  // Range section.
+  const starts=anTrendStarts(), Ps=starts.map(s=>anPeriod(s)), ws=Ps.map(anWorkload), nd=anTrendNoData(starts);
+  const rEnd=[anAddDays(starts[starts.length-1],13),anAddDays(today,-1)].sort()[0], shade=anShadeFor(starts);
+  let tr=anRangeBar(starts[0],rEnd);
+  tr+=anChartCard('Shifts that needed a manager',`${anTrendDesc(starts)}. Share of clocked shifts that did not auto-approve. Hover a period for what happened.`,
+    anLine(starts.map(anTrendLab),ws.map(x=>x.pct??0),{shade,skip:nd.map((x,i)=>x||!ws[i].clocked),color:'#8B2535',fmt:v=>v.toFixed(0)+'%',
+      tipFor:i=>[anPeriodLabel(starts[i]),`Needed a manager: ${ws[i].needed} of ${ws[i].clocked}`].concat(AN_TS_OUTCOMES.map(x=>`   ${x.label}: ${ws[i].count[x.k]}`),[`Paid beyond the clock: +${anHMs(ws[i].moreMins)}`]).join('\n'),
+      aria:'Share of clocked shifts that needed a manager, per pay period'})+anShadeNote(shade));
+  // By manager — names merged regardless of how they were typed.
+  const mg=new Map();
+  ws.forEach(x=>x.rows.forEach(o=>{ if(!o.by||o.kind==='auto'||o.kind==='asis') return; const k=anMgrKey(o.by);
+    if(!mg.has(k)) mg.set(k,{names:{},n:0,kept:0,missed:0,more:0,less:0,moreMins:0}); const m=mg.get(k);
+    m.names[o.by]=(m.names[o.by]||0)+1; m.n++; m[o.kind]++; if(o.kind==='more') m.moreMins+=o.diff; }));
+  const nm=m=>Object.entries(m.names).sort((a,b)=>(/[a-z][A-Z]/.test(b[0])-/[a-z][A-Z]/.test(a[0]))||b[1]-a[1])[0][0];
+  const nz=v=>v?String(v):'<span class="an-flat">–</span>';
+  tr+=`<div class="an-h2 an-tabletitle">Edits by manager</div>`+anTable([{t:'Manager'},{t:'Shifts edited',n:1},{t:'Kept clocked',n:1},{t:'Missed clock',n:1},{t:'Paid more',n:1},{t:'Paid less',n:1}],
+    [...mg.values()].sort((a,b)=>b.n-a.n).map(m=>`<tr><td>${escHtml(nm(m))}</td><td class="n"><strong>${m.n}</strong></td><td class="n">${nz(m.kept)}</td><td class="n">${nz(m.missed)}</td><td class="n">${m.more?`${m.more} <span class="an-flat">+${anHMs(m.moreMins)}</span>`:nz(0)}</td><td class="n">${nz(m.less)}</td></tr>`),
+    {empty:'No shifts were edited in this range.'});
+  // Finalisation history.
+  tr+=`<div class="an-h2 an-tabletitle">Finalisation</div>`+anTable([{t:'Pay period'},{t:'Finalised'},{t:'When',n:1},{t:'By'}],
+    starts.map((s,i)=>({s,x:ws[i],P:Ps[i]})).filter(o=>!anTrendNoData([o.s])[0]).reverse().map(o=>{
+      const f=o.x.fin, lag=o.x.lag;
+      return `<tr><td>${escHtml(anPeriodLabel(o.s))}</td><td>${f?escHtml(new Date(f.finalized_at).toLocaleDateString('en-AU',{day:'numeric',month:'short'})):(o.P.complete?'<span class="an-bad">Not yet</span>':'<span class="an-flat">Still open</span>')}</td><td class="n">${lag==null?'<span class="an-flat">–</span>':lag<=0?'before the end':`${lag} day${lag===1?'':'s'} after`}</td><td>${f&&f.finalized_by?escHtml(f.finalized_by):'<span class="an-flat">–</span>'}</td></tr>`; }),
+    {empty:'No pay periods in this range.'});
+  h+=tr;
+  h+=`<div class="an-foot">Managers are left out: they do not clock. <em>Needed a manager</em> is every clocked shift that would not auto-approve. Paid and clocked are compared as spans (finish minus start), so a break deduction counts neither way; differences of 2 minutes or less count as kept. A forgotten clock-in or missing clock-out set by hand is a <em>missed clock fixed</em>, not a pay judgement — see Kiosk reliability. <em>Changed by</em> is the last manager to edit the shift.</div>`;
   return h;
 }
 /* timesheet_audit is not in loadAll, so it is read here — windowed by date, never
@@ -11380,8 +11463,8 @@ function anPersonShifts(empId, Ps){
     if(String(r.emp.id)!==String(empId)||r.isLeave||!e.clockIn||!r.shift||e.date>=P.today||r.emp.role==='Manager') return;
     if(anForgotIn(e,r.shift)) return;
     const rs=timeToMin(r.shift.start_time), re=timeToMin(r.shift.end_time);
-    out.push({date:e.date, inDev:timeToMin(e.clockIn)-rs, outDev:e.clockOut?timeToMin(e.clockOut)-re:null,
-      clockIn:e.clockIn, clockOut:e.clockOut, rStart:String(r.shift.start_time).slice(0,5), rEnd:String(r.shift.end_time).slice(0,5)});
+    out.push({date:e.date, inDev:timeToMin(e.clockIn)-rs, outDev:anClockOutOf(e)?timeToMin(e.clockOut)-re:null,
+      clockIn:e.clockIn, clockOut:anClockOutOf(e), rStart:String(r.shift.start_time).slice(0,5), rEnd:String(r.shift.end_time).slice(0,5)});
   }));
   return out.sort((a,b)=>a.date.localeCompare(b.date)||a.rStart.localeCompare(b.rStart));
 }
