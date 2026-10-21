@@ -1808,6 +1808,7 @@
   .an-chart { width:100%; height:auto; display:block; font-family:'Nunito',sans-serif; }
   .an-chart .an-ax { font-size:10.5px; fill:var(--muted); font-weight:700; }
   .an-chart .an-ax-m { fill:var(--charcoal); font-weight:800; }
+  .an-chart .an-mark { fill:#8B2535; font-size:9.5px; }
   .an-chart .an-val { font-size:11px; fill:var(--charcoal); font-weight:800; }
   .an-legend { display:flex; flex-wrap:wrap; gap:0.85rem; font-size:0.72rem; font-weight:600; color:var(--text); margin-top:0.5rem; }
   .an-sw { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:0.35rem; vertical-align:-1px; }
@@ -1835,6 +1836,8 @@
   .an-pill.ok.soft { background:transparent; box-shadow:inset 0 0 0 1px var(--success); }
   .an-by { font-size:0.74rem; color:var(--muted); margin-left:0.3rem; }
   .an-cover-rest { margin-top:1rem; }
+  .an-rangebar { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin:1.6rem 0 0.2rem; padding-bottom:0.5rem; border-bottom:1.5px solid var(--border); }
+  .an-rangebar-d { font-weight:600; color:var(--muted); }
   .an-notice.an-notice-bad { background:#FDF1EF; color:#8B2535; border-color:#F2C9C2; margin-bottom:1rem; }
   .an-wd { display:grid; grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); gap:0.6rem; padding-top:0.4rem; }
   .an-wd-cell { display:flex; flex-direction:column; align-items:center; gap:0.25rem; border-radius:10px; padding:0.4rem 0.2rem; cursor:default; }
@@ -9721,6 +9724,12 @@ function anRangeTxt(a,b){
   const f=d=>new Date(d+'T12:00:00').toLocaleDateString('en-AU',yrs?{day:'numeric',month:'short',year:'numeric'}:{day:'numeric',month:'short'});
   return `${f(a)} – ${f(b)}`;
 }
+/* A section heading for everything the range switch governs, when the tiles above follow
+   the pay-period picker instead (Kiosk, Requests): the switch sits on the heading of the
+   things it changes, not in the page header where it read as controlling the tiles. */
+function anRangeBar(from,to){
+  return `<div class="an-rangebar"><div class="an-h2">Last ${escHtml(AN_TRENDS[_anTrend].label)} <span class="an-rangebar-d">· ${anRangeTxt(from,to)}</span></div>${anTrendSeg()}</div>`;
+}
 function anTrendSeg(){
   return `<div class="an-seg an-seg-sm" role="group" aria-label="Trend range">${Object.entries(AN_TRENDS).map(([k,v])=>`<button type="button" class="an-segb${_anTrend===k?' on':''}" onclick="anSetTrend('${k}')" title="Every pay fortnight over ${v.label}">${k}</button>`).join('')}</div>`;
 }
@@ -9866,11 +9875,21 @@ function anKiosk(P){
   const byId=anEmpById();
   const past=P.inPeriod.filter(e=>e.date<P.today);
   const kioskRows=past.filter(e=>String(e.id).startsWith('T'));
-  // A single end-of-shift tap is a forgotten clock-in; it also has no clock-out, so it is
-  // counted once, as forgotIn, and kept out of noOut.
-  const forgotIn=kioskRows.filter(e=>anForgotIn(e,tsShiftForEntry(e,_rosterShifts)));
+  const groups=new Map(), gkey=e=>{ const sh=tsShiftForEntry(e,_rosterShifts); return e.employeeId+'|'+e.date+'|'+(sh?sh.id:'none'); };
+  kioskRows.forEach(e=>{ const k=gkey(e); if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(e); });
+  /* A double tap leaves twin records on one shift, often one complete and one with no
+     clock-out (fixed 21 Oct 2026 — the empty twin was counted as a missed clock-out, though
+     the complete one is what gets paid). An incomplete record only counts when nothing on
+     the same shift is complete, and then once per shift. */
+  const forgot=e=>anForgotIn(e,tsShiftForEntry(e,_rosterShifts));
+  const bad=e=>!!e.clockIn&&(!e.clockOut||forgot(e));
+  const counts=e=>{ const g=groups.get(gkey(e)); if(g.some(x=>x.clockIn&&x.clockOut&&!forgot(x))) return false;
+    return g.filter(bad)[0]===e; };
+  // A single end-of-shift tap is a forgotten clock-in; it also has no clock-out (or one a
+  // few minutes later), so it is counted once, as forgotIn, and kept out of noOut.
+  const forgotIn=kioskRows.filter(e=>bad(e)&&counts(e)&&forgot(e));
   const fset=new Set(forgotIn.map(e=>String(e.id)));
-  const noOut=kioskRows.filter(e=>e.clockIn&&!e.clockOut&&!fset.has(String(e.id)));
+  const noOut=kioskRows.filter(e=>e.clockIn&&!e.clockOut&&counts(e)&&!fset.has(String(e.id)));
   /* Before 11 Aug 2026 paper timesheets ran alongside the kiosk, so a shift typed in by
      a manager — or a rostered block with no entry — was the normal process, not a missed
      clock. Only from AN_SOLE_RECORD_FROM do those count. A kiosk clock-in with no
@@ -9884,13 +9903,11 @@ function anKiosk(P){
   const ids=new Set(_emps.filter(e=>anInScope(e,P.group)).map(e=>String(e.id)));
   let noRecord=[];
   try{ noRecord=tsUnfinalisedForPeriod(ids,P.days,{includeMissing:true}).missing.filter(m=>m.date>=AN_SOLE_RECORD_FROM); }catch(e){ console.warn('anKiosk: missing-block check failed',e); }
-  const groups=new Map();
-  kioskRows.forEach(e=>{
-    const sh=tsShiftForEntry(e,_rosterShifts);
-    const k=e.employeeId+'|'+e.date+'|'+(sh?sh.id:'none');
-    if(!groups.has(k)) groups.set(k,[]);
-    groups.get(k).push(e);
-  });
+  /* The missing-block check sees a block whose only record is an incomplete kiosk tap as
+     having no record, so one shift counted twice — as the bad tap and as no record (fixed
+     21 Oct 2026). A block with a counted kiosk miss that day is that miss, not a second. */
+  const tapped=new Set(noOut.concat(forgotIn).map(e=>e.employeeId+'|'+e.date));
+  noRecord=noRecord.filter(m=>!tapped.has(m.employeeId+'|'+m.date));
   const dupes=[...groups.values()].filter(g=>g.length>1);
   return {taps:kioskRows.length, noOut, forgotIn, mgrAdded, noRecord, dupes,
           total:noOut.length+forgotIn.length+mgrAdded.length+noRecord.length};
@@ -9999,7 +10016,7 @@ function anStack(labels, series, opts={}){
    directly. Counts are printed while they fit (13 columns or fewer); the column hover
    carries every figure and the total at any range. */
 function anMulti(labels, series, opts={}){
-  const W=600, L=72, R=10, T=8, S=opts.strip||46, G=12, B=anAxisB(labels);
+  const W=600, L=Math.max(64,Math.max(...series.map(se=>String(se.label).length))*6.6+14), R=10, T=8, S=opts.strip||46, G=12, B=anAxisB(labels);
   const n=labels.length, slot=(W-L-R)/Math.max(1,n), bw=Math.min(40,slot*0.6);
   const H=T+series.length*(S+G)-G+B, max=Math.max(1,...series.flatMap(se=>se.values)), k=(S-12)/max;
   const fmt=opts.fmt||(v=>String(Math.round(v))), skip=opts.skip||[];
@@ -10248,9 +10265,14 @@ function anLine(labels, values, opts={}){
   values.forEach((v,i)=>{ if(!use[i]) return; const c=opts.color||(v>0.004?'#C0392B':v<-0.004?'#3A6B4F':'#8A7A7D');
     s+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4.5" fill="#fff" stroke="${c}" stroke-width="2.5"/>`; });
   labels.forEach((lab,i)=>{ s+=anAxisAt(labels,i,x(i),H,slot); });
+  // opts.marks: [{at, label}] — a dated event (a kiosk fix, go-live), drawn as a dashed line
+  // at that day's place within its period (at = fractional column index).
+  (opts.marks||[]).forEach(m=>{ const mx=L+m.at*slot; if(mx<L||mx>W-R) return;
+    s+=`<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${T-4}" y2="${(T+ph).toFixed(1)}" stroke="#8B2535" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.7"/>`
+      +`<text x="${(mx+(m.at/n>0.7?-4:4)).toFixed(1)}" y="${T-8}" class="an-ax an-mark" text-anchor="${m.at/n>0.7?'end':'start'}">${escHtml(m.label)}</text>`; });
   // Figures on hover only (Joel, 21 Oct — printed labels overlapped): a transparent column per
   // period carries the instant tooltip and lights up under the pointer.
-  labels.forEach((lab,i)=>{ if(!use[i]) return; s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\n'+fmt(values[i]))}"/>`; });
+  labels.forEach((lab,i)=>{ if(!use[i]) return; s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml(opts.tipFor?opts.tipFor(i):(opts.tipLabels?opts.tipLabels[i]:lab)+'\n'+fmt(values[i]))}"/>`; });
   anTipInit();
   return s+'</svg>';
 }
@@ -10953,7 +10975,7 @@ function anRenderRequests(){
   // ending with it (switch, here in the header), and Waiting now (today, any period).
   const starts=anTrendStarts(), rEnd=[anAddDays(starts[starts.length-1],13),anAddDays(today,-1)].sort()[0];
   const pTxt=anRangeTxt(P.fnStart,anAddDays(P.fnStart,13)), rTxt=anRangeTxt(starts[0],rEnd);
-  let h=anHead(r,`Leave, swap, give-away and cover pick-up requests. The first two tiles and By type cover the selected pay period; the chart and the people tables cover the ${escHtml(AN_TRENDS[_anTrend].label)} ending with it; Waiting now is everything open today.`,anTrendSeg());
+  let h=anHead(r,'Leave, swap, give-away and cover pick-up requests. The tiles and By type cover the selected pay period; Waiting now is everything open today; everything under the range heading covers the range ending with the selected period.');
   h+=anNotice(P);
   h+=`<div class="an-tiles an-tiles-4">
     <div class="an-card an-tile static"><span class="an-tl">Raised</span><span class="an-tv">${reqs.length}</span><span class="an-td">${anDelta(reqs.length,prev.length,'',null)}<br><span class="an-flat">${pTxt}</span></span></div>
@@ -10965,7 +10987,8 @@ function anRenderRequests(){
   const per=starts.map(s=>anReqRaisedIn(all,anPeriod(s)));
   const shade=anShadeFor(starts);
   // Small multiples, not a stack: counts are small and patchy, and the questions are per type.
-  h+=anChartCard('Requests raised per pay period',rTxt+' · '+anTrendDesc(starts)+'. One row per type, all on the same scale. Hover a period for its figures and total.',
+  let tr=anRangeBar(starts[0],rEnd);
+  tr+=anChartCard('Requests raised per pay period',anTrendDesc(starts)+'. One row per type, all on the same scale. Hover a period for its figures and total.',
     anMulti(starts.map(anTrendLab),AN_REQ_TYPES.map(t=>({label:AN_REQ_LABEL[t],color:AN_REQ_COLORS[t],values:per.map(p=>p.filter(q=>q.type===t).length)})),{shade,skip:anTrendNoData(starts),unit:'requests',tipLabels:starts.map(anPeriodLabel),aria:'Requests raised per pay period, one row per type'})
     +anShadeNote(shade));
   // Waiting now
@@ -10987,7 +11010,7 @@ function anRenderRequests(){
   });
   const nz=v=>v?String(v):'<span class="an-flat">–</span>';
   const xs=[...pp.values()].sort((a,b)=>(b.pick+b.gin)-(a.pick+a.gin)||b.swap-a.swap||anName(a.emp).localeCompare(anName(b.emp)));
-  h+=`<div class="an-h2 an-tabletitle">Who takes on extra shifts · ${rTxt}</div>`+anTable([{t:'Staff member'},{t:'Group'},{t:'Taken on',n:1},{t:'Cover',n:1},{t:'Given to them',n:1},{t:'Given away',n:1},{t:'Swaps',n:1}],
+  tr+=`<div class="an-h2 an-tabletitle">Who takes on extra shifts</div>`+anTable([{t:'Staff member'},{t:'Group'},{t:'Taken on',n:1},{t:'Cover',n:1},{t:'Given to them',n:1},{t:'Given away',n:1},{t:'Swaps',n:1}],
     xs.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(staffGroupFor(o.emp))}</td><td class="n"><strong>${nz(o.pick+o.gin)}</strong></td><td class="n">${nz(o.pick)}</td><td class="n">${nz(o.gin)}</td><td class="n">${nz(o.gout)}</td><td class="n">${nz(o.swap)}</td></tr>`),
     {empty:'No approved pick-ups, give-aways or swaps in this range.'});
   // Colleague responses — swaps and give-aways put to a colleague.
@@ -11003,7 +11026,7 @@ function anRenderRequests(){
   });
   const med=a=>{ if(!a.length) return null; const s=a.slice().sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
   const crs=[...cr.values()].sort((a,b)=>(b.none+b.wait)-(a.none+a.wait)||b.asked-a.asked||anName(a.emp).localeCompare(anName(b.emp)));
-  h+=`<div class="an-h2 an-tabletitle">Colleague responses · ${rTxt}</div>`+anTable([{t:'Asked'},{t:'Group'},{t:'Requests',n:1},{t:'Accepted',n:1},{t:'Declined',n:1},{t:'No answer',n:1},{t:'Waiting',n:1},{t:'Answers in',n:1}],
+  tr+=`<div class="an-h2 an-tabletitle">Colleague responses</div>`+anTable([{t:'Asked'},{t:'Group'},{t:'Requests',n:1},{t:'Accepted',n:1},{t:'Declined',n:1},{t:'No answer',n:1},{t:'Waiting',n:1},{t:'Answers in',n:1}],
     crs.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(staffGroupFor(o.emp))}</td><td class="n">${o.asked}</td><td class="n">${nz(o.acc)}</td><td class="n">${nz(o.dec)}</td><td class="n${o.none?' an-bad':''}">${nz(o.none)}</td><td class="n${o.wait?' an-bad':''}">${nz(o.wait)}</td><td class="n">${anFmtWait(med(o.hrs))}</td></tr>`),
     {empty:'No swaps or give-aways were put to a colleague in this range.'});
   // By type, then every request — folded away.
@@ -11019,40 +11042,89 @@ function anRenderRequests(){
     return `<tr><td>${escHtml(new Date(q.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'}))}</td><td>${emp?anWho(emp):escHtml(q.initiatorName||'')}</td><td>${AN_REQ_LABEL[q.type]||escHtml(q.type)}</td><td>${anReqWhat(q)}</td><td>${escHtml(sl[st(q)]||st(q))}</td></tr>`;
   });
   if(list.length) h+=`<details class="an-details an-cover-rest"><summary>Every request raised ${pTxt} (${list.length})</summary>`+anTable([{t:'Raised'},{t:'Raised by'},{t:'Type'},{t:'What'},{t:'Status'}],list)+`</details>`;
+  h+=tr;
   h+=`<div class="an-foot">Colleague (time to answer): raising to the colleague's accept or decline; <em>Answers in</em> is that person's median. Manager (time to decide): from the colleague's answer (or from raising, for leave and pick-ups) to the manager's decision. <em>No answer</em>: the request expired or was handed to the manager without the colleague responding. <em>Duplicate</em>: the same request raised again by the same person — usually a double tap; counted once in Colleague responses. Taken on = cover shifts picked up + shifts given to them by a colleague.</div>`;
   return h;
 }
 
-/* ── Kiosk reliability ── */
+/* ── Kiosk reliability ──
+   Reworked 21 Oct 2026. The question is "are kiosk fixes working", so the headline is a
+   RATE — missed clocks per rostered shift, the Overview's own basis — with dated markers
+   for kiosk changes. Kinds per period as small multiples; what still needs a manager is
+   listed on its own; the full list is folded away. */
+const AN_KIOSK_EVENTS=[{date:'2026-08-11',label:'Kiosk only record'},{date:'2026-10-15',label:'Clock-out fixes'}];
+const AN_KIOSK_KINDS=[
+  {k:'noOut',    label:'No clock-out',          color:'#D4899A'},
+  {k:'forgotIn', label:'Forgot to clock in',    color:'#C45670'},
+  {k:'mgrAdded', label:'Typed in by a manager', color:'#A63245'},
+  {k:'noRecord', label:'No record at all',      color:'#2D2426'}];
 function anRenderKiosk(){
   const r=AN_REPORTS.find(x=>x.id==='kiosk');
-  const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), P=Ps[5], ks=Ps.map(anKiosk), k=ks[5];
-  let h=anHead(r,'Shifts where the kiosk did not produce a complete clock record. Completed days only. Use this to see whether kiosk fixes are working.');
+  const today=anToday(), byId=anEmpById();
+  const P=anPeriod(getPayPeriodStart(_anPPOffset)), Pp=anPeriod(getPayPeriodStart(_anPPOffset-1));
+  const k=anKiosk(P), kp=anKiosk(Pp), base=anRosterShifts(P), baseP=anRosterShifts(Pp);
+  const starts=anTrendStarts(), Ps=starts.map(s=>anPeriod(s)), ks=Ps.map(anKiosk), bases=Ps.map(anRosterShifts), nd=anTrendNoData(starts);
+  const rEnd=[anAddDays(starts[starts.length-1],13),anAddDays(today,-1)].sort()[0];
+  const pTxt=anRangeTxt(P.fnStart,anAddDays(P.fnStart,13)), rTxt=anRangeTxt(starts[0],rEnd);
+  const rate=(kk,b)=>b>0?kk.total/b*100:null;
+  const shade=anShadeFor(starts);
+  let h=anHead(r,'Shifts where the kiosk did not produce a complete clock record, on completed days. The tiles cover the selected pay period; everything under the range heading covers the range ending with it.');
   h+=anNotice(P);
+  const cr=rate(k,base), pr=rate(kp,baseP);
+  const notClocked=k.mgrAdded.length+k.noRecord.length;
   h+=`<div class="an-tiles an-tiles-4">
-    <div class="an-card an-tile static"><span class="an-tl">Forgot to clock in</span><span class="an-tv">${k.forgotIn.length}</span><span class="an-td">${anDelta(k.forgotIn.length,ks[4].forgotIn.length,'',false)}</span></div>
-    <div class="an-card an-tile static"><span class="an-tl">No clock-out</span><span class="an-tv">${k.noOut.length}</span><span class="an-td">${anDelta(k.noOut.length,ks[4].noOut.length,'',false)}</span></div>
-    <div class="an-card an-tile static"><span class="an-tl">Typed in by a manager</span><span class="an-tv">${k.mgrAdded.length}</span><span class="an-td">${anDelta(k.mgrAdded.length,ks[4].mgrAdded.length,'',false)}</span></div>
-    <div class="an-card an-tile static"><span class="an-tl">Rostered, no record at all</span><span class="an-tv">${k.noRecord.length}</span><span class="an-td">${anDelta(k.noRecord.length,ks[4].noRecord.length,'',false)}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Missed clocks</span><span class="an-tv">${k.total}<span class="an-tv-unit"> of ${base} shifts${cr==null?'':` (${cr.toFixed(0)}%)`}</span></span><span class="an-td">${cr==null||pr==null?'<span class="an-flat">no previous period</span>':anDelta(cr,pr,'pts',false)}<br><span class="an-flat">${pTxt}</span></span></div>
+    <div class="an-card an-tile static"><span class="an-tl">No clock-out</span><span class="an-tv">${k.noOut.length}</span><span class="an-td">${anDelta(k.noOut.length,kp.noOut.length,'',false)}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Forgot to clock in</span><span class="an-tv">${k.forgotIn.length}</span><span class="an-td">${anDelta(k.forgotIn.length,kp.forgotIn.length,'',false)}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Not clocked at all</span><span class="an-tv">${notClocked}</span><span class="an-td an-flat">${k.mgrAdded.length} typed in by a manager · ${k.noRecord.length} no record</span></div>
   </div>`;
-  h+=anChartCard('Kiosk misses per pay period','Pay periods (Tue–Mon).',anStack(starts.map(anShortPeriod),[
-    {label:'Forgot to clock in',color:'#E2C4CB',values:ks.map(x=>x.forgotIn.length)},
-    {label:'No clock-out',color:'#D4899A',values:ks.map(x=>x.noOut.length)},
-    {label:'Typed in by a manager',color:'#A63245',values:ks.map(x=>x.mgrAdded.length)},
-    {label:'No record at all',color:'#2D2426',values:ks.map(x=>x.noRecord.length)}],{shade:anShadeFor(starts),aria:'Kiosk misses by kind, last six pay periods'})+anShadeNote(anShadeFor(starts))
-    +anLegend([{label:'Forgot to clock in',color:'#E2C4CB'},{label:'No clock-out',color:'#D4899A'},{label:'Typed in by a manager',color:'#A63245'},{label:'No record at all',color:'#2D2426'}]));
-  const byId=anEmpById();
+  // Rate line, with kiosk changes marked where they fall.
+  const marks=AN_KIOSK_EVENTS.map(ev=>{ for(let i=starts.length-1;i>=0;i--){ if(ev.date>=starts[i]){ const off=(new Date(ev.date+'T12:00:00')-new Date(starts[i]+'T12:00:00'))/864e5; return off<14?{at:i+off/14,label:ev.label}:null; } } return null; }).filter(Boolean);
+  const rates=ks.map((kk,i)=>rate(kk,bases[i])??0);
+  let tr=anRangeBar(starts[0],rEnd);
+  tr+=anChartCard('Missed clocks per rostered shift',`${anTrendDesc(starts)}. Dashed lines mark kiosk changes. Hover a period for its figures.`,
+    anLine(starts.map(anTrendLab),rates,{shade,skip:nd.map((x,i)=>x||!bases[i]),marks,color:'#8B2535',fmt:v=>v.toFixed(1)+'%',
+      tipFor:i=>[anPeriodLabel(starts[i]),`Missed clocks: ${ks[i].total} of ${bases[i]} shifts (${rates[i].toFixed(1)}%)`].concat(AN_KIOSK_KINDS.map(x=>`   ${x.label}: ${ks[i][x.k].length}`)).join('\n'),
+      aria:'Missed clocks as a share of rostered shifts, per pay period'})+anShadeNote(shade));
+  tr+=anChartCard('Missed clocks by kind',`Counts per pay period, one row per kind on the same scale.`,
+    anMulti(starts.map(anTrendLab),AN_KIOSK_KINDS.map(x=>({label:{noOut:'No clock-out',forgotIn:'Forgot in',mgrAdded:'Typed in',noRecord:'No record'}[x.k],color:x.color,values:ks.map(kk=>kk[x.k].length)})),{shade,skip:nd,unit:'missed',tipLabels:starts.map(anPeriodLabel),aria:'Missed clocks by kind, per pay period'}));
+  // Still to fix — completed days in periods not yet finalised, where pay is still missing.
+  const todo=[];
+  for(let i=0;i<8;i++){ const fs=getPayPeriodStart(-i); if(i>0&&anIsFinalised(fs)) continue; if(fs>today) continue;
+    const Q=anPeriod(fs), kk=anKiosk(Q);
+    kk.noOut.forEach(e=>{ if(!e.finalEnd) todo.push({date:e.date,emp:byId.get(String(e.employeeId)),what:'No clock-out',need:`In at ${escHtml(e.clockIn)} — set a finish time`}); });
+    kk.forgotIn.forEach(e=>{ if(!e.finalEnd||!e.finalStart) todo.push({date:e.date,emp:byId.get(String(e.employeeId)),what:'Forgot to clock in',need:`One tap at ${escHtml(e.clockIn)} — set the start and finish`}); });
+    kk.noRecord.forEach(m=>todo.push({date:m.date,emp:byId.get(String(m.employeeId)),what:'No record at all',need:`Rostered ${escHtml(m.start)}–${escHtml(m.end)} — add the shift or mark it not worked`}));
+  }
+  todo.sort((a,b)=>a.date.localeCompare(b.date));
+  h+=`<div class="an-h2 an-tabletitle">Still to fix · pay periods not yet finalised</div>`+anTable([{t:'Date'},{t:'Staff member'},{t:'What happened'},{t:'Needed'}],
+    todo.map(i=>`<tr class="an-row-bad"><td><strong>${escHtml(anDateShort(i.date))}</strong></td><td>${i.emp?anWho(i.emp):'Unknown'}</td><td>${escHtml(i.what)}</td><td>${i.need} · <strong>not paid yet</strong></td></tr>`),
+    {empty:'Nothing waiting — every missed clock in an open pay period has its times set.'});
+  // By person over the range: misses out of their rostered shifts.
+  const pp=new Map(), get=e=>{ const id=String(e.id); if(!pp.has(id)) pp.set(id,{emp:e,shifts:0,noOut:0,forgotIn:0,mgrAdded:0,noRecord:0}); return pp.get(id); };
+  Ps.forEach((Q,i)=>{
+    Q.rostered.filter(x=>x.date<Q.today&&!x.onLeave&&x.emp&&x.emp.role!=='Manager').forEach(x=>get(x.emp).shifts++);
+    AN_KIOSK_KINDS.forEach(kd=>ks[i][kd.k].forEach(e=>{ const emp=byId.get(String(e.employeeId)); if(emp&&emp.role!=='Manager'&&anInScope(emp)) get(emp)[kd.k]++; }));
+  });
+  const tot=o=>o.noOut+o.forgotIn+o.mgrAdded+o.noRecord;
+  // Fewer than 5 rostered shifts gives no meaningful rate — those sort to the bottom.
+  const rk=o=>o.shifts>=5?tot(o)/o.shifts:-1;
+  const people=[...pp.values()].filter(o=>o.shifts>0||tot(o)>0).sort((a,b)=>rk(b)-rk(a)||tot(b)-tot(a)||anName(a.emp).localeCompare(anName(b.emp)));
+  const nz=v=>v?String(v):'<span class="an-flat">–</span>';
+  tr+=`<div class="an-h2 an-tabletitle">By person</div>`+anTable([{t:'Staff member'},{t:'Group'},{t:'Missed',n:1},{t:'No clock-out',n:1},{t:'Forgot in',n:1},{t:'Typed in',n:1},{t:'No record',n:1}],
+    people.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(staffGroupFor(o.emp))}</td><td class="n"><strong>${tot(o)}</strong> <span class="an-flat">of ${o.shifts}${o.shifts&&tot(o)<=o.shifts?` (${(tot(o)/o.shifts*100).toFixed(0)}%)`:''}</span></td><td class="n">${nz(o.noOut)}</td><td class="n">${nz(o.forgotIn)}</td><td class="n">${nz(o.mgrAdded)}</td><td class="n">${nz(o.noRecord)}</td></tr>`),
+    {empty:'No rostered shifts in this range.'});
+  // Every miss in the selected period, folded away.
   const items=[];
   k.forgotIn.forEach(e=>items.push({date:e.date,emp:byId.get(String(e.employeeId)),what:'Forgot to clock in',detail:`One tap at ${escHtml(e.clockIn)}, at the end of the shift — taken as the clock-in`}));
   k.noOut.forEach(e=>items.push({date:e.date,emp:byId.get(String(e.employeeId)),what:'No clock-out',detail:`In at ${escHtml(e.clockIn)}${e.finalEnd?' · finish set to '+escHtml(e.finalEnd):' · <strong>no finish time yet</strong>'}`}));
   k.mgrAdded.forEach(e=>items.push({date:e.date,emp:byId.get(String(e.employeeId)),what:'Typed in by a manager',detail:`${escHtml(e.finalStart||e.clockIn||'')}–${escHtml(e.finalEnd||e.clockOut||'')}${e.adjustedBy?' · by '+escHtml(e.adjustedBy):''}`}));
   k.noRecord.forEach(m=>items.push({date:m.date,emp:byId.get(String(m.employeeId)),what:'No record at all',detail:`Rostered ${escHtml(m.start)}–${escHtml(m.end)} (${m.hours.toFixed(2)}h) — <strong>not paid</strong>`}));
   items.sort((a,b)=>b.date.localeCompare(a.date));
-  h+=anTable([{t:'Date'},{t:'Staff member'},{t:'What happened'},{t:'Detail'}],
-    items.map(i=>`<tr><td><strong>${escHtml(anDateShort(i.date))}</strong></td><td>${i.emp?anWho(i.emp):'Unknown'}</td><td>${escHtml(i.what)}</td><td>${i.detail}</td></tr>`),
-    {empty:'No kiosk misses in this pay period.'});
-  if(k.dupes.length) h+=`<div class="an-foot">${k.dupes.length} shift${k.dupes.length===1?' has':'s have'} more than one kiosk record (usually a double tap). Duplicates cost nobody pay — the export keeps one — so they are not counted as misses.</div>`;
-  h+=`<div class="an-foot">"No record at all" is the same check the MYOB export warns about: a rostered block with no timesheet entry, which is not paid unless someone adds it. Managers are left out of "typed in": they are not expected to clock.</div>`;
+  if(items.length) h+=`<details class="an-details an-cover-rest"><summary>Every missed clock · ${pTxt} (${items.length})</summary>`+anTable([{t:'Date'},{t:'Staff member'},{t:'What happened'},{t:'Detail'}],
+    items.map(i=>`<tr><td><strong>${escHtml(anDateShort(i.date))}</strong></td><td>${i.emp?anWho(i.emp):'Unknown'}</td><td>${escHtml(i.what)}</td><td>${i.detail}</td></tr>`))+`</details>`;
+  h+=tr;
+  h+=`<div class="an-foot">Missed clocks are counted against rostered shifts on completed days, not leave — the same basis as the Overview. A double tap leaves twin kiosk records on one shift; it counts as a miss only if no record on that shift is complete, and then once${k.dupes.length?` (${k.dupes.length} double tap${k.dupes.length===1?'':'s'} in this period)`:''}. "No record at all" is the same check the MYOB export warns about. Managers are left out of "typed in" and By person: they are not expected to clock.</div>`;
   return h;
 }
 
