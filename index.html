@@ -1804,6 +1804,7 @@
   .an-open { border:none; background:none; font-family:'Nunito',sans-serif; font-size:0.74rem; font-weight:800; color:var(--burgundy); cursor:pointer; white-space:nowrap; padding:0; }
   .an-chart { width:100%; height:auto; display:block; font-family:'Nunito',sans-serif; }
   .an-chart .an-ax { font-size:10.5px; fill:var(--muted); font-weight:700; }
+  .an-chart .an-ax-m { fill:var(--charcoal); font-weight:800; }
   .an-chart .an-val { font-size:11px; fill:var(--charcoal); font-weight:800; }
   .an-legend { display:flex; flex-wrap:wrap; gap:0.85rem; font-size:0.72rem; font-weight:600; color:var(--text); margin-top:0.5rem; }
   .an-sw { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:0.35rem; vertical-align:-1px; }
@@ -9716,6 +9717,28 @@ function anTrendSeg(){
 // Axis date labels thin to every second one past 13 periods — the labels only; every
 // period keeps its point and its hover. The newest label is always shown.
 function anShowAxisLabel(i,n){ return n<=13||((n-1-i)%2===0); }
+/* Two-row date axis (21 Oct 2026): when every label is a "D Mon" date, each column gets its
+   day number and the month is written once, under the first column that falls in it, with
+   a faint divider at the month change — every period labelled at any range, no thinning.
+   Other labels fall back to one row, thinned past 13. */
+const AN_DM=/^(\d{1,2}) ([A-Z][a-z]{2,4})$/;
+function anAxisTwoRow(labels){ return labels.length>1&&labels.every(l=>AN_DM.test(String(l))); }
+function anAxisB(labels){ return anAxisTwoRow(labels)?42:30; }
+function anAxisAt(labels,i,cx,H,slot){
+  const n=labels.length;
+  if(!anAxisTwoRow(labels)) return anShowAxisLabel(i,n)?`<text x="${cx.toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(labels[i])}</text>`:'';
+  const [,d,m]=String(labels[i]).match(AN_DM), mon=j=>String(labels[j]).match(AN_DM)[2];
+  let s=`<text x="${cx.toFixed(1)}" y="${H-24}" class="an-ax" text-anchor="middle">${d}</text>`;
+  if(i===0||mon(i-1)!==m){
+    const left=cx-slot/2;
+    if(i>0) s+=`<line x1="${left.toFixed(1)}" x2="${left.toFixed(1)}" y1="${H-36}" y2="${H-2}" stroke="#E6D6DA"/>`;
+    // A month with one column at the left edge has no room for its name — the next month's
+    // divider shows where it ends.
+    let w=1; while(i+w<n&&mon(i+w)===m) w++;
+    if(w*slot>=26||i>0) s+=`<text x="${(left+4).toFixed(1)}" y="${H-7}" class="an-ax an-ax-m">${escHtml(m.slice(0,3))}</text>`;
+  }
+  return s;
+}
 const anTrendLab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
 function anRecentStarts(n){ const out=[]; for(let i=n-1;i>=0;i--) out.push(getPayPeriodStart(_anPPOffset-i)); return out; }
 function anInScope(emp, group=_anGroup){ return !!emp&&!emp.is_placeholder&&(!group||staffGroupFor(emp)===group); }
@@ -9906,7 +9929,7 @@ function anSpark(vals){
 }
 /* Vertical bars with a zero line — negative values go below it. */
 function anBars(labels, values, opts={}){
-  const W=600, H=opts.height||210, L=44, R=10, T=22, B=30;
+  const W=600, H=(opts.height||210)+anAxisB(labels)-30, L=44, R=10, T=22, B=anAxisB(labels);
   const fmt=opts.fmt||(v=>String(Math.round(v)));
   const vmax=Math.max(0,...values), vmin=Math.min(0,...values);
   const span=(vmax-vmin)||1, ph=H-T-B, y=v=>T+(vmax-v)/span*ph;
@@ -9922,7 +9945,7 @@ function anBars(labels, values, opts={}){
     s+=`<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="4" fill="${col}"/>`;
     const ly=v>=0?top-6:top+hh+13;
     s+=`<text x="${(x+bw/2).toFixed(1)}" y="${ly.toFixed(1)}" class="an-val" text-anchor="middle">${escHtml(fmt(v))}</text>`;
-    s+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(labels[i])}</text>`;
+    s+=anAxisAt(labels,i,x+bw/2,H,slot);
   });
   return s+'</svg>';
 }
@@ -9930,7 +9953,7 @@ function anBars(labels, values, opts={}){
 function anStack(labels, series, opts={}){
   // Totals are printed above each column (counts, not %), so leave room for them at the
   // top — at T=12 the tallest column's label was cut off by the chart edge.
-  const W=600, H=opts.height||210, L=44, R=10, T=opts.percent?12:26, B=30, ph=H-T-B;
+  const W=600, H=(opts.height||210)+anAxisB(labels)-30, L=44, R=10, T=opts.percent?12:26, B=anAxisB(labels), ph=H-T-B;
   const n=labels.length, slot=(W-L-R)/Math.max(1,n), bw=Math.min(48,slot*0.6);
   const totals=labels.map((_,i)=>series.reduce((a,s)=>a+(s.values[i]||0),0));
   const max=opts.percent?100:Math.max(1,...totals);
@@ -9950,7 +9973,7 @@ function anStack(labels, series, opts={}){
     // Column totals are printed only while they fit (13 columns or fewer); past that they
     // overlap, and the column hover below carries them instead.
     if(!opts.percent&&totals[i]>0&&n<=13) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(yy-5).toFixed(1)}" class="an-val" text-anchor="middle">${escHtml(fmt(totals[i]))}</text>`;
-    if(anShowAxisLabel(i,n)) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`;
+    s+=anAxisAt(labels,i,x+bw/2,H,slot);
   });
   // One hover per column: the period, its total and every category in it — instant, and
   // above the per-block titles, so the figures are there however many columns there are.
@@ -10169,7 +10192,7 @@ function anDiffCls(v){ return v>0.004?'an-bad':v<-0.004?'an-good':'an-flat'; }
    beside each point (above when positive, below when negative). opts.skip[i] leaves a
    point out (e.g. a future period with nothing paid), breaking the line there. */
 function anLine(labels, values, opts={}){
-  const W=600, H=opts.height||230, L=48, R=14, T=20, B=30, ph=H-T-B;
+  const W=600, H=(opts.height||230)+anAxisB(labels)-30, L=48, R=14, T=20, B=anAxisB(labels), ph=H-T-B;
   const fmt=opts.fmt||(v=>String(Math.round(v)));
   const use=values.map((v,i)=>!(opts.skip&&opts.skip[i]));
   const vs=values.filter((_,i)=>use[i]);
@@ -10185,7 +10208,7 @@ function anLine(labels, values, opts={}){
   // opts.color: one colour for every point (a share, not a gain or loss).
   values.forEach((v,i)=>{ if(!use[i]) return; const c=opts.color||(v>0.004?'#C0392B':v<-0.004?'#3A6B4F':'#8A7A7D');
     s+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4.5" fill="#fff" stroke="${c}" stroke-width="2.5"/>`; });
-  labels.forEach((lab,i)=>{ if(anShowAxisLabel(i,n)) s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  labels.forEach((lab,i)=>{ s+=anAxisAt(labels,i,x(i),H,slot); });
   // Figures on hover only (Joel, 21 Oct — printed labels overlapped): a transparent column per
   // period carries the instant tooltip and lights up under the pointer.
   labels.forEach((lab,i)=>{ if(!use[i]) return; s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\n'+fmt(values[i]))}"/>`; });
@@ -10302,7 +10325,7 @@ function anMix(P){
    above each point) and b (percent, right axis, burgundy, labelled below). The hours axis
    does not start at zero — the movement is the point and the axis says where it starts. */
 function anDualLine(labels, a, b, opts={}){
-  const W=600, H=opts.height||250, L=52, R=44, T=26, B=30, ph=H-T-B;
+  const W=600, H=(opts.height||250)+anAxisB(labels)-30, L=52, R=44, T=26, B=anAxisB(labels), ph=H-T-B;
   const n=labels.length, slot=(W-L-R)/Math.max(1,n), x=i=>L+i*slot+slot/2;
   // opts.skip[i]: no point, line gap and no hover for that period (e.g. before any data).
   const use=a.map((_,i)=>!(opts.skip&&opts.skip[i])), au=a.filter((_,i)=>use[i]), bu=b.filter((_,i)=>use[i]);
@@ -10321,7 +10344,7 @@ function anDualLine(labels, a, b, opts={}){
   s+=line(b,yb,'#8B2535',true)+line(a,ya,'#2D2426',false);
   b.forEach((v,i)=>{ if(!use[i]) return; s+=`<circle cx="${x(i).toFixed(1)}" cy="${yb(v).toFixed(1)}" r="3.5" fill="#fff" stroke="#8B2535" stroke-width="2"/>`; });
   a.forEach((v,i)=>{ if(!use[i]) return; s+=`<circle cx="${x(i).toFixed(1)}" cy="${ya(v).toFixed(1)}" r="4" fill="#2D2426"/>`; });
-  labels.forEach((lab,i)=>{ if(anShowAxisLabel(i,n)) s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  labels.forEach((lab,i)=>{ s+=anAxisAt(labels,i,x(i),H,slot); });
   // Both figures for a period on hover, from anywhere in its column (no printed labels).
   labels.forEach((lab,i)=>{ if(!use[i]) return; s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\nCost-weighted hours: '+anH(a[i])+'\nAt penalty rates: '+b[i].toFixed(1)+'%')}"/>`; });
   anTipInit();
@@ -10470,7 +10493,7 @@ function anMins(m){ if(!m) return '<span class="an-flat">–</span>'; const h=Ma
 /* Several series on one shared axis (here two percentages); figures on hover per column.
    series: [{label,color,values,dash}]. opts.skip[i] leaves period i out entirely. */
 function anLines(labels, series, opts={}){
-  const W=600, H=opts.height||230, L=48, R=14, T=20, B=30, ph=H-T-B, n=labels.length, slot=(W-L-R)/Math.max(1,n), x=i=>L+i*slot+slot/2;
+  const W=600, H=(opts.height||230)+anAxisB(labels)-30, L=48, R=14, T=20, B=anAxisB(labels), ph=H-T-B, n=labels.length, slot=(W-L-R)/Math.max(1,n), x=i=>L+i*slot+slot/2;
   const use=labels.map((_,i)=>!(opts.skip&&opts.skip[i]));
   const all=series.flatMap(se=>se.values.filter((_,i)=>use[i]));
   const max=Math.max(opts.minMax||1,...all)*1.15, y=v=>T+ph-v/max*ph, fmt=opts.fmt||(v=>String(Math.round(v)));
@@ -10480,7 +10503,7 @@ function anLines(labels, series, opts={}){
   series.forEach(se=>{ const segs=[]; let cur=[]; se.values.forEach((v,i)=>{ if(use[i]) cur.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`); else { if(cur.length) segs.push(cur); cur=[]; } }); if(cur.length) segs.push(cur);
     segs.forEach(pts=>{ if(pts.length>1) s+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${se.color}" stroke-width="2.2" stroke-linejoin="round"${se.dash?' stroke-dasharray="5 4"':''}/>`; });
     se.values.forEach((v,i)=>{ if(use[i]) s+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.8" fill="#fff" stroke="${se.color}" stroke-width="2.2"/>`; }); });
-  labels.forEach((lab,i)=>{ if(anShowAxisLabel(i,n)) s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  labels.forEach((lab,i)=>{ s+=anAxisAt(labels,i,x(i),H,slot); });
   labels.forEach((lab,i)=>{ if(!use[i]) return; s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml([(opts.tipLabels?opts.tipLabels[i]:lab)].concat(series.map(se=>se.label+': '+(opts.tipFmt||fmt)(se.values[i],i,se))).join('\n'))}"/>`; });
   anTipInit();
   return s+'</svg>'+`<div class="an-legend">${series.map(se=>`<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="${se.color}" stroke-width="2.2"${se.dash?' stroke-dasharray="5 4"':''}/><circle cx="11" cy="5" r="3" fill="#fff" stroke="${se.color}" stroke-width="2"/></svg> ${escHtml(se.label)}</span>`).join('')}</div>`;
@@ -10723,7 +10746,7 @@ function anLeaveDays(group=_anGroup){
 /* Diverging columns over time: `up` series stack above the zero line, `down` below it, each
    anchored to the line so either side's trend reads straight off. */
 function anDivCols(labels, up, down, opts={}){
-  const W=600, H=opts.height||240, L=44, R=10, T=20, B=30, Z=16;
+  const W=600, H=(opts.height||240)+anAxisB(labels)-30, L=44, R=10, T=20, B=anAxisB(labels), Z=16;
   const n=labels.length, slot=(W-L-R)/Math.max(1,n), bw=Math.min(48,slot*0.6);
   const sum=(ser,i)=>ser.reduce((a,s)=>a+(s.values[i]||0),0);
   const ups=labels.map((_,i)=>sum(up,i)), dns=labels.map((_,i)=>sum(down,i));
@@ -10745,7 +10768,7 @@ function anDivCols(labels, up, down, opts={}){
       down.forEach(se=>{ const v=se.values[i]||0; if(v<=0) return; const hh=v*k; s+=`<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,hh-1).toFixed(1)}" fill="${se.color}"/>`; yy+=hh; });
       if(dns[i]>0&&n<=13) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(yy+11).toFixed(1)}" class="an-val" text-anchor="middle">${escHtml(fmt(dns[i]))}</text>`;
     }
-    if(anShowAxisLabel(i,n)) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-8}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`;
+    s+=anAxisAt(labels,i,x+bw/2,H,slot);
   });
   labels.forEach((lab,i)=>{ if(skip[i]) return;
     const part=(ser,tot,name)=>[`${name}: ${fmt(tot)}`].concat(ser.filter(se=>(se.values[i]||0)>0).map(se=>`   ${se.label}: ${fmt(se.values[i])}`));
