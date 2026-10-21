@@ -1831,6 +1831,15 @@
   .an-pill.ok.soft { background:transparent; box-shadow:inset 0 0 0 1px var(--success); }
   .an-by { font-size:0.74rem; color:var(--muted); margin-left:0.3rem; }
   .an-cover-rest { margin-top:1rem; }
+  .an-notice.an-notice-bad { background:#FDF1EF; color:#8B2535; border-color:#F2C9C2; margin-bottom:1rem; }
+  .an-wd { display:grid; grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); gap:0.6rem; padding-top:0.4rem; }
+  .an-wd-cell { display:flex; flex-direction:column; align-items:center; gap:0.25rem; border-radius:10px; padding:0.4rem 0.2rem; cursor:default; }
+  .an-wd-cell:hover { background:var(--blush-lt); }
+  .an-wd-d { font-size:0.74rem; font-weight:800; color:var(--muted); }
+  .an-wd-bar { width:28px; height:70px; background:#F6EEF0; border-radius:6px; display:flex; align-items:flex-end; overflow:hidden; }
+  .an-wd-bar span { display:block; width:100%; background:#A07228; border-radius:6px 6px 0 0; }
+  .an-wd-v { font-family:'Lora',serif; font-size:1rem; font-weight:600; color:var(--charcoal); }
+  .an-wd-n { font-size:0.68rem; color:var(--muted); }
   .an-empty { padding:1.5rem; text-align:center; color:var(--muted); font-size:0.8rem; font-weight:600; }
   .an-foot { font-size:0.7rem; color:var(--muted); font-weight:500; line-height:1.55; padding:0 0.2rem; max-width:900px; }
   .an-div { display:flex; flex-direction:column; gap:0.35rem; }
@@ -9926,7 +9935,7 @@ function anStack(labels, series, opts={}){
   const totals=labels.map((_,i)=>series.reduce((a,s)=>a+(s.values[i]||0),0));
   const max=opts.percent?100:Math.max(1,...totals);
   const fmt=opts.fmt||(v=>String(Math.round(v)));
-  let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
+  let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`+(opts.defs?`<defs>${opts.defs}</defs>`:'');
   if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return;
     s+=`<rect x="${(L+i*slot+3).toFixed(1)}" y="2" width="${(slot-6).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}><title>${sh==='current'?'Still running — incomplete':'Before 11 Aug 2026 — may be incomplete'}</title></rect>`; });
   [0,0.5,1].forEach(f=>{ const yy=T+ph*(1-f); s+=`<line x1="${L}" x2="${W-R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#F0E4E7"/><text x="${L-6}" y="${(yy+4).toFixed(1)}" class="an-ax" text-anchor="end">${opts.percent?Math.round(f*100)+'%':escHtml(fmt(max*f))}</text>`; });
@@ -10672,45 +10681,158 @@ function anRenderCover(){
   return h;
 }
 
-/* ── Leave patterns ── */
+/* ── Leave patterns ──
+   Reworked 21 Oct 2026. Public holidays are left out everywhere — nobody chose them, and
+   they swamped the pattern (Melbourne Cup week read as 14 days of leave). Planned = annual
+   and long service; unplanned = personal/carer's, compassionate, unpaid — the same split
+   as the Overview's Unplanned leave tile. One person on leave on one date is one day,
+   however many hours.
+   Booked-ahead leave also reads APPROVED REQUESTS: approving leave for dates with no
+   roster yet writes nothing, so the roster alone made months ahead look empty. A
+   request day with no leave entry is counted where the person is rostered to work that
+   date — a CLASH: the roster was built after approval and never marked the leave — or,
+   with nothing rostered, on the weekdays they usually work (their roster, last 8 weeks),
+   skipping public holidays and days marked off. */
+const AN_LEAVE_PLANNED=['annual_leave','long_service_leave'], AN_LEAVE_UNPLANNED=['personal_leave','compassionate_leave','unpaid_leave'];
+const AN_LEAVE_COLORS={annual_leave:'#3A6B4F',long_service_leave:'#2471A3',personal_leave:'#A07228',compassionate_leave:'#8B2535',unpaid_leave:'#C9B79A'};
+function anLeaveDays(group=_anGroup){
+  const today=anToday(), byId=anEmpById(), seen=new Set(), out=[];
+  _entries.forEach(e=>{
+    const lt=e.deleted?null:anLeaveOf(e); if(!lt||lt==='public_holiday') return;
+    const emp=byId.get(String(e.employeeId)); if(!anInScope(emp,group)) return;
+    const k=e.employeeId+'|'+e.date; if(seen.has(k)) return; seen.add(k);
+    out.push({emp,date:e.date,type:lt,src:'roster',future:e.date>today});
+  });
+  const from=anAddDays(today,-56), usual=new Map();
+  _rosterShifts.forEach(s=>{ if(s.date<from||s.date>today||s.is_day_off||!s.start_time) return;
+    const k=String(s.employee_id); if(!usual.has(k)) usual.set(k,new Set()); usual.get(k).add(new Date(s.date+'T12:00:00').getDay()); });
+  (_requests||[]).filter(r=>r.type==='leave'&&r.status==='approved'&&r.leaveStartDate&&r.leaveEndDate>today&&r.leaveType!=='public_holiday').forEach(r=>{
+    const emp=byId.get(String(r.initiatorId)); if(!anInScope(emp,group)) return;
+    const wd=usual.get(String(emp.id))||new Set([1,2,3,4,5]);
+    for(let d=r.leaveStartDate>today?r.leaveStartDate:anAddDays(today,1); d<=r.leaveEndDate; d=anAddDays(d,1)){
+      const k=emp.id+'|'+d; if(seen.has(k)||_publicHolidays.has(d)) continue;
+      const mine=_rosterShifts.filter(s=>s.date===d&&String(s.employee_id)===String(emp.id));
+      const working=mine.some(s=>!s.is_day_off&&s.start_time&&!s.on_leave);
+      if(!working&&(mine.length||!wd.has(new Date(d+'T12:00:00').getDay()))) continue;
+      seen.add(k);
+      out.push({emp,date:d,type:r.leaveType,src:working?'clash':'request',future:true});
+    }
+  });
+  return out;
+}
+/* Diverging columns over time: `up` series stack above the zero line, `down` below it, each
+   anchored to the line so either side's trend reads straight off. */
+function anDivCols(labels, up, down, opts={}){
+  const W=600, H=opts.height||240, L=44, R=10, T=20, B=30, Z=16;
+  const n=labels.length, slot=(W-L-R)/Math.max(1,n), bw=Math.min(48,slot*0.6);
+  const sum=(ser,i)=>ser.reduce((a,s)=>a+(s.values[i]||0),0);
+  const ups=labels.map((_,i)=>sum(up,i)), dns=labels.map((_,i)=>sum(down,i));
+  const mu=Math.max(1,...ups), md=Math.max(1,...dns);
+  const ph=H-T-B-Z, hu=ph*mu/(mu+md), y0=T+hu, k=hu/mu;
+  const fmt=opts.fmt||(v=>String(Math.round(v))), skip=opts.skip||[];
+  let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
+  if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return;
+    s+=`<rect x="${(L+i*slot+3).toFixed(1)}" y="2" width="${(slot-6).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}></rect>`; });
+  [[mu,y0-mu*k],[md,y0+md*k]].forEach(([v,yy])=>{ s+=`<line x1="${L}" x2="${W-R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#F0E4E7"/><text x="${L-6}" y="${(yy+4).toFixed(1)}" class="an-ax" text-anchor="end">${escHtml(fmt(v))}</text>`; });
+  s+=`<line x1="${L}" x2="${W-R}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}" stroke="#D9C4C8" stroke-width="1.5"/><text x="${L-6}" y="${(y0+4).toFixed(1)}" class="an-ax" text-anchor="end">0</text>`;
+  labels.forEach((lab,i)=>{
+    const x=L+i*slot+(slot-bw)/2;
+    if(!skip[i]){
+      let yy=y0;
+      up.forEach(se=>{ const v=se.values[i]||0; if(v<=0) return; const hh=v*k; yy-=hh; s+=`<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,hh-1).toFixed(1)}" fill="${se.color}"/>`; });
+      if(ups[i]>0&&n<=13) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(yy-5).toFixed(1)}" class="an-val" text-anchor="middle">${escHtml(fmt(ups[i]))}</text>`;
+      yy=y0+1;
+      down.forEach(se=>{ const v=se.values[i]||0; if(v<=0) return; const hh=v*k; s+=`<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,hh-1).toFixed(1)}" fill="${se.color}"/>`; yy+=hh; });
+      if(dns[i]>0&&n<=13) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(yy+11).toFixed(1)}" class="an-val" text-anchor="middle">${escHtml(fmt(dns[i]))}</text>`;
+    }
+    if(anShowAxisLabel(i,n)) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-8}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`;
+  });
+  labels.forEach((lab,i)=>{ if(skip[i]) return;
+    const part=(ser,tot,name)=>[`${name}: ${fmt(tot)}`].concat(ser.filter(se=>(se.values[i]||0)>0).map(se=>`   ${se.label}: ${fmt(se.values[i])}`));
+    const lines=[opts.tipLabels?opts.tipLabels[i]:lab].concat(part(up,ups[i],opts.upLabel||'Above'),part(down,dns[i],opts.downLabel||'Below'));
+    s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T}" width="${slot.toFixed(1)}" height="${(ph+Z).toFixed(1)}" data-tip="${escHtml(lines.join('\n'))}"/>`; });
+  anTipInit();
+  return s+'</svg>';
+}
 function anRenderLeave(){
   const r=AN_REPORTS.find(x=>x.id==='leave');
-  const today=anToday(), byId=anEmpById();
-  const t=new Date(today+'T12:00:00');
-  const months=[]; for(let i=11;i>=0;i--){ const d=new Date(t.getFullYear(),t.getMonth()-i,1); months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }
-  const types=Object.keys(LEAVE_TYPES);
-  const colors={annual_leave:'#3A6B4F',personal_leave:'#A07228',public_holiday:'#2D2426',unpaid_leave:'#B7CBBE',compassionate_leave:'#8B2535',long_service_leave:'#2471A3'};
-  const seen=new Set(), perMonth={}, upcoming=[];
-  _entries.forEach(e=>{
-    const lt=e.deleted?null:anLeaveOf(e); if(!lt) return;
-    const emp=byId.get(String(e.employeeId)); if(!anInScope(emp)) return;
-    const k=e.employeeId+'|'+e.date+'|'+lt; if(seen.has(k)) return; seen.add(k);
-    if(e.date>today){ upcoming.push({emp,date:e.date,type:lt}); return; }
-    const m=e.date.slice(0,7); if(!months.includes(m)) return;
-    perMonth[m]=perMonth[m]||{}; perMonth[m][lt]=(perMonth[m][lt]||0)+1;
-  });
-  let h=anHead(r,'Days of leave taken by month over the last year, and what is booked from tomorrow. One person on leave for one day counts as one day.');
-  const mLabels=months.map(m=>new Date(m+'-01T12:00:00').toLocaleDateString('en-AU',{month:'short'}));
-  const usedTypes=types.filter(ty=>months.some(m=>perMonth[m]?.[ty]));
-  h+=anChartCard('Leave days taken, by month','Last 12 months.',anStack(mLabels,usedTypes.map(ty=>({label:LEAVE_TYPES[ty],color:colors[ty]||'#8A7A7D',values:months.map(m=>perMonth[m]?.[ty]||0)})),{fmt:v=>String(Math.round(v)),aria:'Leave days by month and type, last twelve months'})+anLegend(usedTypes.map(ty=>({label:LEAVE_TYPES[ty],color:colors[ty]||'#8A7A7D'}))));
-  // Upcoming, by week (Monday start), next 13 weeks.
-  const mon=new Date(t); mon.setDate(t.getDate()-((t.getDay()+6)%7));
+  const today=anToday();
+  // Anchored on the current pay period: this report has no period picker.
+  const n=AN_TRENDS[_anTrend].n, starts=[]; for(let i=n-1;i>=0;i--) starts.push(getPayPeriodStart(-i));
+  anTrendStarts();
+  const skip=anTrendNoData(starts), shade=anShadeFor(starts);
+  const all=anLeaveDays(), past=all.filter(x=>!x.future);
+  const rangeFrom=starts[0], inRange=past.filter(x=>x.date>=rangeFrom&&x.date<today);
+  const pidx=d=>{ for(let i=starts.length-1;i>=0;i--) if(d>=starts[i]) return i; return -1; };
+  const per={}; inRange.forEach(x=>{ const i=pidx(x.date); if(i<0) return; per[x.type]=per[x.type]||starts.map(()=>0); per[x.type][i]++; });
+  const ser=types=>types.filter(t=>per[t]).map(t=>({label:formatLeaveType(t),color:AN_LEAVE_COLORS[t],values:per[t]}));
+  const planned=inRange.filter(x=>AN_LEAVE_PLANNED.includes(x.type)).length, unplanned=inRange.filter(x=>AN_LEAVE_UNPLANNED.includes(x.type)).length;
+  // Booked ahead: 13 whole weeks from next Monday.
+  const t=new Date(today+'T12:00:00'), mon=new Date(t); mon.setDate(t.getDate()+(((8-t.getDay())%7)||7));
   const weeks=[]; for(let i=0;i<13;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i*7); weeks.push(rbDateKey(d)); }
-  const wk=weeks.map((w,i)=>{ const nx=i<12?weeks[i+1]:anAddDays(w,7); return upcoming.filter(u=>u.date>=w&&u.date<nx).length; });
-  h+=anChartCard('Leave booked, next 13 weeks','People-days of leave per week (weeks start Monday).',anBars(weeks.map(w=>new Date(w+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})),wk,{fmt:v=>String(Math.round(v)),aria:'Leave days booked per week, next thirteen weeks',colorFor:()=>'#3A6B4F'}));
-  // Consecutive days per person and type collapse into one range.
-  upcoming.sort((a,b)=>anName(a.emp).localeCompare(anName(b.emp))||a.type.localeCompare(b.type)||a.date.localeCompare(b.date));
+  const wEnd=anAddDays(weeks[12],7), fut=all.filter(x=>x.future);
+  const wk=src=>weeks.map(w=>fut.filter(x=>x.src===src&&x.date>=w&&x.date<anAddDays(w,7)).length);
+  const onRoster=wk('roster'), onReq=wk('request'), onClash=wk('clash');
+  const ahead=fut.filter(x=>x.date>=weeks[0]&&x.date<wEnd), aheadReq=ahead.filter(x=>x.src==='request').length;
+  const clashes=fut.filter(x=>x.src==='clash').sort((a,b)=>a.date.localeCompare(b.date)), clashPeople=[...new Set(clashes.map(x=>x.emp))];
+  const du=v=>`<span class="an-tv-unit"> day${v===1?'':'s'}</span>`;
+  let h=anHead(r,'Leave taken and leave booked ahead, in days: one person on leave on one date is one day. Public holidays are left out — nobody chooses them.');
+  h+=`<div class="an-tiles an-tiles-3">
+    <div class="an-card an-tile static"><span class="an-tl">Planned leave taken</span><span class="an-tv">${planned}${du(planned)}</span><span class="an-td an-flat">annual and long service · last ${escHtml(AN_TRENDS[_anTrend].label)}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Unplanned leave taken</span><span class="an-tv">${unplanned}${du(unplanned)}</span><span class="an-td an-flat">personal/carer's, compassionate, unpaid${planned+unplanned?` · ${Math.round(unplanned/(planned+unplanned)*100)}% of leave`:''}</span></div>
+    <div class="an-card an-tile static"><span class="an-tl">Booked, next 13 weeks</span><span class="an-tv">${ahead.length}${du(ahead.length)}</span><span class="an-td an-flat">${aheadReq?`${aheadReq} approved but not yet on a roster`:'all of it on the roster'}</span></div>
+  </div>`;
+  if(clashes.length) h+=`<div class="an-notice an-notice-bad"><strong>Rostered to work during approved leave:</strong> ${clashPeople.map(e=>`${anWho(e)} (${clashes.filter(x=>x.emp===e).length} day${clashes.filter(x=>x.emp===e).length===1?'':'s'}, ${escHtml(anDateShort(clashes.filter(x=>x.emp===e)[0].date))} onwards)`).join(', ')}. Most likely the leave was approved before that roster was built, so it was never marked — fix it on the roster. Listed below as <em>Rostered to work</em>.</div>`;
+  // A — taken
+  const upS=ser(AN_LEAVE_PLANNED), dnS=ser(AN_LEAVE_UNPLANNED);
+  h+=anChartCard('Leave taken per pay period',anTrendDesc(starts)+'. Planned above the line, unplanned below. Hover a period for the breakdown.',
+    anDivCols(starts.map(anTrendLab),upS,dnS,{skip,shade,upLabel:'Planned',downLabel:'Unplanned',tipLabels:starts.map(anPeriodLabel),fmt:v=>String(Math.round(v)),aria:'Leave days per pay period, planned above the line and unplanned below'})
+    +anShadeNote(shade)+anLegend(upS.concat(dnS).map(x=>({label:x.label,color:x.color}))),anTrendSeg());
+  // E — unplanned leave by weekday, as a rate of rostered shifts on that weekday
+  const wdN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], byId=anEmpById();
+  const shifts=[0,0,0,0,0,0,0], ul=[0,0,0,0,0,0,0];
+  _rosterShifts.forEach(s=>{ if(s.date<rangeFrom||s.date>=today||s.is_day_off||!s.start_time||_publicHolidays.has(s.date)) return;
+    if(!anInScope(byId.get(String(s.employee_id)))) return; shifts[new Date(s.date+'T12:00:00').getDay()]++; });
+  inRange.filter(x=>AN_LEAVE_UNPLANNED.includes(x.type)).forEach(x=>ul[new Date(x.date+'T12:00:00').getDay()]++);
+  const wds=[1,2,3,4,5,6].filter(d=>shifts[d]>0);
+  h+=anChartCard('Unplanned leave by weekday',`Days of unplanned leave as a share of the shifts rostered on that weekday, last ${escHtml(AN_TRENDS[_anTrend].label)}. Team-wide only.`,
+    `<div class="an-wd">${wds.map(d=>{ const p=ul[d]/shifts[d]*100; return `<div class="an-wd-cell" data-tip="${escHtml(`${wdN[d]}: ${ul[d]} day${ul[d]===1?'':'s'} of unplanned leave in ${shifts[d]} rostered shifts`)}"><div class="an-wd-d">${wdN[d]}</div><div class="an-wd-bar"><span style="height:${Math.min(100,p/Math.max(1,...wds.map(x=>ul[x]/shifts[x]*100))*100).toFixed(0)}%"></span></div><div class="an-wd-v">${p.toFixed(1)}%</div><div class="an-wd-n">${ul[d]} of ${shifts[d]}</div></div>`; }).join('')}</div>`);
+  // B — booked ahead
+  const hatch='repeating-linear-gradient(135deg,#3A6B4F 0 2px,#DCE8DF 2px 6px)';
+  h+=anChartCard('Leave booked, next 13 weeks','People-days of leave per week, weeks starting Monday. Hover a week for the figures.',
+    anStack(weeks.map(w=>new Date(w+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})),[
+      {label:'On the roster',color:'#3A6B4F',values:onRoster},
+      {label:'Approved, not yet on a roster',color:'url(#an-hatch)',values:onReq},
+      {label:'Approved, but rostered to work',color:'#C0392B',values:onClash}],
+      {defs:`<pattern id="an-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#DCE8DF"/><rect width="2" height="6" fill="#3A6B4F"/></pattern>`,
+       tipLabels:weeks.map(w=>'Week of '+new Date(w+'T12:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})),fmt:v=>String(Math.round(v)),aria:'Leave days booked per week, next thirteen weeks'})
+    +anLegend([{label:'On the roster',color:'#3A6B4F'},{label:'Approved, not yet on a roster',color:hatch}].concat(onClash.some(Boolean)?[{label:'Approved, but rostered to work',color:'#C0392B'}]:[])));
+  // C — booked list: consecutive days per person and type collapse into one range.
+  const up=fut.slice().sort((a,b)=>anName(a.emp).localeCompare(anName(b.emp))||a.type.localeCompare(b.type)||a.date.localeCompare(b.date));
   const ranges=[];
-  upcoming.forEach(u=>{
+  up.forEach(u=>{
     const last=ranges[ranges.length-1];
-    if(last&&last.emp===u.emp&&last.type===u.type&&(anAddDays(last.to,1)===u.date||anAddDays(last.to,3)===u.date&&new Date(u.date+'T12:00:00').getDay()===1)){ last.to=u.date; last.days++; return; }
-    ranges.push({emp:u.emp,type:u.type,from:u.date,to:u.date,days:1});
+    // Gaps of non-working days (weekends, a day off, a public holiday) up to 4 days still join.
+    if(last&&last.emp===u.emp&&last.type===u.type&&u.date<=anAddDays(last.to,4)&&(()=>{ for(let d=anAddDays(last.to,1);d<u.date;d=anAddDays(d,1)){ if(fut.some(x=>x.emp===u.emp&&x.date===d)) return false; const g=new Date(d+'T12:00:00').getDay(); if(g!==0&&g!==6&&!_publicHolidays.has(d)&&_rosterShifts.some(s=>String(s.employee_id)===String(u.emp.id)&&s.date===d&&!s.is_day_off)) return false; } return true; })()){
+      last.to=u.date; last.days++; last.src.add(u.src); return; }
+    ranges.push({emp:u.emp,type:u.type,from:u.date,to:u.date,days:1,src:new Set([u.src])});
   });
-  ranges.sort((a,b)=>a.from.localeCompare(b.from));
-  h+=anTable([{t:'From'},{t:'To'},{t:'Staff member'},{t:'Leave'},{t:'Days',n:1}],
-    ranges.map(x=>`<tr><td><strong>${escHtml(anDateShort(x.from))}</strong></td><td>${escHtml(anDateShort(x.to))}</td><td>${anWho(x.emp)}</td><td><span class="an-sw" style="background:${colors[x.type]||'#8A7A7D'}"></span>${escHtml(LEAVE_TYPES[x.type]||x.type)}</td><td class="n">${x.days}</td></tr>`),
+  ranges.sort((a,b)=>a.from.localeCompare(b.from)||anName(a.emp).localeCompare(anName(b.emp)));
+  const srcTxt=s=>s.has('clash')?'<span class="an-pill bad">Rostered to work</span>':s.has('request')?(s.has('roster')?'<span class="an-pill">Partly on roster</span>':'<span class="an-pill warn">Request only</span>'):'Roster';
+  h+=`<div class="an-h2 an-tabletitle">Leave booked from tomorrow</div>`+anTable([{t:'From'},{t:'To'},{t:'Staff member'},{t:'Leave'},{t:'Days',n:1},{t:'Source'}],
+    ranges.map(x=>`<tr${x.src.has('clash')?' class="an-row-bad"':''}><td><strong>${escHtml(anDateShort(x.from))}</strong></td><td>${escHtml(anDateShort(x.to))}</td><td>${anWho(x.emp)}</td><td><span class="an-sw" style="background:${AN_LEAVE_COLORS[x.type]||'#8A7A7D'}"></span>${escHtml(formatLeaveType(x.type))}</td><td class="n">${x.days}</td><td>${srcTxt(x.src)}</td></tr>`),
     {empty:'No leave booked from tomorrow.'});
-  h+=`<div class="an-foot">Counted from timesheet leave entries. Leave balances are held in MYOB, not here. Leave approved for dates with no roster yet writes no entry, so it is missing from these figures until the roster exists.</div>`;
+  // D — per person, selected range
+  const pp=new Map();
+  inRange.forEach(x=>{ const k=String(x.emp.id); if(!pp.has(k)) pp.set(k,{emp:x.emp,t:{}}); const o=pp.get(k); o.t[x.type]=(o.t[x.type]||0)+1; });
+  const sumT=(o,ts)=>ts.reduce((a,t)=>a+(o.t[t]||0),0);
+  const brk=(o,ts)=>ts.filter(t=>o.t[t]).map(t=>`${formatLeaveType(t).replace(' Leave','').toLowerCase()} ${o.t[t]}`).join(' · ');
+  const plist=[...pp.values()].sort((a,b)=>(sumT(b,AN_LEAVE_PLANNED)+sumT(b,AN_LEAVE_UNPLANNED))-(sumT(a,AN_LEAVE_PLANNED)+sumT(a,AN_LEAVE_UNPLANNED))||anName(a.emp).localeCompare(anName(b.emp)));
+  const cell=(o,ts)=>{ const v=sumT(o,ts); return v?`<strong>${v}</strong>${ts.filter(t=>o.t[t]).length>1?`<span class="an-mini">${escHtml(brk(o,ts))}</span>`:''}`:'<span class="an-flat">–</span>'; };
+  h+=`<div class="an-h2 an-tabletitle">Leave taken by person · last ${escHtml(AN_TRENDS[_anTrend].label)}</div>`+anTable([{t:'Staff member'},{t:'Group'},{t:'Planned',n:1},{t:'Unplanned',n:1},{t:'Total',n:1}],
+    plist.map(o=>`<tr><td>${anWho(o.emp)}</td><td>${anGroupDot(staffGroupFor(o.emp))}</td><td class="n">${cell(o,AN_LEAVE_PLANNED)}</td><td class="n">${cell(o,AN_LEAVE_UNPLANNED)}</td><td class="n">${sumT(o,AN_LEAVE_PLANNED)+sumT(o,AN_LEAVE_UNPLANNED)}</td></tr>`),
+    {empty:'No leave taken in this range.'});
+  h+=`<div class="an-foot">Taken: timesheet leave entries on completed days. Booked: leave entries on the roster, plus approved leave requests the roster does not show. Where the person is rostered to work that day it is a clash, counted as booked. Where nothing is rostered, days are counted on the weekdays the person has worked over the last 8 weeks — an estimate until the roster exists. Leave balances are held in MYOB, not here.</div>`;
   return h;
 }
 
