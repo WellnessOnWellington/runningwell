@@ -1850,6 +1850,8 @@
   .an-reading-row { display:flex; justify-content:space-between; gap:1rem; font-size:0.84rem; padding:0.28rem 0; border-bottom:1px solid rgba(234,217,220,0.7); max-width:22rem; }
   .an-reading-row:last-child { border-bottom:none; }
   .an-team-wrap { overflow-x:auto; }
+  .an-colhit { fill:transparent; cursor:default; }
+  .an-colhit:hover { fill:rgba(196,86,112,0.08); }
   .an-rowhl { fill:transparent; }
   .an-rowhl.on { fill:rgba(196,86,112,0.09); }
   .an-team { min-width:760px; }
@@ -10097,8 +10099,7 @@ function anDiffCls(v){ return v>0.004?'an-bad':v<-0.004?'an-good':'an-flat'; }
    beside each point (above when positive, below when negative). opts.skip[i] leaves a
    point out (e.g. a future period with nothing paid), breaking the line there. */
 function anLine(labels, values, opts={}){
-  // Extra room at the bottom so a negative point's label fits under it, clear of the dates.
-  const W=600, H=opts.height||240, L=48, R=14, T=24, B=48, ph=H-T-B;
+  const W=600, H=opts.height||230, L=48, R=14, T=20, B=30, ph=H-T-B;
   const fmt=opts.fmt||(v=>String(Math.round(v)));
   const use=values.map((v,i)=>!(opts.skip&&opts.skip[i]));
   const vs=values.filter((_,i)=>use[i]);
@@ -10111,12 +10112,13 @@ function anLine(labels, values, opts={}){
   values.forEach((v,i)=>{ if(use[i]) seg.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`); else { if(seg.length) segs.push(seg); seg=[]; } }); if(seg.length) segs.push(seg);
   segs.forEach(p=>{ if(p.length>1) s+=`<polyline points="${p.join(' ')}" fill="none" stroke="#8B2535" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`; });
   // opts.color: one colour for every point (a share, not a gain or loss).
-  values.forEach((v,i)=>{ if(!use[i]) return; const c=opts.color||(v>0.004?'#C0392B':v<-0.004?'#3A6B4F':'#8A7A7D'), yy=y(v);
-    s+=`<circle cx="${x(i).toFixed(1)}" cy="${yy.toFixed(1)}" r="4.5" fill="#fff" stroke="${c}" stroke-width="2.5"><title>${escHtml(labels[i])}: ${escHtml(fmt(v))}</title></circle>`;
-    // Below the point when negative — unless that would run into the date labels.
-    const below=v<0&&yy+18<=H-24;  // date labels sit at H-10
-    s+=`<text x="${x(i).toFixed(1)}" y="${(below?yy+18:yy-10).toFixed(1)}" class="an-val" text-anchor="middle" style="fill:${c}">${escHtml(fmt(v))}</text>`; });
+  values.forEach((v,i)=>{ if(!use[i]) return; const c=opts.color||(v>0.004?'#C0392B':v<-0.004?'#3A6B4F':'#8A7A7D');
+    s+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4.5" fill="#fff" stroke="${c}" stroke-width="2.5"/>`; });
   labels.forEach((lab,i)=>{ s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  // Figures on hover only (Joel, 21 Oct — printed labels overlapped): a transparent column per
+  // period carries the instant tooltip and lights up under the pointer.
+  labels.forEach((lab,i)=>{ if(!use[i]) return; s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\n'+fmt(values[i]))}"/>`; });
+  anTipInit();
   return s+'</svg>';
 }
 function anRenderRvp(){
@@ -10155,7 +10157,7 @@ function anRenderRvp(){
     const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
     const vals=TX.map(x=>x.mode==='future'?0:x.diff);
     h+=anChartCard('Paid minus rostered, by pay period','About 6 months — 13 pay periods (Tue–Mon). Above the line: paid more than rostered; below: less.',
-      anLine(tStarts.map(lab),vals,{shade,skip:TX.map(x=>x.mode==='future'),fmt:v=>(v>0?'+':v<0?'−':'')+(Math.abs(v)>=10?Math.abs(v).toFixed(0):Math.abs(v).toFixed(1))+'h',aria:'Paid minus rostered hours, last thirteen pay periods'})+anShadeNote(shade));
+      anLine(tStarts.map(lab),vals,{shade,tipLabels:tStarts.map(s=>anPeriodLabel(s)+' · paid minus rostered'),skip:TX.map(x=>x.mode==='future'),fmt:v=>(v>0?'+':v<0?'−':'')+(Math.abs(v)>=10?Math.abs(v).toFixed(0):Math.abs(v).toFixed(1))+'h',aria:'Paid minus rostered hours, last thirteen pay periods'})+anShadeNote(shade));
     h+=anTable([{t:'Pay period'},{t:'Rostered',n:1},{t:'Paid',n:1},{t:'Difference',n:1},{t:'%',n:1},{t:'Finalised'}],
       TX.map((x,i)=>`<tr><td><strong>${escHtml(anPeriodLabel(tStarts[i]))}</strong>${x.mode==='current'?' <span class="an-flat">(so far)</span>':''}</td><td class="n">${anH(x.tR)}</td><td class="n">${x.mode==='future'?'<span class="an-flat">–</span>':anH(x.tP)}</td>${x.mode==='future'?'<td class="n an-flat">–</td><td class="n an-flat">–</td>':cell(x.diff)+`<td class="n ${anDiffCls(x.diff)}">${x.pct==null?'—':(x.pct>0?'+':x.pct<0?'−':'')+Math.abs(x.pct).toFixed(1)+'%'}</td>`}<td>${x.P.finalised?'Yes':'<span class="an-flat">No</span>'}</td></tr>`).reverse());
     return h+foot;
@@ -10244,9 +10246,12 @@ function anDualLine(labels, a, b, opts={}){
     s+=`<text x="${W-R+6}" y="${(yy+4).toFixed(1)}" class="an-ax" style="fill:#8B2535">${Math.round(b1*f)}%</text>`; });
   const line=(vals,y,c,dash)=>`<polyline points="${vals.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="2.2" stroke-linejoin="round"${dash?' stroke-dasharray="5 4"':''}/>`;
   s+=line(b,yb,'#8B2535',true)+line(a,ya,'#2D2426',false);
-  b.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${yb(v).toFixed(1)}" r="3.5" fill="#fff" stroke="#8B2535" stroke-width="2"><title>${escHtml(labels[i])}: ${v.toFixed(0)}% at penalty rates</title></circle><text x="${x(i).toFixed(1)}" y="${(yb(v)+16).toFixed(1)}" class="an-val" text-anchor="middle" style="fill:#8B2535;font-size:10px">${v.toFixed(0)}%</text>`; });
-  a.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${ya(v).toFixed(1)}" r="4" fill="#2D2426"><title>${escHtml(labels[i])}: ${anH(v)} cost-weighted hours</title></circle><text x="${x(i).toFixed(1)}" y="${(ya(v)-9).toFixed(1)}" class="an-val" text-anchor="middle">${Math.round(v)}</text>`; });
+  b.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${yb(v).toFixed(1)}" r="3.5" fill="#fff" stroke="#8B2535" stroke-width="2"/>`; });
+  a.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${ya(v).toFixed(1)}" r="4" fill="#2D2426"/>`; });
   labels.forEach((lab,i)=>{ s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  // Both figures for a period on hover, from anywhere in its column (no printed labels).
+  labels.forEach((lab,i)=>{ s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\nCost-weighted hours: '+anH(a[i])+'\nAt penalty rates: '+b[i].toFixed(1)+'%')}"/>`; });
+  anTipInit();
   return s+'</svg>'+`<div class="an-legend"><span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="#2D2426" stroke-width="2.2"/><circle cx="11" cy="5" r="3.5" fill="#2D2426"/></svg> Cost-weighted hours (left axis)</span><span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="#8B2535" stroke-width="2.2" stroke-dasharray="5 4"/><circle cx="11" cy="5" r="3" fill="#fff" stroke="#8B2535" stroke-width="2"/></svg> Penalty-rate share (right axis)</span></div>`;
 }
 function anRenderPayCat(){
@@ -10271,7 +10276,7 @@ function anRenderPayCat(){
   const shade=anShadeFor(starts);
   const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
   // Full width, one above the other: 13 periods side by side made both too small to read.
-  h+=`${anChartCard('Cost-weighted hours and penalty-rate share','About 6 months (13 pay periods). Cost-weighted hours track staff cost in base-rate hours; the dashed line shows how much of the worked time was at penalty rates — so you can see whether a rise in cost came from more hours or from more penalty hours.',anDualLine(starts.map(lab),M.map(x=>x.weighted),M.map(x=>x.penShare||0),{shade,aria:'Cost-weighted hours and penalty-rate share, last thirteen pay periods'})+anShadeNote(shade))}
+  h+=`${anChartCard('Cost-weighted hours and penalty-rate share','About 6 months (13 pay periods). Cost-weighted hours track staff cost in base-rate hours; the dashed line shows how much of the worked time was at penalty rates — so you can see whether a rise in cost came from more hours or from more penalty hours.',anDualLine(starts.map(lab),M.map(x=>x.weighted),M.map(x=>x.penShare||0),{shade,tipLabels:starts.map(anPeriodLabel),aria:'Cost-weighted hours and penalty-rate share, last thirteen pay periods'})+anShadeNote(shade))}
     ${anChartCard('Paid hours by category','Per pay period (Tue–Mon). Hover a block for its figure.',anStack(starts.map(lab),kinds.map(x=>({label:x.label,color:x.color,values:M.map(mm=>mm.k[x.k])})),{shade,fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last thirteen pay periods'})+anLegend(kinds))}`;
   const rows=kinds.filter(x=>m.k[x.k]>0||pm.k[x.k]>0).map(x=>{ const d=m.k[x.k]-pm.k[x.k], w=x.k==='evening'?'1.125–1.15':(AN_WEIGHT[x.k]??1).toFixed(x.k==='ph'?1:(AN_WEIGHT[x.k]%1?1:0));
     return `<tr><td><span class="an-sw" style="background:${x.color}"></span>${escHtml(x.label)}</td><td class="n">${anH(m.k[x.k])}</td><td class="n">${anPct(m.total?m.k[x.k]/m.total*100:null,1)}</td><td class="n an-flat">${Math.abs(d)<0.005?'–':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(2)}</td><td class="n an-flat">×${w}</td></tr>`; });
@@ -10322,7 +10327,7 @@ function anRenderTravel(){
   const shade=anShadeFor(starts);
   let h=anHead(r,'Kilometres claimed at the clinic-travel prompt, exported to MYOB as "Travelling Allowance per KLM".');
   h+=anNotice(P);
-  h+=anChartCard('Kilometres per pay period','About 6 months (13 pay periods, Tue–Mon).',anLine(starts.map(lab),km,{shade,color:'#8B2535',fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last thirteen pay periods'})+anShadeNote(shade));
+  h+=anChartCard('Kilometres per pay period','About 6 months (13 pay periods, Tue–Mon).',anLine(starts.map(lab),km,{shade,tipLabels:starts.map(s=>anPeriodLabel(s)+' · kilometres claimed'),color:'#8B2535',fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last thirteen pay periods'})+anShadeNote(shade));
   const by=new Map();
   P.rows.filter(x=>x.travelKm>0).forEach(x=>{ const k=String(x.emp.id); if(!by.has(k)) by.set(k,{emp:x.emp,km:0,trips:0}); const o=by.get(k); o.km+=x.travelKm; o.trips++; });
   const rows=[...by.values()].sort((a,b)=>b.km-a.km).map(o=>`<tr><td>${anWho(o.emp)}</td><td class="n">${o.trips}</td><td class="n"><strong>${o.km.toFixed(1)}</strong></td></tr>`);
