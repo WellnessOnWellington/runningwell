@@ -9861,7 +9861,9 @@ function anBars(labels, values, opts={}){
 }
 /* Stacked columns. series: [{label,color,values[]}]; percent → each column sums to 100. */
 function anStack(labels, series, opts={}){
-  const W=600, H=opts.height||210, L=44, R=10, T=12, B=30, ph=H-T-B;
+  // Totals are printed above each column (counts, not %), so leave room for them at the
+  // top — at T=12 the tallest column's label was cut off by the chart edge.
+  const W=600, H=opts.height||210, L=44, R=10, T=opts.percent?12:26, B=30, ph=H-T-B;
   const n=labels.length, slot=(W-L-R)/Math.max(1,n), bw=Math.min(48,slot*0.6);
   const totals=labels.map((_,i)=>series.reduce((a,s)=>a+(s.values[i]||0),0));
   const max=opts.percent?100:Math.max(1,...totals);
