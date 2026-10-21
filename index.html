@@ -1850,6 +1850,8 @@
   .an-reading-row { display:flex; justify-content:space-between; gap:1rem; font-size:0.84rem; padding:0.28rem 0; border-bottom:1px solid rgba(234,217,220,0.7); max-width:22rem; }
   .an-reading-row:last-child { border-bottom:none; }
   .an-team-wrap { overflow-x:auto; }
+  .an-seg-sm { padding:0.15rem; }
+  .an-seg-sm .an-segb { padding:0.25rem 0.6rem; font-size:0.7rem; }
   .an-colhit { fill:transparent; cursor:default; }
   .an-colhit:hover { fill:rgba(196,86,112,0.08); }
   .an-rowhl { fill:transparent; }
@@ -5940,7 +5942,7 @@ function switchTab(name,btn){
   if(name==='team')       renderTeam();
   if(name==='roster')     renderRoster();
   if(name==='requests'){  renderRequests(); reqExpirySweep(); }
-  if(name==='analytics'){ try{ anRender(); }catch(e){ console.error('Analytics failed',e); } }
+  if(name==='analytics'){ try{ _anCache=new Map(); anRender(); }catch(e){ console.error('Analytics failed',e); } }
   if(name==='settings'){  renderManagersTab(); wosInitPinBoxes(); renderAnchorDate(); renderRequestSettings(); renderBreakExceptions(); }
   if(name==='analytics'){ renderBreakExceptionLog(); }
 }
@@ -9547,10 +9549,15 @@ function anShow(id){ _anView=id; anRender(); document.querySelector('#view-admin
 function anSetGroup(g){ _anGroup=g; anRender(); }
 function anNavPP(dir){ _anPPOffset=dir===0?0:_anPPOffset+dir; anRender(); }
 
+/* Period results are kept between redraws (switching range, view or staff group) so a
+   12-month trend does not recompute 26 periods each time. They are dropped when the
+   Analytics tab is opened (switchTab) and whenever the data visibly changes shape. */
+let _anCacheSig='';
 function anRender(){
   const rep=document.getElementById('an-report');
   if(!rep) return;
-  _anCache=new Map();
+  const sig=[_entries.length,_rosterShifts.length,_emps.length,_publicHolidays?.size||0,(_timesheetFinalizations||[]).length,anToday()].join('|');
+  if(sig!==_anCacheSig){ _anCache=new Map(); _anCacheSig=sig; }
   try{ anRenderSide(); }catch(e){ console.error('Analytics menu failed',e); }
   const isLog=_anView.startsWith('log:');
   const r=isLog?null:(AN_REPORTS.find(x=>x.id===_anView)||AN_REPORTS[0]);
@@ -9661,6 +9668,29 @@ function anShortPeriod(fnStart){
 function anIsFinalised(fnStart){ return (_timesheetFinalizations||[]).some(f=>String(f.fn_start).slice(0,10)===fnStart); }
 function anFinalisation(fnStart){ return (_timesheetFinalizations||[]).find(f=>String(f.fn_start).slice(0,10)===fnStart)||null; }
 // The selected period and the n-1 before it, oldest first.
+/* Trend range — one setting for every trend chart, remembered on this device (Joel, 21 Oct).
+   Every pay fortnight is plotted: no averaging, none skipped. Ranges never reach back past
+   the first fortnight with any data (Running Well began March 2026) — no fake zeros. */
+const AN_TREND_KEY='rw_an_trend', AN_TRENDS={'3m':{n:7,label:'3 months'},'6m':{n:13,label:'6 months'},'12m':{n:26,label:'12 months'}};
+let _anTrend=(()=>{ try{ const v=localStorage.getItem(AN_TREND_KEY); return AN_TRENDS[v]?v:'6m'; }catch(e){ return '6m'; } })();
+function anSetTrend(v){ if(!AN_TRENDS[v]) return; _anTrend=v; try{ localStorage.setItem(AN_TREND_KEY,v); }catch(e){} anRender(); }
+let _anFirstStart=null;
+function anTrendStarts(){
+  if(!_anFirstStart){ let first=null; _entries.forEach(e=>{ if(!e.deleted&&e.date&&(!first||e.date<first)) first=e.date; }); _anFirstStart=first?payPeriodStartFor(first):'0000'; }
+  const all=anRecentStarts(AN_TRENDS[_anTrend].n), starts=all.filter(s=>s>=_anFirstStart);
+  return starts.length?starts:all.slice(-1);
+}
+function anTrendDesc(starts){
+  const want=AN_TRENDS[_anTrend].n, f=new Date(starts[0]+'T12:00:00');
+  return `${starts.length} pay period${starts.length===1?'':'s'} (Tue–Mon)`+(starts.length<want?` · data starts ${f.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`:'');
+}
+function anTrendSeg(){
+  return `<div class="an-seg an-seg-sm" role="group" aria-label="Trend range">${Object.entries(AN_TRENDS).map(([k,v])=>`<button type="button" class="an-segb${_anTrend===k?' on':''}" onclick="anSetTrend('${k}')" title="Every pay fortnight over ${v.label}">${k}</button>`).join('')}</div>`;
+}
+// Axis date labels thin to every second one past 13 periods — the labels only; every
+// period keeps its point and its hover. The newest label is always shown.
+function anShowAxisLabel(i,n){ return n<=13||((n-1-i)%2===0); }
+const anTrendLab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
 function anRecentStarts(n){ const out=[]; for(let i=n-1;i>=0;i--) out.push(getPayPeriodStart(_anPPOffset-i)); return out; }
 function anInScope(emp, group=_anGroup){ return !!emp&&!emp.is_placeholder&&(!group||staffGroupFor(emp)===group); }
 function anEmpById(){ return new Map(_emps.map(e=>[String(e.id),e])); }
@@ -9887,7 +9917,7 @@ function anStack(labels, series, opts={}){
       s+=`<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,hh-1).toFixed(1)}" fill="${se.color}"><title>${escHtml(se.label)}: ${opts.percent?v.toFixed(1)+'%':escHtml(fmt(se.values[i]))}</title></rect>`;
     });
     if(!opts.percent&&totals[i]>0) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(yy-5).toFixed(1)}" class="an-val" text-anchor="middle">${escHtml(fmt(totals[i]))}</text>`;
-    s+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`;
+    if(anShowAxisLabel(i,n)) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`;
   });
   return s+'</svg>';
 }
@@ -10107,14 +10137,15 @@ function anLine(labels, values, opts={}){
   const n=labels.length, slot=(W-L-R)/Math.max(1,n), x=i=>L+i*slot+slot/2, y=v=>T+(vmax-v)/span*ph;
   let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
   if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return; s+=`<rect x="${(L+i*slot+2).toFixed(1)}" y="2" width="${(slot-4).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}/>`; });
-  [...new Set([vmax,0,vmin])].forEach(g=>{ s+=`<line x1="${L}" x2="${W-R}" y1="${y(g).toFixed(1)}" y2="${y(g).toFixed(1)}" stroke="${g===0?'#D9C4C8':'#F0E4E7'}" stroke-width="${g===0?1.5:1}"/><text x="${L-6}" y="${(y(g)+4).toFixed(1)}" class="an-ax" text-anchor="end">${escHtml(fmt(g))}</text>`; });
+  // A gridline label too close to the zero label (one big swing squashes the scale) is dropped.
+  [...new Set([vmax,0,vmin])].forEach(g=>{ const clash=g!==0&&Math.abs(y(g)-y(0))<14; s+=`<line x1="${L}" x2="${W-R}" y1="${y(g).toFixed(1)}" y2="${y(g).toFixed(1)}" stroke="${g===0?'#D9C4C8':'#F0E4E7'}" stroke-width="${g===0?1.5:1}"/>${clash?'':`<text x="${L-6}" y="${(y(g)+4).toFixed(1)}" class="an-ax" text-anchor="end">${escHtml(fmt(g))}</text>`}`; });
   let seg=[]; const segs=[];
   values.forEach((v,i)=>{ if(use[i]) seg.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`); else { if(seg.length) segs.push(seg); seg=[]; } }); if(seg.length) segs.push(seg);
   segs.forEach(p=>{ if(p.length>1) s+=`<polyline points="${p.join(' ')}" fill="none" stroke="#8B2535" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`; });
   // opts.color: one colour for every point (a share, not a gain or loss).
   values.forEach((v,i)=>{ if(!use[i]) return; const c=opts.color||(v>0.004?'#C0392B':v<-0.004?'#3A6B4F':'#8A7A7D');
     s+=`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="4.5" fill="#fff" stroke="${c}" stroke-width="2.5"/>`; });
-  labels.forEach((lab,i)=>{ s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  labels.forEach((lab,i)=>{ if(anShowAxisLabel(i,n)) s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
   // Figures on hover only (Joel, 21 Oct — printed labels overlapped): a transparent column per
   // period carries the instant tooltip and lights up under the pointer.
   labels.forEach((lab,i)=>{ if(!use[i]) return; s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\n'+fmt(values[i]))}"/>`; });
@@ -10125,7 +10156,7 @@ function anRenderRvp(){
   const r=AN_REPORTS.find(x=>x.id==='hours');
   const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), X=Ps.map((p,i)=>anRvp(p,{noCategories:i<5})), cur=X[5], prev=X[4];
   // By pay period looks back about six months (13 pay periods), difference only, as a line (Joel, 21 Oct).
-  const tStarts=_anRvpBy==='period'?anRecentStarts(13):null;
+  const tStarts=_anRvpBy==='period'?anTrendStarts():null;
   const TX=tStarts?tStarts.map(s=>anRvp(anPeriod(s),{noCategories:true})):null;
   const so=cur.mode==='current'?' so far':'';
   const views=[['person','By person'],['group','By staff group'],['category','By pay category'],['period','By pay period']];
@@ -10145,7 +10176,7 @@ function anRenderRvp(){
       <div><div class="an-tl">Paid vs rostered${so}</div>
         <div class="an-reading-big ${anDiffCls(cur.diff)}">${anSg(cur.diff)}<span class="an-tv-unit"> hours ${Math.abs(cur.diff)<0.005?'— on roster':cur.diff>0?'over':'under'}${cur.pct==null?'':` (${cur.pct>0?'+':cur.pct<0?'−':''}${Math.abs(cur.pct).toFixed(1)}%)`}</span></div>
         <div class="an-sub">Paid ${anH(cur.tP)}h against ${anH(cur.tR)}h rostered${so}.</div></div>
-      <div><div class="an-tl">Biggest differences${_anRvpBy==='period'?' (last 13 pay periods)':''}</div>${items.length?items.map(x=>`<div class="an-reading-row"><span>${x.color?`<span class="an-sw" style="background:${x.color}"></span>`:''}${escHtml(x.label)}</span><strong class="${anDiffCls(x.d)}">${anSg(x.d)}h</strong></div>`).join(''):'<div class="an-sub">Everything within 0.05h of the roster.</div>'}</div>
+      <div><div class="an-tl">Biggest differences${_anRvpBy==='period'?` (last ${tStarts.length} pay periods)`:''}</div>${items.length?items.map(x=>`<div class="an-reading-row"><span>${x.color?`<span class="an-sw" style="background:${x.color}"></span>`:''}${escHtml(x.label)}</span><strong class="${anDiffCls(x.d)}">${anSg(x.d)}h</strong></div>`).join(''):'<div class="an-sub">Everything within 0.05h of the roster.</div>'}</div>
     </div>`;
   }
   const foot=`<div class="an-foot">Difference is paid minus rostered: red means more was paid than rostered, green less. Leave is counted on both sides; unpaid leave on neither.${cur.mode==='current'?' "So far" counts only days already finished.':''} Only staff currently active are counted, the same as the MYOB export.</div>`;
@@ -10154,10 +10185,9 @@ function anRenderRvp(){
     /* About six months — 13 pay periods — of the DIFFERENCE alone: one bar per period
        around zero, so the trend reads at a glance. Rostered and paid stay in the table. */
     const shade=anShadeFor(tStarts);
-    const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
     const vals=TX.map(x=>x.mode==='future'?0:x.diff);
-    h+=anChartCard('Paid minus rostered, by pay period','About 6 months — 13 pay periods (Tue–Mon). Above the line: paid more than rostered; below: less.',
-      anLine(tStarts.map(lab),vals,{shade,tipLabels:tStarts.map(s=>anPeriodLabel(s)+' · paid minus rostered'),skip:TX.map(x=>x.mode==='future'),fmt:v=>(v>0?'+':v<0?'−':'')+(Math.abs(v)>=10?Math.abs(v).toFixed(0):Math.abs(v).toFixed(1))+'h',aria:'Paid minus rostered hours, last thirteen pay periods'})+anShadeNote(shade));
+    h+=anChartCard('Paid minus rostered, by pay period',anTrendDesc(tStarts)+'. Above the line: paid more than rostered; below: less. Hover a period for its figure.',
+      anLine(tStarts.map(anTrendLab),vals,{shade,tipLabels:tStarts.map(s=>anPeriodLabel(s)+' · paid minus rostered'),skip:TX.map(x=>x.mode==='future'),fmt:v=>(v>0?'+':v<0?'−':'')+(Math.abs(v)>=10?Math.abs(v).toFixed(0):Math.abs(v).toFixed(1))+'h',aria:'Paid minus rostered hours, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg());
     h+=anTable([{t:'Pay period'},{t:'Rostered',n:1},{t:'Paid',n:1},{t:'Difference',n:1},{t:'%',n:1},{t:'Finalised'}],
       TX.map((x,i)=>`<tr><td><strong>${escHtml(anPeriodLabel(tStarts[i]))}</strong>${x.mode==='current'?' <span class="an-flat">(so far)</span>':''}</td><td class="n">${anH(x.tR)}</td><td class="n">${x.mode==='future'?'<span class="an-flat">–</span>':anH(x.tP)}</td>${x.mode==='future'?'<td class="n an-flat">–</td><td class="n an-flat">–</td>':cell(x.diff)+`<td class="n ${anDiffCls(x.diff)}">${x.pct==null?'—':(x.pct>0?'+':x.pct<0?'−':'')+Math.abs(x.pct).toFixed(1)+'%'}</td>`}<td>${x.P.finalised?'Yes':'<span class="an-flat">No</span>'}</td></tr>`).reverse());
     return h+foot;
@@ -10248,7 +10278,7 @@ function anDualLine(labels, a, b, opts={}){
   s+=line(b,yb,'#8B2535',true)+line(a,ya,'#2D2426',false);
   b.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${yb(v).toFixed(1)}" r="3.5" fill="#fff" stroke="#8B2535" stroke-width="2"/>`; });
   a.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${ya(v).toFixed(1)}" r="4" fill="#2D2426"/>`; });
-  labels.forEach((lab,i)=>{ s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
+  labels.forEach((lab,i)=>{ if(anShowAxisLabel(i,n)) s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
   // Both figures for a period on hover, from anywhere in its column (no printed labels).
   labels.forEach((lab,i)=>{ s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\nCost-weighted hours: '+anH(a[i])+'\nAt penalty rates: '+b[i].toFixed(1)+'%')}"/>`; });
   anTipInit();
@@ -10256,7 +10286,9 @@ function anDualLine(labels, a, b, opts={}){
 }
 function anRenderPayCat(){
   const r=AN_REPORTS.find(x=>x.id==='paycat');
-  const starts=anRecentStarts(13), Ps=starts.map(s=>anPeriod(s)), M=Ps.map(anMix), P=Ps[12], m=M[12], pm=M[11];
+  const starts=anTrendStarts(), Ps=starts.map(s=>anPeriod(s)), M=Ps.map(anMix);
+  // Headline is always the selected period against the one before, whatever the trend range.
+  const P=anPeriod(getPayPeriodStart(_anPPOffset)), m=anMix(P), pm=anMix(anPeriod(getPayPeriodStart(_anPPOffset-1)));
   const kinds=AN_KINDS.filter(x=>x.k!=='unpaid');
   let h=anHead(r,'The mix of what was actually paid — how much went at penalty rates, and what that costs in base-rate hours. Unpaid leave is not counted.');
   h+=anNotice(P);
@@ -10274,10 +10306,9 @@ function anRenderPayCat(){
     <div><div class="an-tl">Largest categories</div>${top.map(x=>`<div class="an-reading-row"><span><span class="an-sw" style="background:${x.color}"></span>${escHtml(x.label)}</span><strong>${anPct(m.total?m.k[x.k]/m.total*100:null)}</strong></div>`).join('')}</div>
   </div>`;
   const shade=anShadeFor(starts);
-  const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
   // Full width, one above the other: 13 periods side by side made both too small to read.
-  h+=`${anChartCard('Cost-weighted hours and penalty-rate share','About 6 months (13 pay periods). Cost-weighted hours track staff cost in base-rate hours; the dashed line shows how much of the worked time was at penalty rates — so you can see whether a rise in cost came from more hours or from more penalty hours.',anDualLine(starts.map(lab),M.map(x=>x.weighted),M.map(x=>x.penShare||0),{shade,tipLabels:starts.map(anPeriodLabel),aria:'Cost-weighted hours and penalty-rate share, last thirteen pay periods'})+anShadeNote(shade))}
-    ${anChartCard('Paid hours by category','Per pay period (Tue–Mon). Hover a block for its figure.',anStack(starts.map(lab),kinds.map(x=>({label:x.label,color:x.color,values:M.map(mm=>mm.k[x.k])})),{shade,fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last thirteen pay periods'})+anLegend(kinds))}`;
+  h+=`${anChartCard('Cost-weighted hours and penalty-rate share',anTrendDesc(starts)+'. '+'Cost-weighted hours track staff cost in base-rate hours; the dashed line shows how much of the worked time was at penalty rates — so you can see whether a rise in cost came from more hours or from more penalty hours.',anDualLine(starts.map(anTrendLab),M.map(x=>x.weighted),M.map(x=>x.penShare||0),{shade,tipLabels:starts.map(anPeriodLabel),aria:'Cost-weighted hours and penalty-rate share, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg())}
+    ${anChartCard('Paid hours by category',anTrendDesc(starts)+'. Hover a block for its figure.',anStack(starts.map(anTrendLab),kinds.map(x=>({label:x.label,color:x.color,values:M.map(mm=>mm.k[x.k])})),{shade,fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last thirteen pay periods'})+anLegend(kinds),anTrendSeg())}`;
   const rows=kinds.filter(x=>m.k[x.k]>0||pm.k[x.k]>0).map(x=>{ const d=m.k[x.k]-pm.k[x.k], w=x.k==='evening'?'1.125–1.15':(AN_WEIGHT[x.k]??1).toFixed(x.k==='ph'?1:(AN_WEIGHT[x.k]%1?1:0));
     return `<tr><td><span class="an-sw" style="background:${x.color}"></span>${escHtml(x.label)}</td><td class="n">${anH(m.k[x.k])}</td><td class="n">${anPct(m.total?m.k[x.k]/m.total*100:null,1)}</td><td class="n an-flat">${Math.abs(d)<0.005?'–':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(2)}</td><td class="n an-flat">×${w}</td></tr>`; });
   if(rows.length) rows.push(`<tr class="an-total"><td>Total</td><td class="n">${anH(m.total)}</td><td class="n">100%</td><td class="n an-flat">${(()=>{const d=m.total-pm.total; return Math.abs(d)<0.005?'–':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(2);})()}</td><td class="n">${anH(m.weighted)} <span class="an-flat">weighted</span></td></tr>`);
@@ -10321,13 +10352,12 @@ function anForecast(P, before){
 function anRenderTravel(){
   const r=AN_REPORTS.find(x=>x.id==='travel');
   // About six months (13 pay periods) as a line, matching the other trend charts (21 Oct).
-  const starts=anRecentStarts(13), Ps=starts.map(s=>anPeriod(s)), P=Ps[12];
+  const starts=anTrendStarts(), Ps=starts.map(s=>anPeriod(s)), P=anPeriod(getPayPeriodStart(_anPPOffset));
   const km=Ps.map(p=>p.rows.reduce((a,x)=>a+x.travelKm,0));
-  const lab=s=>{ const d=new Date(s+'T12:00:00'); return d.getDate()+' '+d.toLocaleDateString('en-AU',{month:'short'}).slice(0,3); };
   const shade=anShadeFor(starts);
   let h=anHead(r,'Kilometres claimed at the clinic-travel prompt, exported to MYOB as "Travelling Allowance per KLM".');
   h+=anNotice(P);
-  h+=anChartCard('Kilometres per pay period','About 6 months (13 pay periods, Tue–Mon).',anLine(starts.map(lab),km,{shade,tipLabels:starts.map(s=>anPeriodLabel(s)+' · kilometres claimed'),color:'#8B2535',fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last thirteen pay periods'})+anShadeNote(shade));
+  h+=anChartCard('Kilometres per pay period',anTrendDesc(starts)+'. Hover a period for its figure.',anLine(starts.map(anTrendLab),km,{shade,tipLabels:starts.map(s=>anPeriodLabel(s)+' · kilometres claimed'),color:'#8B2535',fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg());
   const by=new Map();
   P.rows.filter(x=>x.travelKm>0).forEach(x=>{ const k=String(x.emp.id); if(!by.has(k)) by.set(k,{emp:x.emp,km:0,trips:0}); const o=by.get(k); o.km+=x.travelKm; o.trips++; });
   const rows=[...by.values()].sort((a,b)=>b.km-a.km).map(o=>`<tr><td>${anWho(o.emp)}</td><td class="n">${o.trips}</td><td class="n"><strong>${o.km.toFixed(1)}</strong></td></tr>`);
