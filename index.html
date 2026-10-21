@@ -9937,7 +9937,9 @@ function anUnplannedDays(P){
 }
 /* Overview. Reworked 20 Oct 2026 on the lessons from People: no netted hours (late starts
    cancelled late finishes), counts with the shifts they came from, People's wording.
-   Eight tiles, two rows: hours and attendance on top; exceptions and things waiting below.
+   Eight tiles, two rows (21 Oct): cost and staffing on top — cost-weighted hours, hours paid,
+   paid extra time, leave without cover; attendance below — late, early, missed clocks,
+   unplanned leave. Requests waiting was dropped: the Requests tab badge already shows it.
    Hours over roster, penalty-rate share and approved-with-no-changes moved to their own
    reports. Trend lines are the selected pay period and the five before it — the dates
    under each one say so. */
@@ -9948,8 +9950,8 @@ function anRenderOverview(){
   const outs=Ps.map(p=>anOutside(p)), late=outs.map(o=>o.reduce((a,x)=>a+x.lateIn,0)), early=outs.map(o=>o.reduce((a,x)=>a+x.earlyOut,0));
   const ks=Ps.map(p=>anKiosk(p).total), unpl=Ps.map(anUnplannedDays);
   const cover=anCoverRows(_anGroup).filter(r=>r.expected&&!r.cover).length;
-  const waiting=(_requests||[]).filter(q=>String(q.status).startsWith('pending'));
-  const oldest=waiting.length?Math.max(...waiting.map(q=>Math.floor((Date.now()-new Date(q.createdAt))/86400000))):0;
+  // Cost-weighted hours — the closest thing here to staff cost (see anMix for the weights).
+  const weighted=Ps.map(p=>anMix(p).weighted);
   const line=t=>`<span class="an-flat an-typ">${t}</span>`, bul=t=>`<span class="an-flat an-typ an-bul">${t}</span>`;
   const ofN=(n,b)=>b>0?`of ${b} shift${b===1?'':'s'} (${(n/b*100).toFixed(0)}%)`:'no completed shifts yet';
   const dH=(c,p,goodUp)=>{ const d=c-p; if(Math.abs(d)<0.05) return '<span class="an-flat">same as previous period</span>';
@@ -9961,14 +9963,14 @@ function anRenderOverview(){
   let h=anHead(AN_REPORTS[0],`Pay period ${escHtml(anPeriodLabel(P.fnStart))}${_anGroup?' · '+escHtml(AN_GROUP_LABELS[_anGroup]):''}`);
   h+=anNotice(P);
   h+=`<div class="an-tiles an-tiles-4">
+    ${tile('paycat','Cost-weighted hours',anH(weighted[5])+unit('hours'),line(`${paid[5]>0?((weighted[5]/paid[5]-1)*100).toFixed(1):'0.0'}% above hours paid — the loadings`)+bul(dH(weighted[5],weighted[4],null)),trend(weighted))}
     ${tile('paycat','Hours paid',anH(paid[5])+unit('hours'),line('worked and paid leave')+bul(dH(paid[5],paid[4],null)),trend(paid))}
     ${tile('hours','Paid extra time','+'+anH(extra[5].hours)+unit('hours'),line(`over ${extra[5].shifts} of ${base[5]} shifts`)+bul(dH(extra[5].hours,extra[4].hours,false)),trend(extra.map(x=>x.hours)))}
+    ${tile('cover','Leave without cover',String(cover),line('annual leave blocks with no cover shift')+bul('next 6 weeks'))}
     ${tile('outside','Clocked in late',String(late[5]),line(ofN(late[5],base[5]))+bul(anDelta(late[5],late[4],'',false)),trend(late))}
     ${tile('outside','Clocked out early',String(early[5]),line(ofN(early[5],base[5]))+bul(anDelta(early[5],early[4],'',false)),trend(early))}
     ${tile('kiosk','Missed clocks',String(ks[5]),line(ofN(ks[5],base[5]))+bul(anDelta(ks[5],ks[4],'',false)),trend(ks))}
     ${tile('leave','Unplanned leave',String(unpl[5])+unit(unpl[5]===1?'day':'days'),line('personal, compassionate, unpaid')+bul(anDelta(unpl[5],unpl[4],'',null)),trend(unpl))}
-    ${tile('cover','Leave without cover',String(cover),line('annual leave blocks with no cover shift')+bul('next 6 weeks'))}
-    ${tile('requests','Requests waiting',String(waiting.length),waiting.length?line('for a colleague or a manager')+bul(`oldest ${oldest} day${oldest===1?'':'s'}`):line('nothing waiting'))}
   </div>`;
   /* One chart: the team calendar for the selected pay period. Replaced Paid extra time per
      period (its tile's trend line, bigger) and worked hours by pay category (follows the
