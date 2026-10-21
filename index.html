@@ -1794,7 +1794,8 @@
   .an-tv { font-family:'Lora',serif; font-size:1.75rem; font-weight:600; color:var(--charcoal); line-height:1.1; }
   .an-tv-sm { font-size:1.2rem; }
   .an-td { font-size:0.7rem; font-weight:700; }
-  .an-spark { width:100%; height:30px; display:block; margin-top:0.2rem; }
+  .an-spark { width:100%; height:30px; display:block; margin-top:0.35rem; }
+  .an-spark-cap { display:flex; justify-content:space-between; font-size:0.62rem; font-weight:700; color:#A99A9D; margin-top:0.1rem; }
   .an-good { color:var(--success); }
   .an-bad { color:var(--danger); }
   .an-flat { color:var(--muted); font-weight:600; }
@@ -9903,29 +9904,69 @@ function anTable(head, rows, opts={}){
 }
 
 /* ── Overview ── */
+/* Team-level team extra time: PAID minutes outside the rostered start and finish, never
+   netted against lateness — the same measure as the People tile, summed. */
+function anExtraTime(P){
+  let mins=0, shifts=0;
+  P.rows.forEach(r=>{ if(r.isLeave||!r.shift||r.entry.date>=P.today) return;
+    const fin=resolveFinalTimes(r.entry,r.shift,r.emp); if(!fin.finalStart||!fin.finalEnd) return;
+    const x=Math.max(0,timeToMin(r.shift.start_time)-timeToMin(fin.finalStart))+Math.max(0,timeToMin(fin.finalEnd)-timeToMin(r.shift.end_time));
+    if(x>0){ mins+=x; shifts++; } });
+  return {hours:mins/60, shifts};
+}
+// Rostered shifts due on completed days, not leave — the one denominator, as on People.
+function anRosterShifts(P){ return P.rostered.filter(x=>x.date<P.today&&!x.onLeave).length; }
+// Days of unplanned leave (personal, compassionate, unpaid) taken in the period, team-wide.
+function anUnplannedDays(P){
+  const U=['personal_leave','compassionate_leave','unpaid_leave'], seen=new Set(), byId=anEmpById();
+  _entries.forEach(e=>{ if(e.deleted||e.date>=P.today||!P.days.includes(e.date)) return; const lt=anLeaveOf(e); if(!U.includes(lt)) return;
+    if(!anInScope(byId.get(String(e.employeeId)),P.group)) return; seen.add(e.employeeId+'|'+e.date); });
+  return seen.size;
+}
+/* Overview. Reworked 20 Oct 2026 on the lessons from People: no netted hours (late starts
+   cancelled late finishes), counts with the shifts they came from, People's wording.
+   Eight tiles, two rows: hours and attendance on top; exceptions and things waiting below.
+   Hours over roster, penalty-rate share and approved-with-no-changes moved to their own
+   reports. Trend lines are the selected pay period and the five before it — the dates
+   under each one say so. */
 function anRenderOverview(){
-  const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), P=Ps[5], prev=Ps[4];
-  const tot=Ps.map(anTotals), pen=Ps.map(anPenaltyShare), ks=Ps.map(anKiosk), wl=Ps.map(anWorkload);
+  const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), P=Ps[5];
+  const paid=Ps.map(p=>{ const t=anKindTotals(p,true); return AN_KINDS.reduce((a,k)=>a+(k.k==='unpaid'?0:t[k.k]),0); });
+  const extra=Ps.map(anExtraTime), base=Ps.map(anRosterShifts);
+  const outs=Ps.map(p=>anOutside(p)), late=outs.map(o=>o.reduce((a,x)=>a+x.lateIn,0)), early=outs.map(o=>o.reduce((a,x)=>a+x.earlyOut,0));
+  const ks=Ps.map(p=>anKiosk(p).total), unpl=Ps.map(anUnplannedDays);
   const cover=anCoverRows(_anGroup).filter(r=>r.expected&&!r.cover).length;
-  const tile=(id,label,value,delta,spark)=>`<button type="button" class="an-card an-tile" onclick="anShow('${id}')"><span class="an-tl">${label}</span><span class="an-tv">${value}</span><span class="an-td">${delta}</span>${spark||''}</button>`;
-  const fmtPct=p=>p==null?'—':(p>0?'+':'')+p.toFixed(1)+'%';
+  const waiting=(_requests||[]).filter(q=>String(q.status).startsWith('pending'));
+  const oldest=waiting.length?Math.max(...waiting.map(q=>Math.floor((Date.now()-new Date(q.createdAt))/86400000))):0;
+  const line=t=>`<span class="an-flat an-typ">${t}</span>`, bul=t=>`<span class="an-flat an-typ an-bul">${t}</span>`;
+  const ofN=(n,b)=>b>0?`of ${b} shift${b===1?'':'s'} (${(n/b*100).toFixed(0)}%)`:'no completed shifts yet';
+  const dH=(c,p,goodUp)=>{ const d=c-p; if(Math.abs(d)<0.05) return '<span class="an-flat">same as previous period</span>';
+    const cls=goodUp==null?'an-flat':((d>0)===goodUp?'an-good':'an-bad'); return `<span class="${cls}">${d>0?'▲':'▼'} ${Math.abs(d).toFixed(1)}h</span> <span class="an-flat">vs previous period</span>`; };
+  // Trend line with its date span underneath, so it is never vague what it covers.
+  const trend=vals=>anSpark(vals)+`<span class="an-spark-cap" title="Last 6 pay periods, ending with the selected one"><span>${escHtml(anShortPeriod(starts[0]))}</span><span>6 pay periods</span><span>${escHtml(anShortPeriod(starts[5]))}</span></span>`;
+  const tile=(id,label,value,sub,extraHtml='')=>`<button type="button" class="an-card an-tile" onclick="anShow('${id}')"><span class="an-tl">${label}</span><span class="an-tv">${value}</span><span class="an-td">${sub}</span>${extraHtml}</button>`;
+  const unit=u=>`<span class="an-tv-unit"> ${u}</span>`;
   let h=anHead(AN_REPORTS[0],`Pay period ${escHtml(anPeriodLabel(P.fnStart))}${_anGroup?' · '+escHtml(AN_GROUP_LABELS[_anGroup]):''}`);
   h+=anNotice(P);
-  h+=`<div class="an-tiles">
-    ${tile('hours','Hours over roster',fmtPct(tot[5].pct),anDelta(tot[5].pct,tot[4].pct,'pts',null),anSpark(tot.map(t=>t.pct)))}
-    ${tile('paycat','Penalty-rate hours',anPct(pen[5]),anDelta(pen[5],pen[4],'pts',null),anSpark(pen))}
-    ${tile('cover','Leave with no cover shift',String(cover),'<span class="an-flat">annual leave, next 6 weeks</span>','')}
-    ${tile('kiosk','Kiosk misses',String(ks[5].total),anDelta(ks[5].total,ks[4].total,'',false),anSpark(ks.map(k=>k.total)))}
-    ${tile('workload','Approved with no changes',anPct(wl[5].pct),anDelta(wl[5].pct,wl[4].pct,'pts',true),anSpark(wl.map(w=>w.pct)))}
+  h+=`<div class="an-tiles an-tiles-4">
+    ${tile('paycat','Hours paid',anH(paid[5])+unit('hours'),line('worked and paid leave')+bul(dH(paid[5],paid[4],null)),trend(paid))}
+    ${tile('hours','Paid extra time','+'+anH(extra[5].hours)+unit('hours'),line(`over ${extra[5].shifts} of ${base[5]} shifts`)+bul(dH(extra[5].hours,extra[4].hours,false)),trend(extra.map(x=>x.hours)))}
+    ${tile('outside','Clocked in late',String(late[5]),line(ofN(late[5],base[5]))+bul(anDelta(late[5],late[4],'',false)),trend(late))}
+    ${tile('outside','Clocked out early',String(early[5]),line(ofN(early[5],base[5]))+bul(anDelta(early[5],early[4],'',false)),trend(early))}
+    ${tile('kiosk','Missed clocks',String(ks[5]),line(ofN(ks[5],base[5]))+bul(anDelta(ks[5],ks[4],'',false)),trend(ks))}
+    ${tile('leave','Unplanned leave',String(unpl[5])+unit(unpl[5]===1?'day':'days'),line('personal, compassionate, unpaid')+bul(anDelta(unpl[5],unpl[4],'',null)),trend(unpl))}
+    ${tile('cover','Leave without cover',String(cover),line('annual leave blocks with no cover shift')+bul('next 6 weeks'))}
+    ${tile('requests','Requests waiting',String(waiting.length),waiting.length?line('for a colleague or a manager')+bul(`oldest ${oldest} day${oldest===1?'':'s'}`):line('nothing waiting'))}
   </div>`;
   const labels=starts.map(anShortPeriod);
   const shade=anShadeFor(starts);
-  const c1=anBars(labels,tot.map(t=>t.diff),{shade,fmt:v=>(v>0?'+':'')+v.toFixed(0)+'h',aria:'Hours worked over or under roster, last six pay periods',
-    colorFor:(v,i)=>i===5?(v>=0?'#8B2535':'#3A6B4F'):(v>=0?'#D4899A':'#9DBBA8')});
+  // Was "Hours worked over roster" — netted, the flaw the tiles dropped. Paid extra time instead.
+  const c1=anBars(labels,extra.map(x=>x.hours),{shade,fmt:v=>v.toFixed(0)+'h',aria:'Paid extra time, last six pay periods',
+    colorFor:(v,i)=>i===5?'#8B2535':'#D4899A'});
   const kt=Ps.map(p=>anKindTotals(p));
   const c2=anStack(labels,AN_KINDS.filter(k=>AN_WORK_KINDS.includes(k.k)).map(k=>({label:k.label,color:k.color,values:kt.map(t=>t[k.k])})),{shade,percent:true,aria:'Share of worked hours by pay category, last six pay periods'});
   h+=`<div class="an-two">
-    ${anChartCard('Hours worked over roster','Paid hours minus rostered hours, per pay period (Tue–Mon). Completed days only.',c1+anShadeNote(shade),anOpenLink('hours'))}
+    ${anChartCard('Paid extra time','Hours paid outside the rostered start and finish, per pay period (Tue–Mon). Not netted against late starts.',c1+anShadeNote(shade),anOpenLink('hours'))}
     ${anChartCard('Worked hours by pay category','Share of worked hours, per pay period (Tue–Mon). Leave not included.',c2+anLegend(AN_KINDS.filter(k=>AN_WORK_KINDS.includes(k.k)))+anShadeNote(shade),anOpenLink('paycat'))}
   </div>`;
   return h;
