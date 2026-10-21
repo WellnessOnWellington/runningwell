@@ -9669,20 +9669,22 @@ function anIsFinalised(fnStart){ return (_timesheetFinalizations||[]).some(f=>St
 function anFinalisation(fnStart){ return (_timesheetFinalizations||[]).find(f=>String(f.fn_start).slice(0,10)===fnStart)||null; }
 // The selected period and the n-1 before it, oldest first.
 /* Trend range — one setting for every trend chart, remembered on this device (Joel, 21 Oct).
-   Every pay fortnight is plotted: no averaging, none skipped. Ranges never reach back past
-   the first fortnight with any data (Running Well began March 2026) — no fake zeros. */
+   Every pay fortnight is plotted: no averaging, none skipped. Fortnights before the first one
+   with any data (Running Well began March 2026) keep their place and date on the axis but
+   are not reported at all — no point, no zero, no hover, no table row (anTrendNoData). */
 const AN_TREND_KEY='rw_an_trend', AN_TRENDS={'3m':{n:7,label:'3 months'},'6m':{n:13,label:'6 months'},'12m':{n:26,label:'12 months'}};
 let _anTrend=(()=>{ try{ const v=localStorage.getItem(AN_TREND_KEY); return AN_TRENDS[v]?v:'6m'; }catch(e){ return '6m'; } })();
 function anSetTrend(v){ if(!AN_TRENDS[v]) return; _anTrend=v; try{ localStorage.setItem(AN_TREND_KEY,v); }catch(e){} anRender(); }
 let _anFirstStart=null;
 function anTrendStarts(){
   if(!_anFirstStart){ let first=null; _entries.forEach(e=>{ if(!e.deleted&&e.date&&(!first||e.date<first)) first=e.date; }); _anFirstStart=first?payPeriodStartFor(first):'0000'; }
-  const all=anRecentStarts(AN_TRENDS[_anTrend].n), starts=all.filter(s=>s>=_anFirstStart);
-  return starts.length?starts:all.slice(-1);
+  return anRecentStarts(AN_TRENDS[_anTrend].n);
 }
+// true for a period that ends before the first data — shown on the axis, reported nowhere.
+function anTrendNoData(starts){ anTrendStarts(); return starts.map(s=>s<_anFirstStart); }
 function anTrendDesc(starts){
-  const want=AN_TRENDS[_anTrend].n, f=new Date(starts[0]+'T12:00:00');
-  return `${starts.length} pay period${starts.length===1?'':'s'} (Tue–Mon)`+(starts.length<want?` · data starts ${f.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`:'');
+  const nd=anTrendNoData(starts), f=new Date(_anFirstStart+'T12:00:00');
+  return `${starts.length} pay period${starts.length===1?'':'s'} (Tue–Mon)`+(nd.some(Boolean)?` · no data before ${f.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}`:'');
 }
 function anTrendSeg(){
   return `<div class="an-seg an-seg-sm" role="group" aria-label="Trend range">${Object.entries(AN_TRENDS).map(([k,v])=>`<button type="button" class="an-segb${_anTrend===k?' on':''}" onclick="anSetTrend('${k}')" title="Every pay fortnight over ${v.label}">${k}</button>`).join('')}</div>`;
@@ -9916,9 +9918,18 @@ function anStack(labels, series, opts={}){
       const hh=v/max*ph; yy-=hh;
       s+=`<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,hh-1).toFixed(1)}" fill="${se.color}"><title>${escHtml(se.label)}: ${opts.percent?v.toFixed(1)+'%':escHtml(fmt(se.values[i]))}</title></rect>`;
     });
-    if(!opts.percent&&totals[i]>0) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(yy-5).toFixed(1)}" class="an-val" text-anchor="middle">${escHtml(fmt(totals[i]))}</text>`;
+    // Column totals are printed only while they fit (13 columns or fewer); past that they
+    // overlap, and the column hover below carries them instead.
+    if(!opts.percent&&totals[i]>0&&n<=13) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(yy-5).toFixed(1)}" class="an-val" text-anchor="middle">${escHtml(fmt(totals[i]))}</text>`;
     if(anShowAxisLabel(i,n)) s+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`;
   });
+  // One hover per column: the period, its total and every category in it — instant, and
+  // above the per-block titles, so the figures are there however many columns there are.
+  labels.forEach((lab,i)=>{ if(!(totals[i]>0)) return;
+    const tf=opts.tipFmt||fmt;
+    const lines=[(opts.tipLabels?opts.tipLabels[i]:lab)+(opts.percent?'':' · '+tf(totals[i]))].concat(series.filter(se=>(se.values[i]||0)>0).map(se=>`${se.label}: ${opts.percent?((se.values[i]||0)/totals[i]*100).toFixed(1)+'%':tf(se.values[i])}`));
+    s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+14).toFixed(1)}" data-tip="${escHtml(lines.join('\n'))}"/>`; });
+  anTipInit();
   return s+'</svg>';
 }
 function anLegend(items){ return `<div class="an-legend">${items.map(i=>`<span><span class="an-sw" style="background:${i.color}"></span>${escHtml(i.label)}</span>`).join('')}</div>`; }
@@ -10157,7 +10168,7 @@ function anRenderRvp(){
   const starts=anRecentStarts(6), Ps=starts.map(s=>anPeriod(s)), X=Ps.map((p,i)=>anRvp(p,{noCategories:i<5})), cur=X[5], prev=X[4];
   // By pay period looks back about six months (13 pay periods), difference only, as a line (Joel, 21 Oct).
   const tStarts=_anRvpBy==='period'?anTrendStarts():null;
-  const TX=tStarts?tStarts.map(s=>anRvp(anPeriod(s),{noCategories:true})):null;
+  const TX=tStarts?tStarts.map(s=>anRvp(anPeriod(s),{noCategories:true})):null, TND=tStarts?anTrendNoData(tStarts):null;
   const so=cur.mode==='current'?' so far':'';
   const views=[['person','By person'],['group','By staff group'],['category','By pay category'],['period','By pay period']];
   const seg=`<div class="an-seg" role="group" aria-label="View">${views.map(([v,l])=>`<button type="button" class="an-segb${_anRvpBy===v?' on':''}" onclick="anSetRvpBy('${v}')">${l}</button>`).join('')}</div>`;
@@ -10169,14 +10180,14 @@ function anRenderRvp(){
     let items;
     if(_anRvpBy==='category') items=AN_KINDS.filter(k=>k.k!=='unpaid').map(k=>({label:k.label,color:k.color,d:(cur.cat[k.k]||0)-(cur.proj[k.k]||0)}));
     else if(_anRvpBy==='group'){ const g={}; cur.people.forEach(o=>{ const k=o.group||'—'; g[k]=(g[k]||0)+o.paid-o.rostered; }); items=Object.entries(g).map(([k,d])=>({label:AN_GROUP_LABELS[k]||k,color:AN_GROUP_COLORS[k],d})); }
-    else if(_anRvpBy==='period') items=TX.map((x,i)=>({label:anPeriodLabel(tStarts[i]),d:x.diff})).filter((_,i)=>TX[i].mode!=='future');
+    else if(_anRvpBy==='period') items=TX.map((x,i)=>({label:anPeriodLabel(tStarts[i]),d:x.diff})).filter((_,i)=>TX[i].mode!=='future'&&!TND[i]);
     else items=cur.people.map(o=>({label:anName(o.emp),color:AN_GROUP_COLORS[o.group],d:o.paid-o.rostered}));
     items=items.filter(x=>Math.abs(x.d)>=0.05).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)).slice(0,3);
     h+=`<div class="an-card an-pad an-reading">
       <div><div class="an-tl">Paid vs rostered${so}</div>
         <div class="an-reading-big ${anDiffCls(cur.diff)}">${anSg(cur.diff)}<span class="an-tv-unit"> hours ${Math.abs(cur.diff)<0.005?'— on roster':cur.diff>0?'over':'under'}${cur.pct==null?'':` (${cur.pct>0?'+':cur.pct<0?'−':''}${Math.abs(cur.pct).toFixed(1)}%)`}</span></div>
         <div class="an-sub">Paid ${anH(cur.tP)}h against ${anH(cur.tR)}h rostered${so}.</div></div>
-      <div><div class="an-tl">Biggest differences${_anRvpBy==='period'?` (last ${tStarts.length} pay periods)`:''}</div>${items.length?items.map(x=>`<div class="an-reading-row"><span>${x.color?`<span class="an-sw" style="background:${x.color}"></span>`:''}${escHtml(x.label)}</span><strong class="${anDiffCls(x.d)}">${anSg(x.d)}h</strong></div>`).join(''):'<div class="an-sub">Everything within 0.05h of the roster.</div>'}</div>
+      <div><div class="an-tl">Biggest differences${_anRvpBy==='period'?` (last ${TND.filter(x=>!x).length} pay periods)`:''}</div>${items.length?items.map(x=>`<div class="an-reading-row"><span>${x.color?`<span class="an-sw" style="background:${x.color}"></span>`:''}${escHtml(x.label)}</span><strong class="${anDiffCls(x.d)}">${anSg(x.d)}h</strong></div>`).join(''):'<div class="an-sub">Everything within 0.05h of the roster.</div>'}</div>
     </div>`;
   }
   const foot=`<div class="an-foot">Difference is paid minus rostered: red means more was paid than rostered, green less. Leave is counted on both sides; unpaid leave on neither.${cur.mode==='current'?' "So far" counts only days already finished.':''} Only staff currently active are counted, the same as the MYOB export.</div>`;
@@ -10187,9 +10198,9 @@ function anRenderRvp(){
     const shade=anShadeFor(tStarts);
     const vals=TX.map(x=>x.mode==='future'?0:x.diff);
     h+=anChartCard('Paid minus rostered, by pay period',anTrendDesc(tStarts)+'. Above the line: paid more than rostered; below: less. Hover a period for its figure.',
-      anLine(tStarts.map(anTrendLab),vals,{shade,tipLabels:tStarts.map(s=>anPeriodLabel(s)+' · paid minus rostered'),skip:TX.map(x=>x.mode==='future'),fmt:v=>(v>0?'+':v<0?'−':'')+(Math.abs(v)>=10?Math.abs(v).toFixed(0):Math.abs(v).toFixed(1))+'h',aria:'Paid minus rostered hours, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg());
+      anLine(tStarts.map(anTrendLab),vals,{shade,tipLabels:tStarts.map(s=>anPeriodLabel(s)+' · paid minus rostered'),skip:TX.map((x,i)=>x.mode==='future'||TND[i]),fmt:v=>(v>0?'+':v<0?'−':'')+(Math.abs(v)>=10?Math.abs(v).toFixed(0):Math.abs(v).toFixed(1))+'h',aria:'Paid minus rostered hours, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg());
     h+=anTable([{t:'Pay period'},{t:'Rostered',n:1},{t:'Paid',n:1},{t:'Difference',n:1},{t:'%',n:1},{t:'Finalised'}],
-      TX.map((x,i)=>`<tr><td><strong>${escHtml(anPeriodLabel(tStarts[i]))}</strong>${x.mode==='current'?' <span class="an-flat">(so far)</span>':''}</td><td class="n">${anH(x.tR)}</td><td class="n">${x.mode==='future'?'<span class="an-flat">–</span>':anH(x.tP)}</td>${x.mode==='future'?'<td class="n an-flat">–</td><td class="n an-flat">–</td>':cell(x.diff)+`<td class="n ${anDiffCls(x.diff)}">${x.pct==null?'—':(x.pct>0?'+':x.pct<0?'−':'')+Math.abs(x.pct).toFixed(1)+'%'}</td>`}<td>${x.P.finalised?'Yes':'<span class="an-flat">No</span>'}</td></tr>`).reverse());
+      TX.map((x,i)=>TND[i]?'':`<tr><td><strong>${escHtml(anPeriodLabel(tStarts[i]))}</strong>${x.mode==='current'?' <span class="an-flat">(so far)</span>':''}</td><td class="n">${anH(x.tR)}</td><td class="n">${x.mode==='future'?'<span class="an-flat">–</span>':anH(x.tP)}</td>${x.mode==='future'?'<td class="n an-flat">–</td><td class="n an-flat">–</td>':cell(x.diff)+`<td class="n ${anDiffCls(x.diff)}">${x.pct==null?'—':(x.pct>0?'+':x.pct<0?'−':'')+Math.abs(x.pct).toFixed(1)+'%'}</td>`}<td>${x.P.finalised?'Yes':'<span class="an-flat">No</span>'}</td></tr>`).reverse());
     return h+foot;
   }
   if(_anRvpBy==='category'){
@@ -10264,9 +10275,11 @@ function anMix(P){
 function anDualLine(labels, a, b, opts={}){
   const W=600, H=opts.height||250, L=52, R=44, T=26, B=30, ph=H-T-B;
   const n=labels.length, slot=(W-L-R)/Math.max(1,n), x=i=>L+i*slot+slot/2;
-  const aMin=Math.min(...a), aMax=Math.max(...a), pad=Math.max(1,(aMax-aMin)*0.15);
+  // opts.skip[i]: no point, line gap and no hover for that period (e.g. before any data).
+  const use=a.map((_,i)=>!(opts.skip&&opts.skip[i])), au=a.filter((_,i)=>use[i]), bu=b.filter((_,i)=>use[i]);
+  const aMin=Math.min(...au), aMax=Math.max(...au), pad=Math.max(1,(aMax-aMin)*0.15);
   const a0=Math.max(0,Math.floor((aMin-pad)/10)*10), a1=Math.ceil((aMax+pad)/10)*10;
-  const b1=Math.max(10,Math.ceil(Math.max(...b)*1.25/5)*5);
+  const b1=Math.max(10,Math.ceil(Math.max(...bu)*1.25/5)*5);
   const ya=v=>T+(a1-v)/((a1-a0)||1)*ph, yb=v=>T+(b1-v)/b1*ph;
   let s=`<svg class="an-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escHtml(opts.aria||'')}">`;
   if(opts.shade) opts.shade.forEach((sh,i)=>{ if(!sh) return; s+=`<rect x="${(L+i*slot+2).toFixed(1)}" y="2" width="${(slot-4).toFixed(1)}" height="${H-4}" rx="6" fill="#F6EEF0"${sh==='current'?' stroke="#D4899A" stroke-dasharray="4 3"':''}/>`; });
@@ -10274,13 +10287,14 @@ function anDualLine(labels, a, b, opts={}){
     s+=`<line x1="${L}" x2="${W-R}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#F0E4E7"/>`;
     s+=`<text x="${L-6}" y="${(yy+4).toFixed(1)}" class="an-ax" text-anchor="end" style="fill:#2D2426">${Math.round(a0+(a1-a0)*f)}h</text>`;
     s+=`<text x="${W-R+6}" y="${(yy+4).toFixed(1)}" class="an-ax" style="fill:#8B2535">${Math.round(b1*f)}%</text>`; });
-  const line=(vals,y,c,dash)=>`<polyline points="${vals.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="2.2" stroke-linejoin="round"${dash?' stroke-dasharray="5 4"':''}/>`;
+  const line=(vals,y,c,dash)=>{ const segs=[]; let cur=[]; vals.forEach((v,i)=>{ if(use[i]) cur.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`); else { if(cur.length) segs.push(cur); cur=[]; } }); if(cur.length) segs.push(cur);
+    return segs.filter(p=>p.length>1).map(p=>`<polyline points="${p.join(' ')}" fill="none" stroke="${c}" stroke-width="2.2" stroke-linejoin="round"${dash?' stroke-dasharray="5 4"':''}/>`).join(''); };
   s+=line(b,yb,'#8B2535',true)+line(a,ya,'#2D2426',false);
-  b.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${yb(v).toFixed(1)}" r="3.5" fill="#fff" stroke="#8B2535" stroke-width="2"/>`; });
-  a.forEach((v,i)=>{ s+=`<circle cx="${x(i).toFixed(1)}" cy="${ya(v).toFixed(1)}" r="4" fill="#2D2426"/>`; });
+  b.forEach((v,i)=>{ if(!use[i]) return; s+=`<circle cx="${x(i).toFixed(1)}" cy="${yb(v).toFixed(1)}" r="3.5" fill="#fff" stroke="#8B2535" stroke-width="2"/>`; });
+  a.forEach((v,i)=>{ if(!use[i]) return; s+=`<circle cx="${x(i).toFixed(1)}" cy="${ya(v).toFixed(1)}" r="4" fill="#2D2426"/>`; });
   labels.forEach((lab,i)=>{ if(anShowAxisLabel(i,n)) s+=`<text x="${x(i).toFixed(1)}" y="${H-10}" class="an-ax" text-anchor="middle">${escHtml(lab)}</text>`; });
   // Both figures for a period on hover, from anywhere in its column (no printed labels).
-  labels.forEach((lab,i)=>{ s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\nCost-weighted hours: '+anH(a[i])+'\nAt penalty rates: '+b[i].toFixed(1)+'%')}"/>`; });
+  labels.forEach((lab,i)=>{ if(!use[i]) return; s+=`<rect class="an-colhit" x="${(L+i*slot).toFixed(1)}" y="${T-14}" width="${slot.toFixed(1)}" height="${(ph+28).toFixed(1)}" data-tip="${escHtml((opts.tipLabels?opts.tipLabels[i]:lab)+'\nCost-weighted hours: '+anH(a[i])+'\nAt penalty rates: '+b[i].toFixed(1)+'%')}"/>`; });
   anTipInit();
   return s+'</svg>'+`<div class="an-legend"><span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="#2D2426" stroke-width="2.2"/><circle cx="11" cy="5" r="3.5" fill="#2D2426"/></svg> Cost-weighted hours (left axis)</span><span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="#8B2535" stroke-width="2.2" stroke-dasharray="5 4"/><circle cx="11" cy="5" r="3" fill="#fff" stroke="#8B2535" stroke-width="2"/></svg> Penalty-rate share (right axis)</span></div>`;
 }
@@ -10307,8 +10321,8 @@ function anRenderPayCat(){
   </div>`;
   const shade=anShadeFor(starts);
   // Full width, one above the other: 13 periods side by side made both too small to read.
-  h+=`${anChartCard('Cost-weighted hours and penalty-rate share',anTrendDesc(starts)+'. '+'Cost-weighted hours track staff cost in base-rate hours; the dashed line shows how much of the worked time was at penalty rates — so you can see whether a rise in cost came from more hours or from more penalty hours.',anDualLine(starts.map(anTrendLab),M.map(x=>x.weighted),M.map(x=>x.penShare||0),{shade,tipLabels:starts.map(anPeriodLabel),aria:'Cost-weighted hours and penalty-rate share, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg())}
-    ${anChartCard('Paid hours by category',anTrendDesc(starts)+'. Hover a block for its figure.',anStack(starts.map(anTrendLab),kinds.map(x=>({label:x.label,color:x.color,values:M.map(mm=>mm.k[x.k])})),{shade,fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last thirteen pay periods'})+anLegend(kinds),anTrendSeg())}`;
+  h+=`${anChartCard('Cost-weighted hours and penalty-rate share',anTrendDesc(starts)+'. '+'Cost-weighted hours track staff cost in base-rate hours; the dashed line shows how much of the worked time was at penalty rates — so you can see whether a rise in cost came from more hours or from more penalty hours.',anDualLine(starts.map(anTrendLab),M.map(x=>x.weighted),M.map(x=>x.penShare||0),{shade,skip:anTrendNoData(starts),tipLabels:starts.map(anPeriodLabel),aria:'Cost-weighted hours and penalty-rate share, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg())}
+    ${anChartCard('Paid hours by category',anTrendDesc(starts)+'. Hover a period for its figures.',anStack(starts.map(anTrendLab),kinds.map(x=>({label:x.label,color:x.color,values:M.map(mm=>mm.k[x.k])})),{shade,tipLabels:starts.map(anPeriodLabel),tipFmt:v=>anH(v)+'h',fmt:v=>Math.round(v)+'h',aria:'Paid hours by pay category, last thirteen pay periods'})+anLegend(kinds),anTrendSeg())}`;
   const rows=kinds.filter(x=>m.k[x.k]>0||pm.k[x.k]>0).map(x=>{ const d=m.k[x.k]-pm.k[x.k], w=x.k==='evening'?'1.125–1.15':(AN_WEIGHT[x.k]??1).toFixed(x.k==='ph'?1:(AN_WEIGHT[x.k]%1?1:0));
     return `<tr><td><span class="an-sw" style="background:${x.color}"></span>${escHtml(x.label)}</td><td class="n">${anH(m.k[x.k])}</td><td class="n">${anPct(m.total?m.k[x.k]/m.total*100:null,1)}</td><td class="n an-flat">${Math.abs(d)<0.005?'–':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(2)}</td><td class="n an-flat">×${w}</td></tr>`; });
   if(rows.length) rows.push(`<tr class="an-total"><td>Total</td><td class="n">${anH(m.total)}</td><td class="n">100%</td><td class="n an-flat">${(()=>{const d=m.total-pm.total; return Math.abs(d)<0.005?'–':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(2);})()}</td><td class="n">${anH(m.weighted)} <span class="an-flat">weighted</span></td></tr>`);
@@ -10357,7 +10371,7 @@ function anRenderTravel(){
   const shade=anShadeFor(starts);
   let h=anHead(r,'Kilometres claimed at the clinic-travel prompt, exported to MYOB as "Travelling Allowance per KLM".');
   h+=anNotice(P);
-  h+=anChartCard('Kilometres per pay period',anTrendDesc(starts)+'. Hover a period for its figure.',anLine(starts.map(anTrendLab),km,{shade,tipLabels:starts.map(s=>anPeriodLabel(s)+' · kilometres claimed'),color:'#8B2535',fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg());
+  h+=anChartCard('Kilometres per pay period',anTrendDesc(starts)+'. Hover a period for its figure.',anLine(starts.map(anTrendLab),km,{shade,skip:anTrendNoData(starts),tipLabels:starts.map(s=>anPeriodLabel(s)+' · kilometres claimed'),color:'#8B2535',fmt:v=>Math.round(v)+' km',aria:'Travel kilometres, last thirteen pay periods'})+anShadeNote(shade),anTrendSeg());
   const by=new Map();
   P.rows.filter(x=>x.travelKm>0).forEach(x=>{ const k=String(x.emp.id); if(!by.has(k)) by.set(k,{emp:x.emp,km:0,trips:0}); const o=by.get(k); o.km+=x.travelKm; o.trips++; });
   const rows=[...by.values()].sort((a,b)=>b.km-a.km).map(o=>`<tr><td>${anWho(o.emp)}</td><td class="n">${o.trips}</td><td class="n"><strong>${o.km.toFixed(1)}</strong></td></tr>`);
@@ -10793,7 +10807,8 @@ function anMedian(a){ const v=a.filter(x=>x!=null&&isFinite(x)).sort((x,y)=>x-y)
 const AN_SOLE_RECORD_FROM='2026-08-11';
 function anShadeFor(starts){
   const today=anToday();
-  return starts.map(s=>{ const end=anAddDays(s,13); if(end>=today) return 'current'; if(s<AN_SOLE_RECORD_FROM) return 'early'; return null; });
+  anTrendStarts();
+  return starts.map(s=>{ const end=anAddDays(s,13); if(end>=today) return 'current'; if(_anFirstStart&&s<_anFirstStart) return null; if(s<AN_SOLE_RECORD_FROM) return 'early'; return null; });
 }
 function anShadeNote(shade){
   let h='';
