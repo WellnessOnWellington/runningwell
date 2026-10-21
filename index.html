@@ -9562,7 +9562,7 @@ const AN_GROUP_COLORS={Receptionist:'#27AE60',Nurse:'#2471A3',Manager:'#8E44AD'}
 const AN_GROUP_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Managers'};
 const AN_REPORTS=[
   {id:'overview', label:'Overview', render:anRenderOverview, pp:true},
-  {id:'people',   label:'People',   render:anRenderPeople,   pp:false, after:anSizePeopleSelect},
+  {id:'people',   label:'People',   render:anRenderPeople,   pp:true, after:anSizePeopleSelect},
   {id:'hours',    group:'Hours & pay',   label:'Rostered vs paid',      render:anRenderRvp,      pp:true},
   {id:'paycat',   group:'Hours & pay',   label:'Hours by pay category', render:anRenderPayCat,   pp:true},
   {id:'travel',   group:'Hours & pay',   label:'Travel km',             render:anRenderTravel,   pp:true},
@@ -11351,14 +11351,16 @@ function anOpenClockAudit(empId){
    on raw counts.
 
    Current staff only, as loadAll loads them (decided 19 Oct 2026). */
-let _anPeopleId=null, _anPeopleRange='month';
-const AN_RANGES=[
-  {id:'current',label:'Current pay period',offsets:[0]},
-  {id:'last',   label:'Last pay period',   offsets:[-1]},
-  {id:'month',  label:'About 1 month',     offsets:[-2,-1]},
-  {id:'3m',     label:'About 3 months',    offsets:[-6,-5,-4,-3,-2,-1]},
-  {id:'6m',     label:'About 6 months',    offsets:[-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1]},
-];
+/* Range = the pay period chosen in the top picker (the END) + a length (22 Oct 2026, to match
+   every other page). 3m/6m/12m ARE the shared, remembered trend setting (_anTrend) — picking
+   one here sets it everywhere. '1p' and '1m' are People-only: a short window suits one
+   person, not a trend chart. They are remembered on their own; null = follow _anTrend.
+   "Current pay period" / "Last pay period" are now just the picker on Current / one back. */
+const AN_PEOPLE_SHORT={'1p':{n:1,label:'1 pay period',seg:'1 period'},'1m':{n:2,label:'About 1 month',seg:'1m'}};
+const AN_PEOPLE_SHORT_KEY='rw_an_people_len';
+let _anPeopleId=null;
+let _anPeopleShort=(()=>{ try{ const v=localStorage.getItem(AN_PEOPLE_SHORT_KEY); return v==='trend'?null:(AN_PEOPLE_SHORT[v]?v:'1m'); }catch(e){ return '1m'; } })();
+function anPeopleLen(){ return _anPeopleShort?{id:_anPeopleShort,...AN_PEOPLE_SHORT[_anPeopleShort]}:{id:_anTrend,n:AN_TRENDS[_anTrend].n,label:'Last '+AN_TRENDS[_anTrend].label}; }
 /* A dropdown sizes itself to its longest option, so filtering to a staff group with
    shorter names shrank it and slid the range buttons beside it sideways. Its width is
    set from the longest name across ALL current staff instead, whatever the filter.
@@ -11376,7 +11378,13 @@ function anSizePeopleSelect(){
 }
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{ try{ anSizePeopleSelect(); }catch(e){} });
 function anSetPeople(id){ _anPeopleId=String(id); anRender(); }
-function anSetPeopleRange(r){ _anPeopleRange=r; anRender(); }
+function anSetPeopleLen(v){
+  if(AN_PEOPLE_SHORT[v]) _anPeopleShort=v;
+  else if(AN_TRENDS[v]){ _anPeopleShort=null; _anTrend=v; try{ localStorage.setItem(AN_TREND_KEY,v); }catch(e){} }
+  else return;
+  try{ localStorage.setItem(AN_PEOPLE_SHORT_KEY,_anPeopleShort||'trend'); }catch(e){}
+  anRender();
+}
 function anShowPerson(empId){ anClosePerson(); _anPeopleId=String(empId); anShow('people'); }
 
 /* Everything the page shows, for EVERY current staff member over the range, so the
@@ -11629,8 +11637,8 @@ function anRenderPeople(){
   const staff=_emps.filter(e=>anInScope(e)).sort((a,b)=>anName(a).localeCompare(anName(b)));
   if(!staff.length) return anHead(r,'')+anEmpty('No current staff in this group.');
   if(!_anPeopleId||!staff.some(e=>String(e.id)===_anPeopleId)) _anPeopleId=String(staff[0].id);
-  const range=AN_RANGES.find(x=>x.id===_anPeopleRange)||AN_RANGES[2];
-  const starts=range.offsets.map(o=>getPayPeriodStart(o));
+  const range=anPeopleLen();
+  const starts=[]; for(let i=range.n-1;i>=0;i--) starts.push(getPayPeriodStart(_anPPOffset-i));
   const shade=anShadeFor(starts);
   const {Ps, by}=anPeopleStats(starts);
   const me=by.get(_anPeopleId), emp=me.emp, g=me.group, gl=AN_GROUP_LABELS[g]||g||'their group';
@@ -11638,7 +11646,8 @@ function anRenderPeople(){
   const typ=f=>anMedian(peers.map(o=>o.rate[f]));
   const first=Ps[0].days[0], last=Ps[Ps.length-1].days[13];
   const pick=`<label class="an-ctl">Staff member <select class="form-select an-sel" id="an-people-sel" onchange="anSetPeople(this.value)">${staff.map(e=>`<option value="${escHtml(String(e.id))}"${String(e.id)===_anPeopleId?' selected':''}>${escHtml(anName(e))}</option>`).join('')}</select></label>`;
-  const seg=`<div class="an-seg" role="group" aria-label="Range">${AN_RANGES.map(x=>`<button type="button" class="an-segb${x.id===range.id?' on':''}" onclick="anSetPeopleRange('${x.id}')">${x.label}</button>`).join('')}</div>`;
+  const segOpts=Object.entries(AN_PEOPLE_SHORT).map(([k,v])=>[k,v.seg]).concat(Object.keys(AN_TRENDS).map(k=>[k,k]));
+  const seg=`<div class="an-seg an-seg-sm" role="group" aria-label="Range length">${segOpts.map(([k,l])=>`<button type="button" class="an-segb${k===range.id?' on':''}" onclick="anSetPeopleLen('${k}')" title="${escHtml(AN_PEOPLE_SHORT[k]?AN_PEOPLE_SHORT[k].label:'Last '+AN_TRENDS[k].label+' — the same setting as the other reports')}, ending with the pay period chosen above">${l}</button>`).join('')}</div>`;
   const jump=`<button type="button" class="an-mini-btn" onclick="anOpenPerson('${escHtml(_anPeopleId)}')" title="Quick look at one pay period" aria-label="Quick look at one pay period">Quick look</button><button type="button" class="an-mini-btn" onclick="anOpenClockAudit('${escHtml(_anPeopleId)}')" title="Clock audit for ${escHtml(anName(emp))}" aria-label="Clock audit for ${escHtml(anName(emp))}">Clock audit</button>`;
   let h=anHead(r,'How one person is going, beside the typical figure for their staff group over the same range. Ranges are whole pay periods (Tue–Mon), so totals match payroll.',jump,{noPrint:true,tight:true});
   h+=`<div class="an-people-ctl">${pick}${seg}</div>`;
