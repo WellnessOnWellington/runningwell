@@ -9960,13 +9960,14 @@ function anRenderOverview(){
   const trend=vals=>anSpark(vals)+`<span class="an-spark-cap" title="Last 6 pay periods, ending with the selected one"><span>${escHtml(anShortPeriod(starts[0]))}</span><span>6 pay periods</span><span>${escHtml(anShortPeriod(starts[5]))}</span></span>`;
   const tile=(id,label,value,sub,extraHtml='')=>`<button type="button" class="an-card an-tile" onclick="anShow('${id}')"><span class="an-tl">${label}</span><span class="an-tv">${value}</span><span class="an-td">${sub}</span>${extraHtml}</button>`;
   const unit=u=>`<span class="an-tv-unit"> ${u}</span>`;
-  // One decimal on the Overview — glanceable; the reports keep two so they match MYOB to the cent.
-  const h1=v=>(Math.round(v*10)/10).toFixed(1);
+  // Overview precision (Joel, 21 Oct): whole hours for the two big totals, one decimal for
+  // small amounts and every change. The reports keep two so they match MYOB to the cent.
+  const h0=v=>String(Math.round(v)), h1=v=>(Math.round(v*10)/10).toFixed(1);
   let h=anHead(AN_REPORTS[0],`Pay period ${escHtml(anPeriodLabel(P.fnStart))}${_anGroup?' · '+escHtml(AN_GROUP_LABELS[_anGroup]):''}`);
   h+=anNotice(P);
   h+=`<div class="an-tiles an-tiles-4">
-    ${tile('paycat','Cost-weighted hours',h1(weighted[5])+unit('hours'),line(`${paid[5]>0?((weighted[5]/paid[5]-1)*100).toFixed(1):'0.0'}% above hours paid — the loadings`)+bul(dH(weighted[5],weighted[4],null)),trend(weighted))}
-    ${tile('paycat','Hours paid',h1(paid[5])+unit('hours'),line('worked and paid leave')+bul(dH(paid[5],paid[4],null)),trend(paid))}
+    ${tile('paycat','Cost-weighted hours',h0(weighted[5])+unit('hours'),line(`${paid[5]>0?((weighted[5]/paid[5]-1)*100).toFixed(1):'0.0'}% above hours paid — the loadings`)+bul(dH(weighted[5],weighted[4],null)),trend(weighted))}
+    ${tile('paycat','Hours paid',h0(paid[5])+unit('hours'),line('worked and paid leave')+bul(dH(paid[5],paid[4],null)),trend(paid))}
     ${tile('hours','Paid extra time','+'+h1(extra[5].hours)+unit('hours'),line(`over ${extra[5].shifts} of ${base[5]} shifts`)+bul(dH(extra[5].hours,extra[4].hours,false)),trend(extra.map(x=>x.hours)))}
     ${tile('cover','Leave without cover',String(cover),line('annual leave blocks with no cover shift')+bul('next 6 weeks'))}
     ${tile('outside','Clocked in late',String(late[5]),line(ofN(late[5],base[5]))+bul(anDelta(late[5],late[4],'',false)),trend(late))}
