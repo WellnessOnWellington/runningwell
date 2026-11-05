@@ -5120,7 +5120,7 @@ function returnOrFocusRFID(){
   }
 }
 document.addEventListener('click',e=>{
-  const kioskActive=document.getElementById('view-kiosk').classList.contains('active');
+  const kioskActive=document.getElementById('view-kiosk')?.classList.contains('active');
   const srActive=document.getElementById('view-staff-roster')?.classList.contains('active');
   const reqActive=document.getElementById('view-requests')?.classList.contains('active');
   if(!kioskActive&&!srActive&&!reqActive)return;
@@ -5143,7 +5143,7 @@ function _kioskInputOverlayOpen(){
 // clicking the taskbar/title bar to switch back) — the click listener above only catches
 // clicks that land inside the page content, not the window becoming active again.
 function maybeFocusRFID(){
-  const kioskActive=document.getElementById('view-kiosk').classList.contains('active');
+  const kioskActive=document.getElementById('view-kiosk')?.classList.contains('active');
   const srActive=document.getElementById('view-staff-roster')?.classList.contains('active');
   const reqActive=document.getElementById('view-requests')?.classList.contains('active');
   if(!kioskActive&&!srActive&&!reqActive)return;
@@ -5174,7 +5174,7 @@ async function processRFID(card){
     await processRequestsRFID(card); return;
   }
   // If scanning from Who's On, redirect to kiosk, process, then return
-  if(!document.getElementById('view-kiosk').classList.contains('active')){
+  if(!document.getElementById('view-kiosk')?.classList.contains('active')){
     _preRFIDView=document.querySelector('.view.active')?.id.replace('view-','')||null;
     showView('kiosk');
   }
@@ -5847,7 +5847,10 @@ function resetLogoutTimer(){
   logoutTimer=setTimeout(()=>{if(currentManager){managerLogout();showToast('Session timed out — please log in again');}},AUTO_LOGOUT_MS);
 }
 document.addEventListener('click',()=>{if(currentManager)resetLogoutTimer();});
-document.getElementById('manager-pin').addEventListener('keydown',e=>{if(e.key==='Enter')managerLogin();});
+/* `?.` because this runs at the top level: if #manager-pin were ever missing it would throw
+   during script evaluation, and every top-level statement after it would silently never
+   run — including the startup applyRosterConfig load, which is the v2.4 grace bug. */
+document.getElementById('manager-pin')?.addEventListener('keydown',e=>{if(e.key==='Enter')managerLogin();});
 
 /* ── MANAGER CRUD ── */
 let firstRunMode=false, changePinMgrId=null;

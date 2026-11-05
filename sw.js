@@ -3,7 +3,12 @@
    Increment CACHE_VER on each deploy to bust stale cache. */
 
 const CACHE_VER = 'rw-v16';
-const PRECACHE = ['/', '/index.html', '/icon-192.png', '/icon-512.png'];
+/* Relative to this file, so they resolve under /runningwell/ on GitHub Pages. They were
+   root-absolute ('/', '/index.html', …), which on a project site point at
+   wellnessonwellington.github.io/ itself — all four 404, addAll rejects, and the worker
+   never installed. So until Nov 2026 there was no offline fallback at all, and every
+   CACHE_VER bump before this was a no-op. */
+const PRECACHE = ['./', './index.html', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
