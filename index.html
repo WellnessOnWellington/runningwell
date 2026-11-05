@@ -230,8 +230,14 @@
   }
 
   .flash-sub { font-size: 0.95rem; color: rgba(255,255,255,0.55); font-weight: 500; margin-top: 0.4rem; }
-  .flash-pending { display:none; margin-top:1.25rem; background:rgba(255,255,255,0.18); border:1.5px solid rgba(255,255,255,0.35); border-radius:999px; padding:0.45rem 1.1rem; font-size:0.82rem; font-weight:700; color:#fff; letter-spacing:0.01em; animation:nameIn 0.35s 0.2s ease both; cursor:pointer; }
+  .flash-pending { display:none; margin-top:1.25rem; min-width:300px; max-width:420px; background:rgba(255,255,255,0.14); border:1.5px solid rgba(255,255,255,0.32); border-radius:16px; overflow:hidden; animation:nameIn 0.35s 0.2s ease both; }
   .flash-pending.visible { display:block; }
+  .flash-item { display:flex; align-items:center; gap:0.6rem; width:100%; padding:0.7rem 1rem; background:none; border:none; border-top:1px solid rgba(255,255,255,0.22); color:#fff; font-family:'Nunito',sans-serif; font-size:0.88rem; font-weight:700; text-align:left; cursor:pointer; }
+  .flash-item:first-child { border-top:none; }
+  .flash-item:hover { background:rgba(255,255,255,0.12); }
+  .flash-item-icon { width:1.4rem; text-align:center; flex-shrink:0; }
+  .flash-item-text { flex:1; }
+  .flash-item-chev { opacity:0.7; font-size:1.1rem; }
 
   /* ══════════════════════════════
      REASON OVERLAY
@@ -1099,6 +1105,13 @@
   .rpc.rpc-hist { opacity:0.72; }
   .rpc.rpc-flash-green { background:var(--success-lt) !important; border-left-color:var(--success) !important; border-color:rgba(58,107,79,0.3) !important; }
   .rpc.rpc-flash-orange { background:#fef3e8 !important; border-left-color:#e67e22 !important; border-color:rgba(230,126,34,0.3) !important; }
+  .rpc { position:relative; }
+  .rpc.rpc-tap { padding-right:2.8rem; }
+  .rpc-tick { position:absolute; top:50%; right:0.8rem; transform:translateY(-50%); width:26px; height:26px; border-radius:50%; border:1.5px solid var(--border-dk); color:var(--muted); font-size:0.8rem; font-weight:800; display:flex; align-items:center; justify-content:center; background:var(--white); }
+  .rpc.rpc-tap:hover .rpc-tick { border-color:var(--success); color:var(--success); }
+  .req-section-row { display:flex; align-items:baseline; justify-content:space-between; gap:0.5rem; }
+  .req-mark-all { background:none; border:none; color:var(--muted); font-family:'Nunito',sans-serif; font-size:0.74rem; font-weight:700; cursor:pointer; text-decoration:underline; text-underline-offset:2px; padding:0; }
+  .req-mark-all:disabled { cursor:default; opacity:0.6; }
   .rpc.rpc-collapse { max-height:0 !important; opacity:0 !important; padding-top:0 !important; padding-bottom:0 !important; margin-bottom:0 !important; }
   .rpc-label { font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.22rem; }
   .rpc-label-green { color:var(--success); }
@@ -2287,7 +2300,7 @@
   <div class="flash-greeting" id="flash-greeting"></div>
   <div class="flash-name"     id="flash-name"></div>
   <div class="flash-sub"      id="flash-sub"></div>
-  <div class="flash-pending"  id="flash-pending" onclick="clearTimeout(flashT);document.getElementById('flash').classList.remove('show');openRequestsAsFlashEmp();"></div>
+  <div class="flash-pending"  id="flash-pending"></div>
 </div>
 
 <!-- REASON -->
@@ -5167,8 +5180,16 @@ async function processRFID(card){
   if(!emp){showFlash('error','🤷','','Card not recognised','Please see your manager');return;}
   // Fresh fetch before committing — prevents duplicate entries when multiple kiosks are in use
   try{ _entries=(await db.get('entries')).map(normaliseEntry); }catch(e){}
-  try{ _notes=(await db.get('notes')).map(normaliseNote); }catch(e){}
-  if(!_requests.length){ try{ _requests=(await db.get('requests')).map(normaliseRequest); }catch(e){} }
+  /* Requests are fetched on EVERY tap, not only when empty. The desktop kiosk never loads
+     them at startup, so the old empty-check filled them on the first tap of the session and
+     then never again — the clock-in list counted requests as they stood that morning.
+     Notifications and open cover are per-person filtered reads for the same list; both are
+     tiny, and run alongside the notes read rather than after it. */
+  await Promise.all([
+    db.get('notes').then(r=>{ _notes=r.map(normaliseNote); }).catch(()=>{}),
+    db.get('requests').then(r=>{ _requests=r.map(normaliseRequest); }).catch(()=>{}),
+    _loadFlashExtras(emp)
+  ]);
   const now=new Date();
   const todayKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   const timeStr=now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false});
@@ -5291,13 +5312,45 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
 }
 
 function greet(d){const h=d.getHours();return h<12?'Good morning,':h<17?'Good afternoon,':'Good evening,';}
+/* Per-person extras for the clock-in list, filled by processRFID alongside the notes read.
+   Both are filtered reads (one person's unseen notifications; open cover in the next six
+   months), so they stay a few rows however large the tables grow. null = not loaded, and
+   the row is simply left off rather than shown as zero. */
+let _flashNotifs=null,_flashCover=null;
+async function _loadFlashExtras(emp){
+  _flashNotifs=null; _flashCover=null;
+  const today=rbDateKey(new Date());
+  const sixMonthsStr=rbDateKey(new Date(Date.now()+6*30.5*86400000));
+  // Same placeholder rule as the Staff Portal's Pick Up list (renderRequestForm).
+  const placeholderIds=_emps.filter(e=>e.is_placeholder&&staffGroupFor(e)===staffGroupFor(emp)&&e.active!==false).map(e=>e.id);
+  await Promise.all([
+    db.get('notifications',{employee_id:emp.id,seen_at:{is:'null'}})
+      .then(r=>{ _flashNotifs=r.map(normaliseNotif); }).catch(()=>{}),
+    placeholderIds.length
+      ? db.get('roster_shifts',{employee_id:{in:`(${placeholderIds.join(',')})`},date:{gt:today,lte:sixMonthsStr}})
+          .then(r=>{ _flashCover=r.filter(s=>!s.is_day_off&&s.start_time&&s.end_time); }).catch(()=>{})
+      : Promise.resolve().then(()=>{ _flashCover=[]; })
+  ]);
+}
+/* The clock-in list: what is waiting for this person in the Staff Portal. Each item opens
+   the portal at the right place.
+
+   "Updates" counts only what needs reading — flagged notes and request outcomes. Routine
+   approvals of kiosk notes are left out: staff almost never dismissed them, so by Nov 2026
+   receptionists showed 30–70 each going back to April and the number meant nothing.
+   Incoming swap/give-away notifications are left out too; those requests are already
+   counted in the first row. */
 function _kioskFlashMsg(emp){
   const unseenReqs=_requests.filter(r=>(r.status==='pending_manager'||r.status==='pending_peer')&&(r.initiatorId===emp.id||(r.colleagueId===emp.id&&r.status==='pending_peer'))).length;
-  const unreadNotes=_notes.filter(n=>n.employeeId===emp.id&&(n.status==='approved'||n.status==='flagged')&&!n.staffAcknowledged).length;
-  const parts=[];
-  if(unseenReqs>0) parts.push(unseenReqs===1?'1 pending request':`${unseenReqs} pending requests`);
-  if(unreadNotes>0) parts.push(unreadNotes===1?'1 update in Staff Portal':`${unreadNotes} updates in Staff Portal`);
-  return parts.length?'📋 '+parts.join(' · '):'';
+  const flaggedNotes=_notes.filter(n=>n.employeeId===emp.id&&n.status==='flagged'&&!n.staffAcknowledged).length;
+  const outcomes=(_flashNotifs||[]).filter(n=>n.employeeId===emp.id&&staffNotifUnread(n)&&n.type!=='incoming_swap'&&n.type!=='incoming_giveaway').length;
+  const updates=flaggedNotes+outcomes;
+  const cover=(_flashCover||[]).length;
+  const items=[];
+  if(unseenReqs>0) items.push({icon:'📋',text:unseenReqs===1?'1 request awaiting a response':`${unseenReqs} requests awaiting a response`,dest:'requests'});
+  if(updates>0) items.push({icon:'🔔',text:updates===1?'1 update from management':`${updates} updates from management`,dest:'list'});
+  if(cover>0) items.push({icon:'🙋',text:cover===1?'1 shift available to pick up':`${cover} shifts available to pick up`,dest:'pickup'});
+  return items;
 }
 
 async function addNote(emp,type,time,reason,entryId,date){
@@ -5319,8 +5372,13 @@ function showFlash(type,wave,greeting,name,sub,pendingMsg='',emp=null){
   document.getElementById('flash-greeting').textContent=greeting;
   document.getElementById('flash-name').textContent=name;
   document.getElementById('flash-sub').textContent=sub;
+  // pendingMsg is the item list from _kioskFlashMsg; error flashes pass nothing.
   const pd=document.getElementById('flash-pending');
-  if(pd){ pd.textContent=pendingMsg; pd.classList.toggle('visible',!!pendingMsg); }
+  const items=Array.isArray(pendingMsg)?pendingMsg:[];
+  if(pd){
+    pd.innerHTML=items.map(it=>`<button class="flash-item" onclick="clearTimeout(flashT);document.getElementById('flash').classList.remove('show');openRequestsAsFlashEmp('${it.dest}');"><span class="flash-item-icon">${it.icon}</span><span class="flash-item-text">${escHtml(it.text)}</span><span class="flash-item-chev">›</span></button>`).join('');
+    pd.classList.toggle('visible',items.length>0);
+  }
   renderKioskPresence();
   clearTimeout(flashT);
   flashT=setTimeout(()=>{o.classList.remove('show');returnOrFocusRFID();},2800);
@@ -15065,11 +15123,15 @@ async function openRequestsView(){
   showView('requests');
 }
 
-async function openRequestsAsFlashEmp(){
+async function openRequestsAsFlashEmp(dest){
   if(_flashEmp){
     showView('requests');
     _reqEmployee=_flashEmp;
     await reqShowList();
+    // Straight to the Pick Up list — the same form "+ New Request" opens, on its Pick Up tab.
+    if(dest==='pickup') reqShowForm('pickup');
+    // Requests sit below the updates, so without this a long Updates list hides them.
+    if(dest==='requests') document.getElementById('req-your-requests')?.scrollIntoView({block:'start'});
   } else {
     openRequestsView();
   }
@@ -15206,14 +15268,33 @@ function _notifMeta(type){
   return m[type]||{label:'Update',color:'neutral'};
 }
 
+/* An update counts as read once it is more than this many days old, tapped or not.
+   Staff almost never tapped updates away, so they piled up from April 2026 (30–70 per
+   receptionist by November, request outcomes from August still "new") and buried what did
+   need reading. Derived at display time — nothing is written, so changing the rule re-sorts
+   everything. The kiosk clock-in list, the portal's Active tab and Mark all as read all use
+   these two, so the counts cannot drift apart on age.
+   Flagged notes never age out: they ask the person to speak to their manager. Notes carry
+   no decided-at time, so a note's age is from its shift date. */
+const STAFF_UPDATE_AUTO_READ_DAYS=14;
+function staffNoteUnread(n){
+  if(n.staffAcknowledged) return false;
+  if(n.status==='flagged') return true;
+  if(n.status!=='approved') return false;
+  return n.date>=rbDateKey(new Date(Date.now()-STAFF_UPDATE_AUTO_READ_DAYS*86400000));
+}
+function staffNotifUnread(n){
+  return !n.seenAt&&Date.now()-new Date(n.createdAt).getTime()<STAFF_UPDATE_AUTO_READ_DAYS*86400000;
+}
+
 function renderRequestsList(){
   if(!_reqEmployee) return;
   const emp=_reqEmployee;
   const now=Date.now();
   const FOURTEEN=14*86400000;
   // ── Active ──
-  const activeNotes=_notes.filter(n=>n.employeeId===emp.id&&(n.status==='approved'||n.status==='flagged')&&!n.staffAcknowledged);
-  const activeNotifs=_notifications.filter(n=>n.employeeId===emp.id&&!n.seenAt).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const activeNotes=_notes.filter(n=>n.employeeId===emp.id&&staffNoteUnread(n));
+  const activeNotifs=_notifications.filter(n=>n.employeeId===emp.id&&staffNotifUnread(n)).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   const pendingReqs=_requests
     .filter(r=>r.initiatorId===emp.id||r.colleagueId===emp.id)
     .filter(r=>!['approved','declined','expired'].includes(r.status))
@@ -15241,6 +15322,7 @@ function renderRequestsList(){
     const label=ok?'✓ Approved':'⚠ Flagged — speak with your manager';
     const tap=isHist?'':` onclick="acknowledgePortalItem('note','${n.id}','${n.status}',this)"`;
     return`<div class="rpc rpc-${color}${isHist?' rpc-hist':' rpc-tap'}"${tap}>
+      ${isHist?'':'<span class="rpc-tick" title="Mark as read">✓</span>'}
       <div class="rpc-label rpc-label-${color}">${label}</div>
       <div class="rpc-msg">${escHtml(staffNoteMessage(n))}</div>
       <div class="rpc-time">${isHist?`Acknowledged ${reqFmtDate(n.staffAcknowledgedAt||n.date)}`:reqFmtDate(n.date)}</div>
@@ -15251,6 +15333,7 @@ function renderRequestsList(){
     const meta=_notifMeta(n.type);
     const tap=isHist?'':` onclick="acknowledgePortalItem('notif','${n.id}','${n.type}',this)"`;
     return`<div class="rpc rpc-${meta.color}${isHist?' rpc-hist':' rpc-tap'}"${tap}>
+      ${isHist?'':'<span class="rpc-tick" title="Mark as read">✓</span>'}
       <div class="rpc-label rpc-label-${meta.color}">${meta.label}</div>
       <div class="rpc-msg">${escHtml(n.message)}</div>
       <div class="rpc-time">${reqFmtDate(isHist?n.seenAt:n.createdAt)}</div>
@@ -15281,11 +15364,11 @@ function renderRequestsList(){
       ...activeNotifs.map(n=>({_type:'notif',_date:n.createdAt,n}))
     ].sort((a,b)=>new Date(b._date)-new Date(a._date));
     if(allUpdates.length){
-      html+=`<div class="req-section-label">Updates (${allUpdates.length})</div>`;
+      html+=`<div class="req-section-row"><div class="req-section-label">Updates (${allUpdates.length})</div>${allUpdates.length>1?`<button class="req-mark-all" onclick="reqMarkAllRead(this)">Mark all as read</button>`:''}</div>`;
       allUpdates.forEach(({_type,n})=>{ html+=_type==='note'?_noteCard(n):_notifCard(n); });
     }
     if(pendingReqs.length){
-      html+=`<div class="req-section-label">Your Requests</div>`;
+      html+=`<div class="req-section-label" id="req-your-requests">Your Requests</div>`;
       pendingReqs.forEach(r=>{ html+=_reqCard(r); });
     }
     if(!allUpdates.length&&!pendingReqs.length){
@@ -15330,6 +15413,25 @@ async function acknowledgePortalItem(type,id,subtype,cardEl){
     }catch(e){}
   }
   setTimeout(()=>renderRequestsList(),700);
+}
+
+/* Every update currently on the Active tab, in one go. Same writes as tapping each card
+   (acknowledgePortalItem), sent five at a time so a long backlog is not 70 requests at once. */
+async function reqMarkAllRead(btn){
+  const emp=_reqEmployee; if(!emp) return;
+  btn.disabled=true; btn.textContent='Marking…';
+  const ackAt=new Date().toISOString();
+  const jobs=[
+    ..._notes.filter(n=>n.employeeId===emp.id&&staffNoteUnread(n)).map(n=>()=>db.update('notes',n.id,{staff_acknowledged:true,staff_acknowledged_at:ackAt}).then(()=>{n.staffAcknowledged=true;n.staffAcknowledgedAt=ackAt;})),
+    ..._notifications.filter(n=>n.employeeId===emp.id&&staffNotifUnread(n)).map(n=>()=>db.update('notifications',n.id,{seen_at:ackAt}).then(()=>{n.seenAt=ackAt;}))
+  ];
+  let failed=0;
+  for(let i=0;i<jobs.length;i+=5){
+    const res=await Promise.allSettled(jobs.slice(i,i+5).map(j=>j()));
+    failed+=res.filter(r=>r.status==='rejected').length;
+  }
+  if(failed) showToast(`⚠ ${failed} update${failed===1?'':'s'} could not be marked — please try again`);
+  renderRequestsList();
 }
 
 function reqTitle(r,isInitiator){
@@ -15622,8 +15724,8 @@ function reqPeerDeclinePrompt(requestId){
   reqPeerRespond(requestId,'declined',reason||'');
 }
 
-function reqShowForm(){
-  _reqFormType='leave';
+function reqShowForm(type){
+  _reqFormType=type||'leave';
   renderRequestForm();
   document.getElementById('req-panel-auth').style.display='none';
   document.getElementById('req-panel-list').style.display='none';
