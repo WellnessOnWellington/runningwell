@@ -3296,7 +3296,7 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.4 &middot; October 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.5 &middot; November 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
@@ -3304,6 +3304,13 @@
                  rule, never by hand: fading per row was forgotten at every bump from v2.2 to v3.3,
                  which left eleven old releases looking current. -->
             <div class="about-history" style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.5</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">5 November 2026 &mdash; Clock-in list and Staff Portal updates</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Clocking in now shows what is waiting for you.</strong> Below the greeting, a short list shows requests awaiting a response, updates from management, and &mdash; new &mdash; shifts available to pick up. Tap a row to go straight to it in the Staff Portal: requests open at <em>Your Requests</em>, and shifts open on the Pick Up list. The request count is now current at every tap; on the clinic kiosk it used to stay as it was at the first tap of the day.<br><br><strong>Updates no longer pile up.</strong> Each update in the Staff Portal now has a small tick, and <em>Mark all as read</em> clears the lot. Updates more than 14 days old are treated as read automatically, except flagged notes, which stay until you tap them because they ask you to speak with your manager. The clock-in list counts only updates that need reading &mdash; flagged notes and request outcomes &mdash; so its number means something again.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.4</div>
                 <div>
@@ -4762,8 +4769,8 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.4';
-const APP_VERSION_DATE='October 2026';
+const APP_VERSION='3.5';
+const APP_VERSION_DATE='November 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
 // beyond it, a gap decision is required before the shift can be locked or exported.
