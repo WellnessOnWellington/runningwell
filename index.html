@@ -1958,6 +1958,48 @@
     .an-two { grid-template-columns:1fr; }
     .an-side { position:static; flex-basis:100%; }
   }
+
+  /* ══════════════════════════════
+     PHONE APP PREVIEW (m2) — every rule here is scoped to .m2-*, so none of it can reach
+     the kiosk, Who's On, the portal or the admin panel. See the m2 script block.
+  ══════════════════════════════ */
+  .m2-root { position:fixed; top:0; left:0; right:0; height:var(--vvh,100vh); z-index:50; flex-direction:column; align-items:center; background:var(--warm-white); font-family:'Nunito',sans-serif; color:var(--text); }
+  .m2-door, .m2-app { width:100%; max-width:520px; height:100%; display:flex; flex-direction:column; }
+  .m2-door[hidden], .m2-app[hidden] { display:none; }
+  .m2-door { justify-content:center; padding:calc(1.5rem + env(safe-area-inset-top)) 1.25rem calc(1.5rem + env(safe-area-inset-bottom)); }
+  .m2-door-card { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:1.6rem 1.4rem; }
+  .m2-door-title { font-family:'Lora',serif; font-size:1.35rem; font-weight:600; color:var(--charcoal); margin-bottom:0.3rem; }
+  .m2-door-sub { font-size:0.88rem; color:var(--muted); line-height:1.5; margin-bottom:1.2rem; }
+  .m2-door-input { width:100%; box-sizing:border-box; font-size:18px; letter-spacing:0.3em; text-align:center; padding:0.8rem; border:1.5px solid var(--border-dk); border-radius:var(--radius-sm); font-family:'Nunito',sans-serif; background:var(--warm-white); }
+  .m2-door-input:focus { outline:none; border-color:var(--burgundy); box-shadow:0 0 0 3px rgba(139,37,53,0.12); }
+  .m2-door-err { min-height:1.3rem; font-size:0.82rem; color:var(--burgundy); font-weight:600; margin:0.5rem 0 0.3rem; }
+  .m2-btn { width:100%; min-height:48px; border:none; border-radius:var(--radius-sm); background:var(--burgundy); color:#fff; font-family:'Nunito',sans-serif; font-size:1rem; font-weight:800; cursor:pointer; }
+  .m2-btn:disabled { opacity:0.55; cursor:default; }
+  .m2-link { display:block; margin:1rem auto 0; min-height:44px; background:none; border:none; color:var(--muted); font-family:'Nunito',sans-serif; font-size:0.86rem; font-weight:700; text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+
+  .m2-bar { flex-shrink:0; display:flex; align-items:center; gap:0.4rem; padding:calc(0.5rem + env(safe-area-inset-top)) 0.6rem 0.5rem; background:var(--white); border-bottom:1px solid var(--border); }
+  .m2-icon-btn { min-width:44px; min-height:44px; border:none; background:none; border-radius:50%; color:var(--charcoal); font-size:1.25rem; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .m2-icon-btn:active { background:var(--blush-lt); }
+  .m2-icon-btn[hidden] { display:none; }
+  .m2-title { flex:1; min-width:0; font-family:'Lora',serif; font-size:1.15rem; font-weight:600; color:var(--charcoal); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-left:0.4rem; }
+  .m2-pill { font-size:0.62rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:var(--warning); background:var(--warning-lt); border-radius:999px; padding:0.2rem 0.55rem; flex-shrink:0; }
+  .m2-exit { min-height:44px; padding:0 0.5rem; border:none; background:none; color:var(--muted); font-family:'Nunito',sans-serif; font-size:0.84rem; font-weight:700; cursor:pointer; }
+
+  .m2-tabs { flex-shrink:0; display:flex; gap:0.35rem; padding:0.5rem 0.75rem; background:var(--white); border-bottom:1px solid var(--border); }
+  .m2-tab { flex:1; min-height:44px; border:1.5px solid transparent; border-radius:999px; background:none; color:var(--muted); font-family:'Nunito',sans-serif; font-size:0.95rem; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:0.35rem; }
+  .m2-tab[aria-selected="true"] { background:var(--blush); color:var(--burgundy); }
+  .m2-badge { min-width:1.25rem; height:1.25rem; padding:0 0.3rem; box-sizing:border-box; border-radius:999px; background:var(--burgundy); color:#fff; font-size:0.7rem; font-weight:800; display:inline-flex; align-items:center; justify-content:center; }
+  .m2-badge[hidden] { display:none; }
+
+  .m2-body { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:1rem 0.9rem calc(1.25rem + env(safe-area-inset-bottom)); }
+  .m2-panel[hidden] { display:none; }
+  .m2-card { background:var(--white); border:1.5px solid var(--border); border-radius:var(--radius); padding:1.25rem 1.15rem; margin-bottom:0.8rem; }
+  .m2-locked { text-align:center; padding:2rem 1.25rem; }
+  .m2-locked-icon { font-size:1.8rem; margin-bottom:0.5rem; }
+  .m2-locked-title { font-family:'Lora',serif; font-size:1.1rem; font-weight:600; color:var(--charcoal); margin-bottom:0.35rem; }
+  .m2-locked-sub { font-size:0.88rem; color:var(--muted); line-height:1.5; }
+  .m2-next { margin-top:0.9rem; font-size:0.74rem; font-weight:700; color:var(--warning); }
+  .m2-foot { text-align:center; }
 </style>
 </head>
 <body>
@@ -2291,6 +2333,42 @@
       <path d="M 0 6 C 12 6, 24 1, 38 1 C 50 1, 61 3, 70 1" stroke="#8B2535" stroke-width="1.2" stroke-linecap="round" fill="none"/>
       <path d="M 0 8 C 12 8, 24 3, 38 3 C 50 3, 61 6, 70 3" stroke="#D4899A" stroke-width="0.7" stroke-linecap="round" fill="none" opacity="0.5"/>
     </svg>
+  </div>
+</div>
+
+<!-- PHONE APP PREVIEW (m2) — the staff phone app being rebuilt. Reached only at #m2 with a
+     partner's PIN until the viewport gate replaces this door (Runningwell-Vault/phone_ui_plan.md
+     step 9). One root node, so that gate is a one-line change. Behaviour: the m2 script block. -->
+<div class="view m2-root" id="view-m2">
+  <div class="m2-door" id="m2-door" hidden>
+    <div class="m2-door-card">
+      <div class="m2-door-title">Phone app preview</div>
+      <div class="m2-door-sub">The new staff phone app, still being built. Partners only &mdash; staff can&rsquo;t see it yet.</div>
+      <input class="m2-door-input" id="m2-door-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Partner PIN" aria-label="Partner PIN" onkeydown="if(event.key==='Enter')m2_doorSubmit()">
+      <div class="m2-door-err" id="m2-door-err" role="alert"></div>
+      <button class="m2-btn" id="m2-door-btn" onclick="m2_doorSubmit()">Open preview</button>
+    </div>
+    <button class="m2-link" onclick="m2_exit()">Back to the kiosk</button>
+  </div>
+  <div class="m2-app" id="m2-app" hidden>
+    <header class="m2-bar">
+      <button class="m2-icon-btn" id="m2-back" hidden aria-label="Back">&#8249;</button>
+      <div class="m2-title" id="m2-title">Running Well</div>
+      <span class="m2-pill">Preview</span>
+      <button class="m2-icon-btn" onclick="m2_refresh()" aria-label="Refresh">&#8635;</button>
+      <button class="m2-exit" onclick="m2_exit()">Exit</button>
+    </header>
+    <nav class="m2-tabs" role="tablist">
+      <button class="m2-tab" role="tab" id="m2-tab-mine"  onclick="m2_setTab('mine')">Mine</button>
+      <button class="m2-tab" role="tab" id="m2-tab-team"  onclick="m2_setTab('team')">Team</button>
+      <button class="m2-tab" role="tab" id="m2-tab-inbox" onclick="m2_setTab('inbox')">Inbox<span class="m2-badge" id="m2-inbox-badge" hidden></span></button>
+    </nav>
+    <main class="m2-body" id="m2-body">
+      <section class="m2-panel" id="m2-panel-mine"  role="tabpanel"></section>
+      <section class="m2-panel" id="m2-panel-team"  role="tabpanel" hidden></section>
+      <section class="m2-panel" id="m2-panel-inbox" role="tabpanel" hidden></section>
+      <div class="m2-foot"><button class="m2-link" onclick="m2_lockDevice()">Lock the preview on this device</button></div>
+    </main>
   </div>
 </div>
 
@@ -17463,6 +17541,158 @@ window.addEventListener('load', ()=>{
   window.addEventListener('load',_setVVH);
   _setVVH();
 })();
+</script>
+<script>
+/* ═══════════════════════════════════════════
+   PHONE APP PREVIEW (m2) — build step 1 of Runningwell-Vault/phone_ui_plan.md
+   The staff phone app is being rebuilt here, inside index.html, behind a door: it opens
+   only at #m2 and only with a partner's PIN, so staff never see it until the viewport
+   gate replaces the door at the end.
+
+   The door hides the UI, not the code, so this block follows the plan's safety rules:
+   - Its own <script> tag. A SyntaxError or a duplicate top-level name here kills THIS
+     script only; the main script above has already run, so the kiosk is unaffected.
+   - Nothing at the top level that can throw: function declarations, literal constants,
+     two listeners. Everything else runs inside functions.
+   - Every global is m2_ / M2_ and every class .m2-, so nothing can collide.
+   - All markup lives under #view-m2.
+
+   Sign-in follows Joel's 5 Nov decision to KEEP BOTH PINs: the shared roster PIN opens
+   Team (a shared break-room phone), a personal PIN opens Mine and Inbox. So the app has
+   two modes and nothing may assume it knows who is holding the phone. m2_who models that;
+   the sign-in itself arrives with Mine (step 2).
+═══════════════════════════════════════════ */
+const M2_DOOR_KEY='rw_m2_door';      // {mid, until} — which partner opened the door here, and until when
+const M2_TAB_KEY='rw_m2_tab';
+const M2_DOOR_DAYS=7;
+const M2_DOOR_MAX_FAILS=5, M2_DOOR_LOCK_MS=60000;
+const M2_TABS=['mine','team','inbox'];
+let m2_tab='mine';
+let m2_who=null;                     // null | {kind:'team'} | {kind:'person', emp}
+let m2_doorFails=0, m2_doorLockedUntil=0;
+
+function m2_route(){
+  try{
+    const want=location.hash==='#m2';
+    const on=document.getElementById('view-m2')?.classList.contains('active');
+    if(want&&!on) m2_open();
+    else if(!want&&on) showView('kiosk');
+  }catch(e){ console.error('m2_route',e); }
+}
+
+async function m2_open(){
+  showView('m2');
+  const ok=await m2_doorStillOpen();
+  if(ok) m2_showApp(); else m2_showDoor();
+}
+
+/* Re-checked on every open, not trusted from storage: a partner demoted or archived since
+   loses the preview on this device at once. Offline counts as closed — the door then
+   says so itself. */
+async function m2_doorStillOpen(){
+  let rec=null;
+  try{ rec=JSON.parse(localStorage.getItem(M2_DOOR_KEY)||'null'); }catch(e){}
+  if(!rec||!rec.mid||!(rec.until>Date.now())) return false;
+  try{
+    const mgrs=(await db.get('managers')).map(normaliseMgr);
+    return mgrs.some(m=>m.id===rec.mid&&m.active&&m.role==='partner');
+  }catch(e){ return false; }
+}
+
+function m2_showDoor(){
+  document.getElementById('m2-app').hidden=true;
+  document.getElementById('m2-door').hidden=false;
+  document.getElementById('m2-door-err').textContent='';
+  const inp=document.getElementById('m2-door-pin');
+  inp.value='';
+  setTimeout(()=>inp.focus(),80);
+}
+
+/* Any active partner's PIN opens it — the same hash managerLogin compares, against a fresh
+   read of managers. Five wrong tries locks it for a minute. */
+async function m2_doorSubmit(){
+  const inp=document.getElementById('m2-door-pin');
+  const err=document.getElementById('m2-door-err');
+  const btn=document.getElementById('m2-door-btn');
+  if(Date.now()<m2_doorLockedUntil){ err.textContent='Too many tries — please wait a minute.'; return; }
+  const pin=inp.value.trim();
+  inp.value='';
+  if(!pin){ err.textContent='Enter a partner PIN.'; return; }
+  btn.disabled=true; err.textContent='';
+  let mgrs=null;
+  try{ mgrs=(await db.get('managers')).map(normaliseMgr); }catch(e){}
+  btn.disabled=false;
+  if(!mgrs){ err.textContent="Couldn't reach the database — check your connection."; return; }
+  const h=hashPIN(pin);
+  const mgr=mgrs.find(m=>m.active&&m.role==='partner'&&m.pinHash===h);
+  if(!mgr){
+    m2_doorFails++;
+    if(m2_doorFails>=M2_DOOR_MAX_FAILS){ m2_doorFails=0; m2_doorLockedUntil=Date.now()+M2_DOOR_LOCK_MS; err.textContent='Too many tries — please wait a minute.'; }
+    else err.textContent="That PIN doesn't open the preview.";
+    inp.focus();
+    return;
+  }
+  m2_doorFails=0;
+  try{ localStorage.setItem(M2_DOOR_KEY,JSON.stringify({mid:mgr.id,until:Date.now()+M2_DOOR_DAYS*86400000})); }catch(e){}
+  m2_showApp();
+}
+
+function m2_lockDevice(){
+  try{ localStorage.removeItem(M2_DOOR_KEY); }catch(e){}
+  m2_who=null;
+  m2_showDoor();
+}
+
+/* Leaves by dropping #m2 without adding a history entry, then back to the kiosk. */
+function m2_exit(){
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  showView('kiosk');
+}
+
+function m2_showApp(){
+  document.getElementById('m2-door').hidden=true;
+  document.getElementById('m2-app').hidden=false;
+  let t=null;
+  try{ t=localStorage.getItem(M2_TAB_KEY); }catch(e){}
+  m2_setTab(M2_TABS.includes(t)?t:'mine');
+}
+
+function m2_setTab(tab){
+  if(!M2_TABS.includes(tab)) return;
+  m2_tab=tab;
+  try{ localStorage.setItem(M2_TAB_KEY,tab); }catch(e){}
+  M2_TABS.forEach(t=>{
+    document.getElementById('m2-tab-'+t).setAttribute('aria-selected',t===tab?'true':'false');
+    document.getElementById('m2-panel-'+t).hidden=t!==tab;
+  });
+  document.getElementById('m2-body').scrollTop=0;
+  m2_render();
+}
+
+/* iOS: an installed app has no URL bar and so no pull-to-refresh — this button is the only
+   way to ask for fresh data. Step 1 has no data yet, so it just redraws. */
+function m2_refresh(){ m2_render(); }
+
+function m2_render(){
+  const panel=document.getElementById('m2-panel-'+m2_tab);
+  if(!panel) return;
+  if(m2_tab==='mine') panel.innerHTML=m2_who?.kind==='person'
+    ? `<div class="m2-card">Signed in as ${escHtml(m2_who.emp.name)}.</div>`
+    : m2_locked('🗓️','Your shifts, leave and requests','Sign in with your name and personal PIN to see your next shift, your upcoming shifts and your leave, and to swap or give away a shift.','Step 2 — Mine');
+  else if(m2_tab==='team') panel.innerHTML=m2_who
+    ? `<div class="m2-card">Team view.</div>`
+    : m2_locked('👥',"Who's on",'Enter the roster PIN to see who is working each day and the leave calendar. Sign in with your own PIN to pick up an open shift.','Step 3 — Team');
+  else panel.innerHTML=m2_who?.kind==='person'
+    ? `<div class="m2-card">Nothing waiting.</div>`
+    : m2_locked('🔔','Your inbox','Sign in with your name and personal PIN to see requests waiting for your answer and updates from management.','Step 4 — Inbox');
+}
+
+function m2_locked(icon,title,sub,next){
+  return `<div class="m2-card m2-locked"><div class="m2-locked-icon">${icon}</div><div class="m2-locked-title">${escHtml(title)}</div><div class="m2-locked-sub">${escHtml(sub)}</div><div class="m2-next">Coming in ${escHtml(next)}</div></div>`;
+}
+
+window.addEventListener('hashchange',m2_route);
+document.addEventListener('DOMContentLoaded',m2_route);
 </script>
 </body>
 </html>
