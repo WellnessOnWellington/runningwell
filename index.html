@@ -3983,6 +3983,11 @@ let _emps=[], _entries=[], _notes=[], _mgrs=[];
 let _editingEmpId=null;
 let _rosterConfig=null, _rosterTemplates=[], _rosterOverrides=[];
 let _rosterShifts=[], _rosterFortnights=[], _coverageRules=[], _timesheetFinalizations=[];
+/* True once _timesheetFinalizations has actually been read from the database. An empty list
+   cannot say "nothing is finalised" and "the read failed" apart, and the two need opposite
+   answers — see REQ_FINALS_UNKNOWN_MSG. Set only on a successful read; a later failed read
+   keeps the last good list rather than replacing it with nothing. */
+let _tsFinalLoaded=false;
 let _publicHolidays=new Set(); // dates (YYYY-MM-DD) flagged as public holidays
 
 // Roster builder state
@@ -4115,7 +4120,7 @@ async function loadAll() {
       db.get('requests').catch(()=>[]),
       db.get('notifications').catch(()=>[]),
       db.get('public_holidays').catch(()=>[]),
-      db.get('timesheet_finalizations').catch(()=>[])
+      db.get('timesheet_finalizations').catch(()=>null)
     ]);
     _emps    = emps.filter(e=>e.active!==false);
     _entries = entries.map(normaliseEntry);
@@ -4130,7 +4135,7 @@ async function loadAll() {
     _requests        = reqs.map(normaliseRequest);
     _notifications   = notifs.map(normaliseNotif);
     _publicHolidays  = new Set((phs||[]).map(r=>r.date));
-    _timesheetFinalizations = tsFinal||[];
+    if(tsFinal){ _timesheetFinalizations=tsFinal; _tsFinalLoaded=true; }
   } catch(e) {
     showToast('⚠ Could not connect to database — check your internet connection');
     console.error(e);
@@ -7108,7 +7113,7 @@ async function tsToggleFinalize(cb){
     }catch(e){
       cb.checked=false;
       if(/duplicate|unique|conflict/i.test(e?.message||'')){
-        try{ _timesheetFinalizations=await db.get('timesheet_finalizations'); }catch(e2){}
+        try{ _timesheetFinalizations=await db.get('timesheet_finalizations'); _tsFinalLoaded=true; }catch(e2){}
         tsRenderFinalizeToggle(fnStart);
         showToast('Already pushed by someone else — refreshed');
       } else {
@@ -8847,6 +8852,11 @@ async function rbMarkLeave(empId, date, shiftId, leaveType){
      rbCleanupLinkedEntryOnShiftDelete. The control is hidden in makeBar; this is the guard
      that makes hiding it a convenience rather than the only thing stopping it. */
   if(emp.is_placeholder) return abort('Cover shifts cannot be marked as leave — delete the shift to withdraw the offer');
+  if(!_tsFinalLoaded){
+    alert(REQ_FINALS_UNKNOWN_MSG);
+    renderDayTimelineForRole(role);
+    return;
+  }
   if(reqPeriodFinalised(date)){
     alert(`${srFortnightLabel(payPeriodStartFor(date))} has already been finalised and exported to MYOB.\n\nChanging leave now would change a pay period that has been paid. If it genuinely needs correcting, un-push that period in Timesheets first, then change it there.`);
     renderDayTimelineForRole(role);
@@ -15251,7 +15261,7 @@ async function reqShowList(){
     _requests=reqs.map(normaliseRequest);
     _notifications=notifs.map(normaliseNotif);
     _notes=notes.map(normaliseNote);
-    if(finals) _timesheetFinalizations=finals;
+    if(finals){ _timesheetFinalizations=finals; _tsFinalLoaded=true; }
   }catch(e){}
   renderRequestsList();
   document.getElementById('req-panel-auth').style.display='none';
@@ -15506,11 +15516,11 @@ async function reqShowTimesheets(){
   content.innerHTML=`<div class="req-emp-greeting">My Timesheets</div><div class="req-empty">Loading…</div>`;
   try{
     const [finals,entriesRaw,shifts]=await Promise.all([
-      db.get('timesheet_finalizations').catch(()=>[]),
+      db.get('timesheet_finalizations').catch(()=>null),
       db.get('entries',{employee_id:emp.id}),
       db.get('roster_shifts',{employee_id:emp.id})
     ]);
-    if(finals&&finals.length) _timesheetFinalizations=finals;  // keep one copy, not two
+    if(finals){ _timesheetFinalizations=finals; _tsFinalLoaded=true; }  // keep one copy, not two
     _reqTsCache={shifts,entries:entriesRaw.map(normaliseEntry)};
     const periods=[-1,-2].map(offset=>{
       const fnStart=getPayPeriodStart(offset);
@@ -15707,6 +15717,10 @@ async function reqPeerRespond(requestId,response,reason=''){
   if(r.status!=='pending_peer'){
     showToast('That request has already been answered');
     await reqShowList(); return;
+  }
+  if(!_tsFinalLoaded){
+    showToast(REQ_FINALS_UNKNOWN_MSG);
+    await reqShowList(); return;   // reqShowList re-reads the list, so the next tap can go through
   }
   if(reqIsLapsed(r)){
     showToast(`Too late to respond — ${reqLapseReason(r)}. Speak to your manager.`);
@@ -16367,6 +16381,7 @@ async function managerApproveRequest(id){
   const _dates=r.type==='leave'
     ? [r.leaveStartDate,r.leaveEndDate].filter(Boolean)
     : [reqShiftDateOf(r),r.colleagueShiftDate].filter(Boolean);
+  if(!_tsFinalLoaded){ alert(REQ_FINALS_UNKNOWN_MSG); return; }
   const _blocked=_dates.find(d=>reqPeriodFinalised(d));
   if(_blocked){
     alert(`${srFortnightLabel(payPeriodStartFor(_blocked))} has already been finalised and exported to MYOB.\n\nApproving this now would change a pay period that has been paid. If it genuinely needs correcting, un-push that period in Timesheets first, then approve.`);
@@ -16443,6 +16458,7 @@ async function reqRevokeLeave(id){
 
   // Same test, same wording as managerApproveRequest: a revoke rewrites the same
   // history an approve would. Check every period the range touches.
+  if(!_tsFinalLoaded){ alert(REQ_FINALS_UNKNOWN_MSG); return; }
   const _blocked=[r.leaveStartDate,r.leaveEndDate].filter(Boolean).find(d=>reqPeriodFinalised(d));
   if(_blocked){
     alert(`${srFortnightLabel(payPeriodStartFor(_blocked))} has already been finalised and exported to MYOB.\n\nWithdrawing this leave now would change a pay period that has been paid. If it genuinely needs correcting, un-push that period in Timesheets first.`);
@@ -16738,6 +16754,17 @@ function reqExpiryFor(shiftDate){
   return w.toISOString();
 }
 
+/* reqPeriodFinalised answers "not finalised" when the list never loaded (_tsFinalLoaded).
+   That is right for anything that only DISPLAYS, and wrong for anything that ACTS, in
+   both directions:
+   - treated as "not finalised", a closed period looks open, so a staff member could
+     accept a swap, or a manager approve one, into a period already paid;
+   - treated as "finalised" (the obvious fix), reqExpirySweep — which writes — would
+     expire every waiting swap and notify both people, on one failed read.
+   So every path that writes checks _tsFinalLoaded first and does nothing when it is
+   false: the sweep waits for next time, staff and managers get this message. */
+const REQ_FINALS_UNKNOWN_MSG="Couldn't check whether that pay period has been finalised — please try again in a moment.";
+
 function reqPeriodFinalised(shiftDate){
   if(!shiftDate) return false;
   return _timesheetFinalizations.some(f=>f.fn_start===payPeriodStartFor(shiftDate));
@@ -16780,6 +16807,7 @@ function reqLapseReason(r){
    too late (its period already finalised) becomes `expired`. */
 async function reqExpirySweep(){
   if(!_requests.length) return;
+  if(!_tsFinalLoaded) return;   // cannot tell expired from not-yet — leave them for the next run
   const stale=_requests.filter(r=>r.status==='pending_peer'&&reqIsLapsed(r));
   for(const r of stale){
     const tooLate=reqPeriodFinalised(reqShiftDateOf(r));
