@@ -1963,6 +1963,9 @@
      PHONE APP PREVIEW (m2) — every rule here is scoped to .m2-*, so none of it can reach
      the kiosk, Who's On, the portal or the admin panel. See the m2 script block.
   ══════════════════════════════ */
+  /* Android paints a grey/blue box over anything tapped; the .m2 controls have their own
+     pressed states, so the system one is switched off inside the preview only. */
+  .m2-root, .m2-root * { -webkit-tap-highlight-color:transparent; }
   .m2-root { position:fixed; top:0; left:0; right:0; height:var(--vvh,100vh); z-index:50; flex-direction:column; align-items:center; background:var(--warm-white); font-family:'Nunito',sans-serif; color:var(--text); }
   .m2-door, .m2-app { width:100%; max-width:520px; height:100%; display:flex; flex-direction:column; }
   .m2-door[hidden], .m2-app[hidden] { display:none; }
@@ -1986,8 +1989,32 @@
   .m2-exit { min-height:44px; padding:0 0.5rem; border:none; background:none; color:var(--muted); font-family:'Nunito',sans-serif; font-size:0.84rem; font-weight:700; cursor:pointer; }
 
   .m2-tabs { flex-shrink:0; display:flex; gap:0.35rem; padding:0.5rem 0.75rem; background:var(--white); border-bottom:1px solid var(--border); }
-  .m2-tab { flex:1; min-height:44px; border:1.5px solid transparent; border-radius:999px; background:none; color:var(--muted); font-family:'Nunito',sans-serif; font-size:0.95rem; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:0.35rem; }
+  .m2-tab { flex:1; min-width:0; min-height:44px; border:1.5px solid transparent; border-radius:999px; background:none; color:var(--muted); font-family:'Nunito',sans-serif; font-size:0.92rem; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:0.35rem; white-space:nowrap; }
+  .m2-tab:active { background:var(--blush-lt); }
   .m2-tab[aria-selected="true"] { background:var(--blush); color:var(--burgundy); }
+  .m2-tab-ic { position:relative; display:flex; align-items:center; justify-content:center; }
+  .m2-tab-ic svg { width:18px; height:18px; }
+  .m2-tab-ic .m2-badge { position:absolute; top:-7px; right:-12px; }
+
+  /* Tabs at the BOTTOM (the preview's switch; Joel is comparing on real phones).
+     Not position:fixed — the bar is the last child of the --vvh flex column, so it cannot
+     fall below the visible screen (the kiosk's proven pattern). Padded above Android's
+     gesture bar: Chrome 135+ reports it as safe-area-inset-bottom, and recommends the MAX
+     inset so the bar does not jump as Chrome's own bottom chin slides away; iOS uses the
+     plain inset. Hidden while typing, so it never rides up on top of the keyboard. */
+  .m2-app.m2-nav-bottom .m2-tabs { order:3; border-bottom:none; border-top:1px solid var(--border); padding:0.3rem 0.5rem calc(0.3rem + env(safe-area-max-inset-bottom, env(safe-area-inset-bottom, 0px))); gap:0.25rem; }
+  .m2-app.m2-nav-bottom .m2-tab { flex-direction:column; gap:0.15rem; min-height:56px; border-radius:12px; font-size:0.75rem; }
+  .m2-app.m2-nav-bottom .m2-tab[aria-selected="true"] { background:none; }
+  .m2-app.m2-nav-bottom .m2-tab-ic { width:56px; height:30px; border-radius:15px; }
+  .m2-app.m2-nav-bottom .m2-tab-ic svg { width:22px; height:22px; }
+  .m2-app.m2-nav-bottom .m2-tab[aria-selected="true"] .m2-tab-ic { background:var(--blush); }
+  .m2-app.m2-nav-bottom .m2-tab-ic .m2-badge { top:-2px; right:6px; }
+  .m2-app.m2-nav-bottom .m2-body { padding-bottom:1.25rem; }
+  .m2-app.m2-nav-bottom.m2-typing .m2-tabs { display:none; }
+  .m2-seg { display:inline-flex; padding:3px; gap:3px; background:var(--blush); border-radius:12px; margin-top:0.4rem; }
+  .m2-seg button { min-height:40px; min-width:84px; border:none; border-radius:9px; background:none; color:var(--muted); font-family:'Nunito',sans-serif; font-size:0.86rem; font-weight:800; cursor:pointer; }
+  .m2-seg button[aria-pressed="true"] { background:var(--white); color:var(--charcoal); }
+  .m2-foot-label { font-size:0.74rem; font-weight:800; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); margin-top:0.6rem; }
   .m2-badge { min-width:1.25rem; height:1.25rem; padding:0 0.3rem; box-sizing:border-box; border-radius:999px; background:var(--burgundy); color:#fff; font-size:0.7rem; font-weight:800; display:inline-flex; align-items:center; justify-content:center; }
   .m2-badge[hidden] { display:none; }
 
@@ -2359,15 +2386,22 @@
       <button class="m2-exit" onclick="m2_exit()">Exit</button>
     </header>
     <nav class="m2-tabs" role="tablist">
-      <button class="m2-tab" role="tab" id="m2-tab-mine"  onclick="m2_setTab('mine')">Mine</button>
-      <button class="m2-tab" role="tab" id="m2-tab-team"  onclick="m2_setTab('team')">Team</button>
-      <button class="m2-tab" role="tab" id="m2-tab-inbox" onclick="m2_setTab('inbox')">Inbox<span class="m2-badge" id="m2-inbox-badge" hidden></span></button>
+      <button class="m2-tab" role="tab" id="m2-tab-shifts" onclick="m2_setTab('shifts')"><span class="m2-tab-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>My Shifts</button>
+      <button class="m2-tab" role="tab" id="m2-tab-swaps"  onclick="m2_setTab('swaps')"><span class="m2-tab-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg><span class="m2-badge" id="m2-swaps-badge" hidden></span></span>Swaps</button>
+      <button class="m2-tab" role="tab" id="m2-tab-whoson" onclick="m2_setTab('whoson')"><span class="m2-tab-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span>Who's On</button>
     </nav>
     <main class="m2-body" id="m2-body">
-      <section class="m2-panel" id="m2-panel-mine"  role="tabpanel"></section>
-      <section class="m2-panel" id="m2-panel-team"  role="tabpanel" hidden></section>
-      <section class="m2-panel" id="m2-panel-inbox" role="tabpanel" hidden></section>
-      <div class="m2-foot"><button class="m2-link" onclick="m2_lockDevice()">Lock the preview on this device</button></div>
+      <section class="m2-panel" id="m2-panel-shifts" role="tabpanel"></section>
+      <section class="m2-panel" id="m2-panel-swaps"  role="tabpanel" hidden></section>
+      <section class="m2-panel" id="m2-panel-whoson" role="tabpanel" hidden></section>
+      <div class="m2-foot">
+        <div class="m2-foot-label">Preview: tab position</div>
+        <div class="m2-seg" role="group" aria-label="Tab position">
+          <button id="m2-navpos-top" onclick="m2_setNavPos('top')">Top</button>
+          <button id="m2-navpos-bottom" onclick="m2_setNavPos('bottom')">Bottom</button>
+        </div>
+        <button class="m2-link" onclick="m2_lockDevice()">Lock the preview on this device</button>
+      </div>
     </main>
   </div>
 </div>
@@ -17564,10 +17598,13 @@ window.addEventListener('load', ()=>{
 ═══════════════════════════════════════════ */
 const M2_DOOR_KEY='rw_m2_door';      // {mid, until} — which partner opened the door here, and until when
 const M2_TAB_KEY='rw_m2_tab';
+const M2_NAVPOS_KEY='rw_m2_navpos';  // 'top' | 'bottom' — the preview's switch, per device
 const M2_DOOR_DAYS=7;
 const M2_DOOR_MAX_FAILS=5, M2_DOOR_LOCK_MS=60000;
-const M2_TABS=['mine','team','inbox'];
-let m2_tab='mine';
+// 6 Nov 2026: My Shifts · Swaps · Who's On (no inbox page — see phone_ui_plan.md).
+const M2_TABS=['shifts','swaps','whoson'];
+let m2_tab='shifts';
+let m2_typingBound=false;
 let m2_who=null;                     // null | {kind:'team'} | {kind:'person', emp}
 let m2_doorFails=0, m2_doorLockedUntil=0;
 
@@ -17654,7 +17691,34 @@ function m2_showApp(){
   document.getElementById('m2-app').hidden=false;
   let t=null;
   try{ t=localStorage.getItem(M2_TAB_KEY); }catch(e){}
-  m2_setTab(M2_TABS.includes(t)?t:'mine');
+  let pos=null;
+  try{ pos=localStorage.getItem(M2_NAVPOS_KEY); }catch(e){}
+  m2_setNavPos(pos==='bottom'?'bottom':'top');
+  m2_bindTyping();
+  m2_setTab(M2_TABS.includes(t)?t:'shifts');
+}
+
+/* Top or bottom tabs — a preview-only switch so the two can be compared on real phones. */
+function m2_setNavPos(pos){
+  const bottom=pos==='bottom';
+  document.getElementById('m2-app').classList.toggle('m2-nav-bottom',bottom);
+  document.getElementById('m2-navpos-top').setAttribute('aria-pressed',bottom?'false':'true');
+  document.getElementById('m2-navpos-bottom').setAttribute('aria-pressed',bottom?'true':'false');
+  try{ localStorage.setItem(M2_NAVPOS_KEY,bottom?'bottom':'top'); }catch(e){}
+}
+
+/* While a field has focus the keyboard is up, and a bottom bar would sit on top of it or
+   squeeze the page — so it steps aside. Focus rather than viewport size: Android and iOS
+   report the keyboard differently, and an installed iOS app mis-measures after the first
+   time the keyboard opens; focus is the same everywhere. */
+function m2_bindTyping(){
+  if(m2_typingBound) return;
+  m2_typingBound=true;
+  const root=document.getElementById('view-m2');
+  const app=document.getElementById('m2-app');
+  const isField=el=>!!el&&el.matches&&el.matches('input,textarea,select,[contenteditable="true"]');
+  root.addEventListener('focusin',e=>{ if(isField(e.target)) app.classList.add('m2-typing'); });
+  root.addEventListener('focusout',()=>{ setTimeout(()=>{ if(!isField(document.activeElement)) app.classList.remove('m2-typing'); },60); });
 }
 
 function m2_setTab(tab){
@@ -17676,19 +17740,19 @@ function m2_refresh(){ m2_render(); }
 function m2_render(){
   const panel=document.getElementById('m2-panel-'+m2_tab);
   if(!panel) return;
-  if(m2_tab==='mine') panel.innerHTML=m2_who?.kind==='person'
+  if(m2_tab==='shifts') panel.innerHTML=m2_who?.kind==='person'
     ? `<div class="m2-card">Signed in as ${escHtml(m2_who.emp.name)}.</div>`
-    : m2_locked('🗓️','Your shifts, leave and requests','Sign in with your name and personal PIN to see your next shift, your upcoming shifts and your leave, and to swap or give away a shift.','Step 2 — Mine');
-  else if(m2_tab==='team') panel.innerHTML=m2_who
-    ? `<div class="m2-card">Team view.</div>`
-    : m2_locked('👥',"Who's on",'Enter the roster PIN to see who is working each day and the leave calendar. Sign in with your own PIN to pick up an open shift.','Step 3 — Team');
-  else panel.innerHTML=m2_who?.kind==='person'
+    : m2_locked('🗓️','My Shifts','Your next shift, what is coming up and your leave. Start a swap from the shift itself, or request leave.','My Shifts — next to be built');
+  else if(m2_tab==='swaps') panel.innerHTML=m2_who?.kind==='person'
     ? `<div class="m2-card">Nothing waiting.</div>`
-    : m2_locked('🔔','Your inbox','Sign in with your name and personal PIN to see requests waiting for your answer and updates from management.','Step 4 — Inbox');
+    : m2_locked('🔁','Swaps','Shifts you can pick up, offers from colleagues waiting for your answer, and your own swaps in progress.','Swaps — not built yet');
+  else panel.innerHTML=m2_who
+    ? `<div class="m2-card">Who's on.</div>`
+    : m2_locked('👥',"Who's On",'Who is working each day, one person\'s shifts, and the leave calendar. Opens with the roster PIN or your own.',"Who's On — not built yet");
 }
 
 function m2_locked(icon,title,sub,next){
-  return `<div class="m2-card m2-locked"><div class="m2-locked-icon">${icon}</div><div class="m2-locked-title">${escHtml(title)}</div><div class="m2-locked-sub">${escHtml(sub)}</div><div class="m2-next">Coming in ${escHtml(next)}</div></div>`;
+  return `<div class="m2-card m2-locked"><div class="m2-locked-icon">${icon}</div><div class="m2-locked-title">${escHtml(title)}</div><div class="m2-locked-sub">${escHtml(sub)}</div><div class="m2-next">${escHtml(next)}</div></div>`;
 }
 
 window.addEventListener('hashchange',m2_route);
