@@ -17837,6 +17837,12 @@ let m2_day=null, m2_wmode='day', m2_person=null, m2_pOffset=0, m2_month=null, m2
 let m2_fns={}, m2_fnSeq=0;
 let m2_sheet=[], m2_drafts={}, m2_suppressPop=0;
 let m2_secretCount=0, m2_secretLast=0;
+/* Browser history is used ONLY where a hardware/system Back exists to drive it — Android.
+   On iPhone/iPad any history entry gives the left-edge swipe somewhere to go "back" to (even
+   in an app added to the home screen); the live app never touches history, which is why it
+   never swipes back. So on iOS the preview adds none: sheets close with ⌄, the backdrop or a
+   drag. Evaluated once; a literal expression that cannot throw. */
+const M2_USE_HISTORY=!(/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
 const M2_SECRET_TAPS=5, M2_SECRET_GAP_MS=1000;
 
 /* ── small helpers ───────────────────────────────────────────────────── */
@@ -17954,7 +17960,7 @@ function m2_lockDevice(){ m2_store(M2_DOOR_KEY,null); m2_sheetHide(); m2_showDoo
 /* Leaves by dropping #m2 without adding a history entry. An open sheet's history steps are
    unwound first, so Back afterwards can't land on an old #m2 entry and reopen the preview. */
 function m2_exit(){
-  const n=m2_sheet.length+(m2_guard?1:0);
+  const n=M2_USE_HISTORY?m2_sheet.length+(m2_guard?1:0):0;
   m2_guard=false;
   const leave=()=>{ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} document.documentElement.classList.remove('m2-on'); showView('kiosk'); };
   m2_sheetHide();
@@ -17972,7 +17978,7 @@ function m2_bindSecretTap(){
       const now=Date.now();
       m2_secretCount=now-m2_secretLast<=M2_SECRET_GAP_MS?m2_secretCount+1:1;
       m2_secretLast=now;
-      if(m2_secretCount>=M2_SECRET_TAPS){ m2_secretCount=0; location.hash='#m2'; }
+      if(m2_secretCount>=M2_SECRET_TAPS){ m2_secretCount=0; try{ history.replaceState(null,'',location.pathname+location.search+'#m2'); }catch(e){} m2_route(); }
     });
   }catch(e){ console.error('m2_bindSecretTap',e); }
 }
@@ -18566,7 +18572,7 @@ function m2_sheetOpen(step){ m2_sheet=[]; m2_sheetPush(step); }
 function m2_sheetPush(step){
   m2_sheetSaveDraft();
   m2_sheet.push(step);
-  try{ history.pushState({m2s:m2_sheet.length},''); }catch(e){}
+  if(M2_USE_HISTORY) try{ history.pushState({m2s:m2_sheet.length},''); }catch(e){}
   m2_sheetRender(true);
 }
 function m2_sheetRender(animate){
@@ -18582,13 +18588,16 @@ function m2_sheetRender(animate){
   if(step.after) try{ step.after(); }catch(e){ console.error(e); }
   if(animate) requestAnimationFrame(()=>wrap.classList.add('open'));
 }
-function m2_sheetNav(){ if(m2_sheet.length>1){ try{ history.back(); }catch(e){ m2_sheetPopStep(); } } else m2_sheetClose(); }
+function m2_sheetNav(){
+  if(m2_sheet.length>1){ if(M2_USE_HISTORY){ try{ history.back(); }catch(e){ m2_sheetPopStep(); } } else m2_sheetPopStep(); }
+  else m2_sheetClose();
+}
 function m2_sheetPopStep(){ m2_sheetSaveDraft(); m2_sheet.pop(); if(m2_sheet.length) m2_sheetRender(false); else m2_sheetHide(); }
 function m2_sheetClose(){
   const n=m2_sheet.length;
   m2_sheetSaveDraft();
   m2_sheetHide();
-  if(n){ m2_suppressPop++; try{ history.go(-n); }catch(e){ m2_suppressPop--; } }
+  if(n&&M2_USE_HISTORY){ m2_suppressPop++; try{ history.go(-n); }catch(e){ m2_suppressPop--; } }
 }
 function m2_sheetHide(){
   const wrap=m2_el('m2-sheet-wrap'); if(!wrap) return;
@@ -18601,7 +18610,7 @@ function m2_sheetHide(){
    on the first tab (or the start screen) Back does nothing — leave with the home gesture,
    as with any app. Sheets' own history steps sit above the guard. */
 let m2_guard=false;
-function m2_pushGuard(){ if(m2_guard) return; try{ history.pushState({m2g:1},''); m2_guard=true; }catch(e){} }
+function m2_pushGuard(){ if(m2_guard||!M2_USE_HISTORY) return; try{ history.pushState({m2g:1},''); m2_guard=true; }catch(e){} }
 function m2_onPop(){
   if(m2_suppressPop>0){ m2_suppressPop--; return; }
   if(m2_sheet.length){ m2_sheetPopStep(); return; }
