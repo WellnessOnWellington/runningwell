@@ -2012,8 +2012,13 @@
   .m2-dry[hidden] { display:none; }
   .m2-body { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:14px 14px 20px; }
   .m2-panel { display:flex; flex-direction:column; gap:16px; }
-  .m2-body { overflow-x:hidden; }
-  .m2-swipe { position:relative; }
+  .m2-body { overflow-x:hidden; overscroll-behavior-x:none; }
+  /* Sideways movement on the day swipe is the app's; the browser only scrolls vertically. */
+  .m2-swipe { position:relative; touch-action:pan-y; }
+  /* While the phone app is showing, a sideways swipe reaching the page edge must not become
+     the browser's back/forward navigation (Chrome Android, trackpads). Class set by m2_route,
+     so the kiosk and every other view keep the browser's normal behaviour. */
+  html.m2-on, html.m2-on body { overscroll-behavior-x:none; }
   .m2-swipe-page { will-change:transform; }
   .m2-panel[hidden] { display:none; }
 
@@ -17897,6 +17902,7 @@ function m2_route(){
   try{
     const want=location.hash==='#m2';
     const on=m2_el('view-m2')?.classList.contains('active');
+    document.documentElement.classList.toggle('m2-on',want);
     if(want&&!on) m2_open();
     else if(!want&&on){ m2_sheetHide(); showView('kiosk'); }
   }catch(e){ console.error('m2_route',e); }
@@ -17942,7 +17948,7 @@ function m2_lockDevice(){ m2_store(M2_DOOR_KEY,null); m2_sheetHide(); m2_showDoo
    unwound first, so Back afterwards can't land on an old #m2 entry and reopen the preview. */
 function m2_exit(){
   const n=m2_sheet.length;
-  const leave=()=>{ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} showView('kiosk'); };
+  const leave=()=>{ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} document.documentElement.classList.remove('m2-on'); showView('kiosk'); };
   m2_sheetHide();
   if(n){ m2_suppressPop++; try{ history.go(-n); }catch(e){ m2_suppressPop--; } setTimeout(leave,80); }
   else leave();
