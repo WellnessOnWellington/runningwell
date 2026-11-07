@@ -2013,7 +2013,7 @@
   .m2-pill.live { color:#fff; background:var(--burgundy); }
   .m2-body { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:14px 14px 20px; }
   .m2-panel { display:flex; flex-direction:column; gap:16px; }
-  .m2-body { overflow-x:hidden; overscroll-behavior-x:none; }
+  .m2-body { overflow-x:hidden; overscroll-behavior-x:none; touch-action:pan-y; }
   /* Sideways movement on the day swipe is the app's; the browser only scrolls vertically. */
   .m2-swipe { position:relative; touch-action:pan-y; margin:0 -14px; }
   .m2-swipe-page { padding:0 14px; box-sizing:border-box; }
@@ -18535,11 +18535,16 @@ function m2_slideDay(dir){
   m2_swAdj(dir);
   requestAnimationFrame(()=>requestAnimationFrame(()=>m2_swCommit(dir)));
 }
+/* Bound ONCE to the whole scrolling body — like the live app, which listens on the whole
+   Who's On view — so a quiet day with one pill still swipes from the empty space below it.
+   Acts only while Who's On is showing in Day view. */
+function m2_canSwipe(){ return m2_tab==='whoson'&&m2_wmode==='day'&&!!m2_el('m2-swipe')&&!m2_swAnimating; }
 function m2_bindSwipe(){
-  const el=m2_el('m2-swipe'); if(!el||el._m2sw) return; el._m2sw=true;
+  const el=m2_el('m2-body'); if(!el||el._m2sw) return; el._m2sw=true;
   let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false;
   el.addEventListener('touchstart',e=>{
-    if(m2_swAnimating) return;
+    tracking=false;
+    if(!m2_canSwipe()) return;
     const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now();
     tracking=true; locked=false; horiz=false;
   },{passive:true});
