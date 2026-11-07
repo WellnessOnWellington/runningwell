@@ -2008,8 +2008,9 @@
   .m2-avatar { width:44px; height:44px; border:none; background:none; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
   .m2-avatar span { width:34px; height:34px; border-radius:17px; background:var(--blush); color:var(--burgundy); font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; }
   .m2-signin-btn { min-height:40px; padding:0 14px; border:1.5px solid var(--burgundy); border-radius:20px; background:var(--white); color:var(--burgundy); font-family:'Nunito',sans-serif; font-size:14px; font-weight:800; cursor:pointer; }
-  .m2-dry { flex-shrink:0; font-size:12px; font-weight:800; color:#7A5418; background:var(--warning-lt); text-align:center; padding:5px 10px; }
-  .m2-dry[hidden] { display:none; }
+  /* The Preview pill is the only dry-run signal (the banner broke the visual flow, Joel 8 Nov);
+     with Live actions on it turns burgundy and reads "Preview · Live". */
+  .m2-pill.live { color:#fff; background:var(--burgundy); }
   .m2-body { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:14px 14px 20px; }
   .m2-panel { display:flex; flex-direction:column; gap:16px; }
   .m2-body { overflow-x:hidden; overscroll-behavior-x:none; }
@@ -2485,10 +2486,9 @@
     <div class="m2-shell" id="m2-shell" hidden>
       <header class="m2-bar">
         <h1 class="m2-title" id="m2-title">My Shifts</h1>
-        <span class="m2-pill">Preview</span>
+        <span class="m2-pill" id="m2-preview-pill">Preview</span>
         <span id="m2-bar-right"></span>
       </header>
-      <div class="m2-dry" id="m2-dry" hidden>Dry run &mdash; actions show what would be sent and save nothing</div>
       <main class="m2-body" id="m2-body">
         <section class="m2-panel" id="m2-panel-shifts" role="tabpanel"></section>
         <section class="m2-panel" id="m2-panel-swaps"  role="tabpanel" hidden></section>
@@ -17865,6 +17865,12 @@ function m2_groupLabel(g){ return (M2_GROUPS.find(x=>x[0]===g)||[0,g])[1]; }
 function m2_store(k,v){ try{ v==null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 function m2_load(k){ try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ return null; } }
 function m2_live(){ return m2_load(M2_LIVE_KEY)===true; }
+function m2_markLive(){
+  const p=m2_el('m2-preview-pill'); if(!p) return;
+  const live=m2_live();
+  p.classList.toggle('live',live); p.textContent=live?'Preview · Live':'Preview';
+  p.title=live?'Live actions on — actions save for real':'Dry run — actions show what would be saved';
+}
 function m2_toast(msg){
   const t=m2_el('m2-toast'); if(!t) return;
   t.textContent=msg; t.hidden=false; clearTimeout(m2_toast._t);
@@ -18079,7 +18085,7 @@ function m2_enterShell(fresh){
   m2_el('m2-bar-right').innerHTML=team
     ?`<button class="m2-signin-btn" onclick="m2_signOut(false)">Sign in</button>`
     :`<button class="m2-avatar" aria-label="Account: ${m2_esc(m2_who.emp.name)}" onclick="m2_openAccount()"><span>${m2_esc(m2_initials(m2_who.emp))}</span></button>`;
-  m2_el('m2-dry').hidden=m2_live();
+  m2_markLive();
   m2_bindTyping();
   // Land on My Shifts on a fresh open (Who's On with the roster PIN); the last tab if back
   // within half an hour.
@@ -18870,7 +18876,7 @@ function m2_previewOptions(){
   const live=m2_live();
   return `<section><h2 class="m2-h2">Preview options</h2><div class="m2-box" style="gap:0;padding:0 14px">
     <label class="m2-row" style="cursor:pointer"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Live actions</span><span style="font-size:13px;color:#6E5F62">${live?'On — actions save for real':'Off — actions show what would be saved'}</span></span>
-      <input type="checkbox" ${live?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_LIVE_KEY,this.checked);m2_el('m2-dry').hidden=this.checked;m2_sheetRender(false)"></label>
+      <input type="checkbox" ${live?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_LIVE_KEY,this.checked);m2_markLive();m2_sheetRender(false)"></label>
     <button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;cursor:pointer;padding:0" onclick="m2_exit()">Exit preview to the kiosk</button>
     <button class="m2-row" style="width:100%;border:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;color:var(--burgundy);cursor:pointer;padding:0" onclick="m2_lockDevice()">Lock the preview on this device</button>
   </div></section>`;
