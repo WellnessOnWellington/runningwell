@@ -2015,7 +2015,8 @@
   .m2-panel { display:flex; flex-direction:column; gap:16px; }
   .m2-body { overflow-x:hidden; overscroll-behavior-x:none; }
   /* Sideways movement on the day swipe is the app's; the browser only scrolls vertically. */
-  .m2-swipe { position:relative; touch-action:pan-y; }
+  .m2-swipe { position:relative; touch-action:pan-y; margin:0 -14px; }
+  .m2-swipe-page { padding:0 14px; box-sizing:border-box; }
   /* While the phone app is showing, a sideways swipe reaching the page edge must not become
      the browser's back/forward navigation (Chrome Android, trackpads). Class set by m2_route,
      so the kiosk and every other view keep the browser's normal behaviour. */
@@ -17953,7 +17954,8 @@ function m2_lockDevice(){ m2_store(M2_DOOR_KEY,null); m2_sheetHide(); m2_showDoo
 /* Leaves by dropping #m2 without adding a history entry. An open sheet's history steps are
    unwound first, so Back afterwards can't land on an old #m2 entry and reopen the preview. */
 function m2_exit(){
-  const n=m2_sheet.length;
+  const n=m2_sheet.length+(m2_guard?1:0);
+  m2_guard=false;
   const leave=()=>{ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} document.documentElement.classList.remove('m2-on'); showView('kiosk'); };
   m2_sheetHide();
   if(n){ m2_suppressPop++; try{ history.go(-n); }catch(e){ m2_suppressPop--; } setTimeout(leave,80); }
@@ -17994,6 +17996,7 @@ async function m2_loadBase(){
    Sign out / Forget me in the avatar panel. */
 async function m2_showApp(){
   m2_el('m2-door').hidden=true; m2_el('m2-app').hidden=false;
+  m2_pushGuard();
   try{ await m2_loadBase(); }catch(e){ m2_el('m2-start').hidden=false; m2_el('m2-shell').hidden=true; m2_el('m2-start').innerHTML=`<div class="m2-empty">Couldn't reach the database — check your connection.<br><br><button class="m2-btn plain" onclick="m2_showApp()">Try again</button></div>`; return; }
   const rec=m2_load(M2_WHO_KEY);
   if(rec&&rec.until>Date.now()){
@@ -18592,9 +18595,23 @@ function m2_sheetHide(){
   wrap.classList.remove('open'); m2_sheet=[];
   setTimeout(()=>{ if(!m2_sheet.length) wrap.hidden=true; },220);
 }
+/* Android's Back (the edge swipe in an installed app) can't be switched off, but what it does
+   can. A "guard" history entry sits under the app, so Back never falls through to the kiosk
+   page beneath #m2: an open sheet steps back; otherwise another tab goes to the first tab;
+   on the first tab (or the start screen) Back does nothing — leave with the home gesture,
+   as with any app. Sheets' own history steps sit above the guard. */
+let m2_guard=false;
+function m2_pushGuard(){ if(m2_guard) return; try{ history.pushState({m2g:1},''); m2_guard=true; }catch(e){} }
 function m2_onPop(){
   if(m2_suppressPop>0){ m2_suppressPop--; return; }
-  if(m2_sheet.length) m2_sheetPopStep();
+  if(m2_sheet.length){ m2_sheetPopStep(); return; }
+  if(!m2_guard||!m2_el('view-m2')?.classList.contains('active')) return;
+  // Popped the guard itself: put it back, and go home if not already there.
+  m2_guard=false; m2_pushGuard();
+  if(m2_who&&!m2_el('m2-shell').hidden){
+    const home=m2_who.kind==='team'?'whoson':'shifts';
+    if(m2_tab!==home) m2_setTab(home);
+  }
 }
 function m2_sheetSaveDraft(){
   const step=m2_sheet[m2_sheet.length-1]; if(!step||!step.key) return;
