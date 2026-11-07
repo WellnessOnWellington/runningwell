@@ -17755,8 +17755,30 @@ function m2_locked(icon,title,sub,next){
   return `<div class="m2-card m2-locked"><div class="m2-locked-icon">${icon}</div><div class="m2-locked-title">${escHtml(title)}</div><div class="m2-locked-sub">${escHtml(sub)}</div><div class="m2-next">${escHtml(next)}</div></div>`;
 }
 
+/* A way in with no address bar: an app added to the home screen always opens on the start
+   page, and on iPhone it has its own storage, so #m2 cannot be typed and Safari's unlock does
+   not carry over. Five quick taps on the front-page clock open the door instead; the door
+   still needs a partner PIN, so stumbling on it shows nothing.
+   TOUCH SCREENS ONLY. On the clinic's desktop kiosk an open door would hold focus in its
+   PIN field, and the next staff card tap would type into it instead of clocking them in. */
+const M2_SECRET_TAPS=5, M2_SECRET_GAP_MS=1000;
+let m2_secretCount=0, m2_secretLast=0;
+function m2_bindSecretTap(){
+  try{
+    if(!window.matchMedia('(pointer:coarse)').matches) return;
+    const clock=document.getElementById('kiosk-time');
+    if(!clock) return;
+    clock.addEventListener('click',()=>{
+      const now=Date.now();
+      m2_secretCount=now-m2_secretLast<=M2_SECRET_GAP_MS?m2_secretCount+1:1;
+      m2_secretLast=now;
+      if(m2_secretCount>=M2_SECRET_TAPS){ m2_secretCount=0; location.hash='#m2'; }
+    });
+  }catch(e){ console.error('m2_bindSecretTap',e); }
+}
+
 window.addEventListener('hashchange',m2_route);
-document.addEventListener('DOMContentLoaded',m2_route);
+document.addEventListener('DOMContentLoaded',()=>{ m2_route(); m2_bindSecretTap(); });
 </script>
 </body>
 </html>
