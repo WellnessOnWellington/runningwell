@@ -2013,6 +2013,31 @@
   .m2-pill.live { color:#fff; background:var(--burgundy); }
   .m2-body { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:14px 14px 20px; }
   .m2-panel { display:flex; flex-direction:column; gap:16px; }
+  /* Who's On, option B3 (Joel 8 Nov): the bar holds the month + Day/Person; a FIXED week strip
+     sits under it. Only the pills below slide. */
+  .m2-title-who { display:flex; flex-direction:column; min-width:0; }
+  .m2-month { font-family:'Lora',serif; font-size:20px; font-weight:600; color:var(--charcoal); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.15; }
+  /* A 360px phone has to fit month + Back to today + switch + Preview + avatar/Sign in, so the
+     bar tightens on Who's On only, and the title column never gives up "Back to today". */
+  .m2-bar.who { gap:4px; padding-left:0.85rem; }
+  .m2-bar.who .m2-title { flex:1 0 auto; max-width:calc(100% - 230px); min-width:88px; }
+  .m2-bar.who .m2-pill { padding:0.18rem 0.4rem; letter-spacing:0.04em; }
+  .m2-bar.who .m2-signin-btn { white-space:nowrap; flex-shrink:0; padding:0 10px; font-size:13px; min-height:36px; }
+  .m2-back-today { white-space:nowrap; align-self:flex-start; border:none; background:none; padding:0; min-height:20px; font-family:'Nunito',sans-serif; font-size:12px; font-weight:800; color:var(--burgundy); cursor:pointer; }
+  .m2-back-today[hidden] { display:none; }
+  .m2-seg.compact { width:108px; flex-shrink:0; border-radius:11px; }
+  .m2-seg.compact button { min-height:34px; font-size:13px; border-radius:8px; padding:0; }
+  .m2-subbar { flex-shrink:0; display:flex; align-items:center; gap:2px; padding:4px 4px 8px; background:var(--white); border-bottom:1px solid var(--border); }
+  .m2-subbar[hidden] { display:none; }
+  .m2-subbar .m2-icon-btn { width:32px; height:50px; border-radius:10px; color:#6E5F62; }
+  .m2-week { flex:1; display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; }
+  .m2-wd { min-height:50px; border:none; border-radius:12px; background:none; color:var(--text); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; font-family:'Nunito',sans-serif; cursor:pointer; padding:0; }
+  .m2-wd small { font-size:11px; font-weight:800; opacity:0.75; }
+  .m2-wd b { font-size:17px; font-weight:800; }
+  .m2-wd.today { box-shadow:inset 0 0 0 1.5px var(--burgundy); }
+  .m2-wd.sel { background:var(--burgundy); color:#fff; box-shadow:none; }
+  .m2-wd:active { background:var(--blush-lt); }
+  .m2-wd.sel:active { background:var(--burgundy); }
   .m2-body { overflow-x:hidden; overscroll-behavior-x:none; touch-action:pan-y; }
   /* Sideways movement on the day swipe is the app's; the browser only scrolls vertically. */
   .m2-swipe { position:relative; touch-action:pan-y; margin:0 -14px; }
@@ -2488,9 +2513,11 @@
     <div class="m2-shell" id="m2-shell" hidden>
       <header class="m2-bar">
         <h1 class="m2-title" id="m2-title">My Shifts</h1>
+        <span id="m2-bar-mid"></span>
         <span class="m2-pill" id="m2-preview-pill">Preview</span>
         <span id="m2-bar-right"></span>
       </header>
+      <div class="m2-subbar" id="m2-subbar" hidden></div>
       <main class="m2-body" id="m2-body">
         <section class="m2-panel" id="m2-panel-shifts" role="tabpanel"></section>
         <section class="m2-panel" id="m2-panel-swaps"  role="tabpanel" hidden></section>
@@ -18112,7 +18139,7 @@ function m2_setTab(tab){
     m2_el('m2-tab-'+t).setAttribute('aria-selected',t===tab?'true':'false');
     m2_el('m2-panel-'+t).hidden=t!==tab;
   });
-  m2_el('m2-title').textContent=M2_TITLES[tab];
+  m2_renderBar();
   m2_el('m2-body').scrollTop=0;
   m2_render(tab);
   m2_refresh(tab,false);
@@ -18423,20 +18450,32 @@ async function m2_loadWhoson(){
   return {mode:'person',person:m2_person,start,end,shifts,leave:m2_leaveRows(leave)};
 }
 function m2_setWmode(mode){ m2_wmode=mode; m2_data.whoson=null; m2_render('whoson'); m2_refresh('whoson',true); }
-/* ±1 slides like a swipe; 0 ("Back to today") jumps. */
+/* ±1 slides like a swipe; 0 ("Back to today") slides to today. */
 function m2_moveDay(n){
-  if(n!==0&&m2_el('m2-swipe')){ m2_slideDay(n); return; }
-  m2_day=n===0?m2_today():m2_add(m2_day||m2_today(),n);
+  if(n===0){ m2_jumpDay(m2_today()); return; }
+  if(m2_el('m2-swipe')){ m2_slideDay(n); return; }
+  m2_day=m2_add(m2_day||m2_today(),n);
   m2_data.whoson=m2_dayCache[m2_day]||null; m2_render('whoson'); m2_refresh('whoson',true);
 }
-/* One day as a page: its date bar + the pills. The same markup draws the neighbour that
-   slides in, so both halves of the swipe look identical. d.shifts null = not loaded yet. */
+/* Any day (week strip, ‹ › a week, Back to today): fetched first so the page that slides in
+   is already drawn, then the same slide as a swipe, in the direction of the target. */
+async function m2_jumpDay(k){
+  if(m2_swAnimating||!k||k===m2_day) return;
+  if(m2_wmode!=='day'||!m2_el('m2-swipe')){ m2_day=k; m2_data.whoson=m2_dayCache[k]||null; m2_render('whoson'); m2_refresh('whoson',true); return; }
+  m2_swAnimating=true;   // blocks a second tap / a swipe while the target day loads
+  try{ await m2_fetchDay(k); }catch(e){}
+  m2_swAnimating=false;
+  if(m2_tab!=='whoson'||m2_wmode!=='day'||!m2_el('m2-swipe')) return;
+  const dir=k>m2_day?1:-1;
+  m2_swAdj(dir,k);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>m2_swCommit(dir)));
+}
+/* One day's pills — the page that slides. The date lives in the fixed bar + strip above, so
+   both halves of a swipe are just pills. d.shifts null = not loaded yet. */
 function m2_dayPage(d){
   const me=m2_me(), t=m2_today();
-  let html=`<div class="m2-daynav"><button class="m2-icon-btn" aria-label="Previous day" onclick="m2_moveDay(-1)">${M2_ICON.left}</button>
-    <div class="m2-daynav-mid"><div class="m2-daynav-title">${m2_esc(m2_long(d.day))}</div>${d.day!==t?`<button class="m2-today-btn" onclick="m2_moveDay(0)">Back to today</button>`:`<div class="m2-note" style="font-size:12px">Today · swipe for other days</div>`}</div>
-    <button class="m2-icon-btn" aria-label="Next day" onclick="m2_moveDay(1)">${M2_ICON.right}</button></div>`;
-  if(!d.shifts) return html+`<div class="m2-empty">Loading…</div>`;
+  let html='';
+  if(!d.shifts) return `<div class="m2-empty">Loading…</div>`;
   const isToday=d.day===t;
   const working=d.shifts.filter(s=>!s.is_day_off&&s.start_time&&s.end_time);
   let any=false;
@@ -18464,20 +18503,61 @@ function m2_dayPage(d){
   if(!any) html+=`<div class="m2-empty">Nobody rostered.</div>`;
   return html;
 }
+/* The top bar on Who's On (option B3): the selected day's MONTH (Joel: the selected day's,
+   not the earlier month, in a week that crosses two), "Back to today" under it when away from
+   today, and a compact Day/Person switch. In Person view the bar shows the fortnight and the
+   strip becomes ‹ person › with the arrows moving a fortnight. Every other tab: its title.
+   The month label cross-fades when it changes; it never slides. */
+function m2_renderBar(){
+  const title=m2_el('m2-title'), mid=m2_el('m2-bar-mid'), sub=m2_el('m2-subbar'); if(!title) return;
+  title.closest('.m2-bar').classList.toggle('who',m2_tab==='whoson');
+  if(m2_tab!=='whoson'){ title.textContent=M2_TITLES[m2_tab]; mid.innerHTML=''; sub.hidden=true; sub.innerHTML=''; return; }
+  const t=m2_today(), day=m2_day||t, me=m2_me();
+  let label, away;
+  if(m2_wmode==='day'){
+    label=m2_fmt(day,{month:'long'})+(day.slice(0,4)!==t.slice(0,4)?' '+day.slice(0,4):'');
+    away=day!==t;
+  } else {
+    const st=m2_add(m2_mondayOf(t),m2_pOffset*14), en=m2_add(st,13);
+    label=`${m2_fmt(st,{day:'numeric',month:'short'})} – ${m2_fmt(en,{day:'numeric',month:'short'})}`;
+    away=m2_pOffset!==0;
+  }
+  if(!m2_el('m2-month')) title.innerHTML=`<span class="m2-title-who"><span class="m2-month" id="m2-month"></span><button class="m2-back-today" id="m2-back-today" onclick="m2_backToToday()">Back to today</button></span>`;
+  const mEl=m2_el('m2-month');
+  if(mEl.textContent!==label){
+    if(mEl.textContent){ mEl.style.transition='none'; mEl.style.opacity='0'; mEl.textContent=label;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{ mEl.style.transition='opacity 0.2s ease'; mEl.style.opacity='1'; })); }
+    else mEl.textContent=label;
+  }
+  m2_el('m2-back-today').hidden=!away;
+  mid.innerHTML=`<div class="m2-seg compact" role="tablist" aria-label="Who's On view"><button role="tab" aria-selected="${m2_wmode==='day'}" onclick="m2_setWmode('day')">Day</button><button role="tab" aria-selected="${m2_wmode==='person'}" onclick="m2_setWmode('person')">Person</button></div>`;
+  sub.hidden=false;
+  if(m2_wmode==='day'){
+    const mon=m2_mondayOf(day);
+    let cells='';
+    for(let i=0;i<7;i++){
+      const k=m2_add(mon,i), cls=['m2-wd',k===day?'sel':'',k===t?'today':''].join(' ');
+      cells+=`<button class="${cls}" aria-label="${m2_esc(m2_long(k))}"${k===day?' aria-current="date"':''} onclick="m2_jumpDay('${k}')"><small>${m2_esc(m2_fmt(k,{weekday:'narrow'}))}</small><b>${+k.slice(8)}</b></button>`;
+    }
+    sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous week" onclick="m2_jumpDay(m2_add(m2_day,-7))">${M2_ICON.left}</button><div class="m2-week">${cells}</div><button class="m2-icon-btn" aria-label="Next week" onclick="m2_jumpDay(m2_add(m2_day,7))">${M2_ICON.right}</button>`;
+  } else {
+    const people=m2_emps.filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
+    sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous fortnight" onclick="m2_movePerson(-1)">${M2_ICON.left}</button>
+      <select class="m2-select" style="flex:1;min-width:0" aria-label="Person" onchange="m2_person=this.value;m2_data.whoson=null;m2_render('whoson');m2_refresh('whoson',true)">${people.map(e=>`<option value="${m2_esc(e.id)}"${String(e.id)===String(m2_person)?' selected':''}>${m2_esc(e.name)}${me&&e.id===me.id?' (you)':''}</option>`).join('')}</select>
+      <button class="m2-icon-btn" aria-label="Next fortnight" onclick="m2_movePerson(1)">${M2_ICON.right}</button>`;
+  }
+}
+function m2_backToToday(){ if(m2_wmode==='day') m2_jumpDay(m2_today()); else { m2_pOffset=0; m2_data.whoson=null; m2_render('whoson'); m2_refresh('whoson',true); } }
+function m2_movePerson(n){ m2_pOffset+=n; m2_data.whoson=null; m2_render('whoson'); m2_refresh('whoson',true); }
 function m2_renderWhoson(panel,d){
-  const me=m2_me();
-  let html=`<div class="m2-seg" role="tablist" aria-label="Who's On view">
-    <button role="tab" aria-selected="${d.mode==='day'}" onclick="m2_setWmode('day')">Day</button>
-    <button role="tab" aria-selected="${d.mode==='person'}" onclick="m2_setWmode('person')">Person</button></div>`;
+  if(!m2_person) m2_person=d.person||m2_me()?.id||m2_emps.find(e=>!e.is_placeholder)?.id;
+  m2_renderBar();
+  let html='';
   if(d.mode==='day'){
     html+=`<div class="m2-swipe" id="m2-swipe"><div class="m2-swipe-page" id="m2-swipe-cur">${m2_dayPage(d)}</div></div>`;
   } else {
     const p=m2_emp(d.person);
-    const people=m2_emps.filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
-    html+=`<label class="m2-label" style="margin-top:12px">Person<select class="m2-select" onchange="m2_person=this.value;m2_data.whoson=null;m2_render('whoson');m2_refresh('whoson',true)">${people.map(e=>`<option value="${m2_esc(e.id)}"${e.id===d.person?' selected':''}>${m2_esc(e.name)}${me&&e.id===me.id?' (you)':''}</option>`).join('')}</select></label>
-      <div class="m2-daynav" style="margin-top:8px"><button class="m2-icon-btn" aria-label="Previous fortnight" onclick="${m2_on(()=>{ m2_pOffset--; m2_data.whoson=null; m2_render('whoson'); m2_refresh('whoson',true); })}">${M2_ICON.left}</button>
-      <div class="m2-daynav-mid"><div class="m2-daynav-title" style="font-size:17px">${m2_esc(m2_fmt(d.start,{day:'numeric',month:'short'}))} – ${m2_esc(m2_fmt(d.end,{day:'numeric',month:'short'}))}</div></div>
-      <button class="m2-icon-btn" aria-label="Next fortnight" onclick="${m2_on(()=>{ m2_pOffset++; m2_data.whoson=null; m2_render('whoson'); m2_refresh('whoson',true); })}">${M2_ICON.right}</button></div><div style="margin-top:8px">`;
+    html+=`<div>`;
     const colour=m2_groupColour(m2_groupOf(p));
     for(let k=d.start;k<=d.end;k=m2_add(k,1)){
       const s=d.shifts.find(x=>x.date===k&&!x.is_day_off&&x.start_time&&x.end_time);
@@ -18503,12 +18583,12 @@ function m2_renderWhoson(panel,d){
 const M2_SWIPE_PX=50, M2_SWIPE_V=0.35, M2_COMMIT_MS=180, M2_CANCEL_MS=200;
 let m2_swAnimating=false;
 function m2_swSet(el,x,tr){ if(!el) return; el.style.transition=tr||'none'; el.style.transform=x===0?'':`translateX(${x}px)`; }
-function m2_swAdj(dir){
+function m2_swAdj(dir,target){
   const wrap=m2_el('m2-swipe'); if(!wrap) return null;
   m2_el('m2-swipe-adj')?.remove();
-  const k=m2_add(m2_day,dir);
+  const k=target||m2_add(m2_day,dir);
   const pane=document.createElement('div');
-  pane.id='m2-swipe-adj'; pane.className='m2-swipe-page'; pane.setAttribute('aria-hidden','true');
+  pane.id='m2-swipe-adj'; pane.className='m2-swipe-page'; pane.setAttribute('aria-hidden','true'); pane.dataset.day=k;
   pane.style.cssText=`position:absolute;top:0;left:${dir>0?100:-100}%;width:100%;pointer-events:none;`;
   pane.innerHTML=m2_dayPage(m2_dayCache[k]||{day:k,shifts:null,entries:[]});
   wrap.appendChild(pane);
@@ -18517,9 +18597,11 @@ function m2_swAdj(dir){
 function m2_swCommit(dir){
   m2_swAnimating=true;
   const W=m2_el('m2-swipe').offsetWidth, ease=`transform ${M2_COMMIT_MS}ms ease-out`;
+  const target=m2_el('m2-swipe-adj')?.dataset.day||m2_add(m2_day,dir);
   m2_swSet(m2_el('m2-swipe-cur'),-dir*W,ease); m2_swSet(m2_el('m2-swipe-adj'),-dir*W,ease);
+  /* The fixed strip + month move to the new day as the pills START sliding, not after. */
+  m2_day=target; m2_renderBar();
   setTimeout(()=>{
-    m2_day=m2_add(m2_day,dir);
     m2_data.whoson=m2_dayCache[m2_day]||null;
     m2_swAnimating=false;
     m2_render('whoson'); m2_refresh('whoson',true);
