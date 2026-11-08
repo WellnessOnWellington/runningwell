@@ -18511,7 +18511,7 @@ function m2_calPage(d){
   return html+`</div></div>`;
 }
 /* Month swipe on the calendar box, and the ‹ › arrows — the Who's On slide (6 px axis lock,
-   50 px / 0.35 px/ms, 180 ms commit, 200 ms spring). The label cross-fades as the slide starts. */
+   m2_swipeCommits thresholds, 180 ms commit, 200 ms spring). The label cross-fades as the slide starts. */
 let m2_calNoTapUntil=0, m2_calAnimating=false;
 function m2_calAdj(dir,target){
   const wrap=m2_el('m2-calwrap'); if(!wrap) return null;
@@ -18590,8 +18590,8 @@ function m2_bindCalSwipe(){
   el.addEventListener('touchend',()=>{
     if(!tracking||!horiz){ tracking=false; return; } tracking=false;
     m2_calNoTapUntil=Date.now()+400;
-    const dx=cx-x0, v=Math.abs(dx)/Math.max(1,Date.now()-t0);
-    if((Math.abs(dx)>M2_SWIPE_PX||v>M2_SWIPE_V)&&dx!==0) m2_calCommit(dx<0?1:-1); else m2_calCancel();
+    const dx=cx-x0;
+    if(m2_swipeCommits(dx,Date.now()-t0,m2_el('m2-calwrap')?.offsetWidth)) m2_calCommit(dx<0?1:-1); else m2_calCancel();
   },{passive:true});
   el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_calCancel(); tracking=false; },{passive:true});
 }
@@ -18835,8 +18835,8 @@ function m2_bindWeekSwipe(){
   };
   el.addEventListener('touchend',()=>{
     if(!tracking||!horiz) { tracking=false; return; }
-    const dx=cx-x0, v=Math.abs(dx)/Math.max(1,Date.now()-t0);
-    finish(Math.abs(dx)>M2_SWIPE_PX||v>M2_SWIPE_V);
+    const dx=cx-x0;
+    finish(m2_swipeCommits(dx,Date.now()-t0,m2_el('m2-weekwrap')?.offsetWidth));
   },{passive:true});
   el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) finish(false); tracking=false; },{passive:true});
 }
@@ -18880,10 +18880,20 @@ function m2_renderWhoson(panel,d){
 }
 /* Swipe between days — the live Who's On's drag-across, reproduced: the neighbouring day is
    drawn just off-screen as soon as the drag is clearly sideways (6 px axis lock); both pages
-   follow the finger as one surface; past 50 px or a flick faster than 0.35 px/ms they finish
+   follow the finger as one surface; past m2_swipeCommits' threshold (35% of width, or a real flick) they finish
    together in 180 ms (ease-out), otherwise they spring back in 200 ms with a slight
-   overshoot. Same numbers as the live SWIPE NAVIGATION block. */
-const M2_SWIPE_PX=50, M2_SWIPE_V=0.35, M2_COMMIT_MS=180, M2_CANCEL_MS=200;
+   overshoot. Timings match the live SWIPE NAVIGATION block; the commit threshold is higher. */
+const M2_COMMIT_MS=180, M2_CANCEL_MS=200;
+/* When a swipe turns the page (Joel 8 Nov: 50 px — 13% of a phone — committed too easily).
+   Now the iOS / Android pager / Swiper.js shape: a slow drag must pass 35% of the page width
+   (~135 px on a 390 px phone); a flick commits sooner but only if it is BOTH fast
+   (>= 0.5 px/ms, Android's ~400 dp/s) and has moved >= 30 px (Android's ~25 dp), so a short
+   twitch springs back. Shared by every m2 swipe: days, fortnights, week strip, leave months. */
+const M2_SWIPE_FRAC=0.35, M2_FLICK_V=0.5, M2_FLICK_PX=30;
+function m2_swipeCommits(dx,ms,width){
+  const a=Math.abs(dx); if(!a) return false;
+  return a>=M2_SWIPE_FRAC*(width||360)||(a>=M2_FLICK_PX&&a/Math.max(1,ms)>=M2_FLICK_V);
+}
 let m2_swAnimating=false;
 function m2_swSet(el,x,tr){ if(!el) return; el.style.transition=tr||'none'; el.style.transform=x===0?'':`translateX(${x}px)`; }
 function m2_swAdj(dir,target){
@@ -18950,8 +18960,8 @@ function m2_bindSwipe(){
   el.addEventListener('touchend',()=>{
     if(!tracking) return; tracking=false;
     if(!horiz) return;
-    const dx=cx-x0, v=Math.abs(dx)/Math.max(1,Date.now()-t0);
-    if(Math.abs(dx)>M2_SWIPE_PX||v>M2_SWIPE_V) m2_swCommit(dx<0?1:-1); else m2_swCancel();
+    const dx=cx-x0;
+    if(m2_swipeCommits(dx,Date.now()-t0,m2_el('m2-swipe')?.offsetWidth)) m2_swCommit(dx<0?1:-1); else m2_swCancel();
   },{passive:true});
   el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_swCancel(); tracking=false; },{passive:true});
 }
