@@ -2020,13 +2020,26 @@
   /* A 360px phone has to fit month + Back to today + switch + Preview + avatar/Sign in, so the
      bar tightens on Who's On only, and the title column never gives up "Back to today". */
   .m2-bar.who { gap:4px; padding-left:0.85rem; }
-  .m2-bar.who .m2-title { flex:1 0 auto; max-width:calc(100% - 230px); min-width:88px; }
-  .m2-bar.who .m2-pill { padding:0.18rem 0.4rem; letter-spacing:0.04em; }
+  .m2-bar.who .m2-title { flex:1 1 auto; min-width:0; }
+  #m2-bar-mid { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+  #m2-bar-mid:empty { display:none; }
+  /* On Who's On the Preview pill shrinks to a dot (amber = dry run, burgundy = live) so a 360px
+     phone fits month + today + Day/Person + avatar. Full pill on every other tab. Goes at launch. */
+  .m2-bar.who .m2-pill { width:10px; height:10px; padding:0; border-radius:5px; font-size:0; overflow:hidden; background:#E0A63A; }
+  .m2-bar.who .m2-pill.live { background:var(--burgundy); }
+  .m2-month.fn { font-size:16px; letter-spacing:-0.01em; }
   .m2-bar.who .m2-signin-btn { white-space:nowrap; flex-shrink:0; padding:0 10px; font-size:13px; min-height:36px; }
-  .m2-back-today { white-space:nowrap; align-self:flex-start; border:none; background:none; padding:0; min-height:20px; font-family:'Nunito',sans-serif; font-size:12px; font-weight:800; color:var(--burgundy); cursor:pointer; }
-  .m2-back-today[hidden] { display:none; }
-  .m2-seg.compact { width:108px; flex-shrink:0; border-radius:11px; }
-  .m2-seg.compact button { min-height:34px; font-size:13px; border-radius:8px; padding:0; }
+  /* Today button (Joel 8 Nov, replaces the "Back to today" text link that appeared and
+     disappeared and shifted the month): a calendar glyph holding today's date, ALWAYS in the
+     bar so nothing moves. Grey + disabled when already on today; burgundy when away. Google
+     Calendar's pattern. Re-tapping the current bottom tab does the same. */
+  .m2-today-btn { position:relative; width:38px; height:40px; flex-shrink:0; border:none; background:none; padding:0; display:flex; align-items:center; justify-content:center; color:var(--burgundy); cursor:pointer; border-radius:10px; }
+  .m2-today-btn svg { width:26px; height:26px; }
+  .m2-today-btn b { position:absolute; left:0; right:0; top:15px; text-align:center; font-family:'Nunito',sans-serif; font-size:11px; font-weight:800; line-height:1; }
+  .m2-today-btn:disabled { color:#B9A9AC; cursor:default; }
+  .m2-today-btn:not(:disabled):active { background:var(--blush-lt); }
+  .m2-seg.compact { width:98px; flex-shrink:0; border-radius:11px; }
+  .m2-seg.compact button { min-height:34px; font-size:12.5px; border-radius:8px; padding:0; }
   .m2-subbar { flex-shrink:0; display:flex; align-items:center; gap:2px; padding:4px 4px 8px; background:var(--white); border-bottom:1px solid var(--border); }
   .m2-subbar[hidden] { display:none; }
   .m2-subbar .m2-icon-btn { width:32px; height:50px; border-radius:10px; color:#6E5F62; }
@@ -18146,6 +18159,11 @@ function m2_enterShell(fresh){
 }
 function m2_setTab(tab){
   if(!M2_TABS.includes(tab)||!m2_who) return;
+  /* Tapping the tab you are already on: back to today (Who's On / Leave) and back to the top. */
+  if(tab===m2_tab&&!m2_el('m2-panel-'+tab).hidden){
+    const b=m2_el('m2-body'); if(b) b.scrollTo({top:0,behavior:'smooth'});
+    m2_goToday(); return;
+  }
   m2_tab=tab;
   m2_store(M2_LAST_KEY,{tab,at:Date.now()});
   M2_TABS.forEach(t=>{
@@ -18432,9 +18450,9 @@ function m2_calPage(d){
 /* Month swipe on the calendar box, and the ‹ › arrows — the Who's On slide (6 px axis lock,
    50 px / 0.35 px/ms, 180 ms commit, 200 ms spring). The label cross-fades as the slide starts. */
 let m2_calNoTapUntil=0, m2_calAnimating=false;
-function m2_calAdj(dir){
+function m2_calAdj(dir,target){
   const wrap=m2_el('m2-calwrap'); if(!wrap) return null;
-  const k=m2_addMonth(m2_month,dir); let pane=m2_el('m2-cal-adj');
+  const k=target||m2_addMonth(m2_month,dir); let pane=m2_el('m2-cal-adj');
   if(pane&&pane.dataset.key===k) return pane;
   pane?.remove();
   pane=document.createElement('div'); pane.id='m2-cal-adj'; pane.className='m2-calpage'; pane.dataset.key=k; pane.setAttribute('aria-hidden','true');
@@ -18448,12 +18466,12 @@ function m2_calAdj(dir){
 function m2_calCommit(dir){
   m2_calAnimating=true;
   const W=m2_el('m2-calwrap').offsetWidth, ease=`transform ${M2_COMMIT_MS}ms ease-out`;
-  const k=m2_addMonth(m2_month,dir), mine=m2_data.leave?.mine||[];
+  const k=m2_el('m2-cal-adj')?.dataset.key||m2_addMonth(m2_month,dir), mine=m2_data.leave?.mine||[];
   m2_swSet(m2_el('m2-cal-cur'),-dir*W,ease); m2_swSet(m2_el('m2-cal-adj'),-dir*W,ease);
   const lab=m2_el('m2-monthlabel');
   if(lab){ lab.style.transition='none'; lab.style.opacity='0'; lab.textContent=m2_monthLabel(k);
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ lab.style.transition='opacity 0.2s ease'; lab.style.opacity='1'; })); }
-  m2_month=k;
+  m2_month=k; m2_renderBar();
   setTimeout(()=>{
     m2_calAnimating=false;
     const c=m2_mCache[k];
@@ -18470,6 +18488,15 @@ function m2_slideMonth(dir){
   if(m2_calAnimating) return;
   if(!m2_el('m2-calwrap')){ m2_month=m2_addMonth(m2_month,dir); m2_data.leave=null; m2_render('leave'); m2_refresh('leave',true); return; }
   m2_calAdj(dir);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>m2_calCommit(dir)));
+}
+async function m2_slideMonthTo(k){
+  if(m2_calAnimating||!m2_month||k===m2_month) return;
+  if(!m2_el('m2-calwrap')){ m2_month=k; m2_data.leave=null; m2_render('leave'); m2_refresh('leave',true); return; }
+  m2_calAnimating=true; try{ await m2_fetchMonth(k); }catch(e){} m2_calAnimating=false;
+  if(m2_tab!=='leave'||!m2_el('m2-calwrap')) return;
+  const dir=k>m2_month?1:-1;
+  m2_calAdj(dir,k);
   requestAnimationFrame(()=>requestAnimationFrame(()=>m2_calCommit(dir)));
 }
 function m2_bindCalSwipe(){
@@ -18529,7 +18556,7 @@ function m2_renderLeave(panel,d){
     return `<div class="m2-row" style="min-height:44px"><span class="m2-dot" style="background:${m2_groupColour(m2_groupOf(e))}"></span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(e?m2_first(e):'Staff member')}</span><span class="m2-chip ${type==='annual_leave'?'wait':'no'}">${type==='annual_leave'?'Annual leave':'On leave'}</span></div>`; }).join('')+`</div>`;
   html+=`</section>`;
   panel.innerHTML=html;
-  m2_bindCalSwipe();
+  m2_bindCalSwipe(); m2_renderBar();
 }
 
 /* ── Who's On ─────────────────────────────────────────────────────────── */
@@ -18648,26 +18675,29 @@ function m2_dayPage(d){
 function m2_renderBar(){
   const title=m2_el('m2-title'), mid=m2_el('m2-bar-mid'), sub=m2_el('m2-subbar'); if(!title) return;
   title.closest('.m2-bar').classList.toggle('who',m2_tab==='whoson');
-  if(m2_tab!=='whoson'){ title.textContent=M2_TITLES[m2_tab]; mid.innerHTML=''; sub.hidden=true; sub.innerHTML=''; return; }
+  if(m2_tab!=='whoson'){
+    title.textContent=M2_TITLES[m2_tab]; sub.hidden=true; sub.innerHTML='';
+    mid.innerHTML=m2_tab==='leave'?m2_todayBtn(!!m2_month&&m2_month!==m2_monthStart(m2_today()),'month'):'';
+    return;
+  }
   const t=m2_today(), day=m2_day||t, me=m2_me();
   let label, away;
   if(m2_wmode==='day'){
-    label=m2_fmt(day,{month:'long'})+(day.slice(0,4)!==t.slice(0,4)?' '+day.slice(0,4):'');
+    label=day.slice(0,4)!==t.slice(0,4)?m2_fmt(day,{month:'short',year:'numeric'}):m2_fmt(day,{month:'long'});
     away=day!==t;
   } else {
     const st=m2_add(m2_mondayOf(t),m2_pOffset*14), en=m2_add(st,13);
-    label=`${m2_fmt(st,{day:'numeric',month:'short'})} – ${m2_fmt(en,{day:'numeric',month:'short'})}`;
+    label=st.slice(5,7)===en.slice(5,7)?`${+st.slice(8)}–${m2_fmt(en,{day:'numeric',month:'short'})}`:`${m2_fmt(st,{day:'numeric',month:'short'})}–${m2_fmt(en,{day:'numeric',month:'short'})}`;
     away=m2_pOffset!==0;
   }
-  if(!m2_el('m2-month')) title.innerHTML=`<span class="m2-title-who"><span class="m2-month" id="m2-month"></span><button class="m2-back-today" id="m2-back-today" onclick="m2_backToToday()">Back to today</button></span>`;
-  const mEl=m2_el('m2-month');
+  if(!m2_el('m2-month')) title.innerHTML=`<span class="m2-title-who"><span class="m2-month" id="m2-month"></span></span>`;
+  const mEl=m2_el('m2-month'); mEl.classList.toggle('fn',m2_wmode!=='day');
   if(mEl.textContent!==label){
     if(mEl.textContent){ mEl.style.transition='none'; mEl.style.opacity='0'; mEl.textContent=label;
       requestAnimationFrame(()=>requestAnimationFrame(()=>{ mEl.style.transition='opacity 0.2s ease'; mEl.style.opacity='1'; })); }
     else mEl.textContent=label;
   }
-  m2_el('m2-back-today').hidden=!away;
-  mid.innerHTML=`<div class="m2-seg compact" role="tablist" aria-label="Who's On view"><button role="tab" aria-selected="${m2_wmode==='day'}" onclick="m2_setWmode('day')">Day</button><button role="tab" aria-selected="${m2_wmode==='person'}" onclick="m2_setWmode('person')">Person</button></div>`;
+  mid.innerHTML=m2_todayBtn(away,m2_wmode==='day'?'day':'fortnight')+`<div class="m2-seg compact" role="tablist" aria-label="Who's On view"><button role="tab" aria-selected="${m2_wmode==='day'}" onclick="m2_setWmode('day')">Day</button><button role="tab" aria-selected="${m2_wmode==='person'}" onclick="m2_setWmode('person')">Person</button></div>`;
   sub.hidden=false;
   if(m2_wmode==='day'){
     sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous week" onclick="m2_jumpDay(m2_add(m2_day,-7))">${M2_ICON.left}</button><div class="m2-weekwrap" id="m2-weekwrap"><div class="m2-week" id="m2-week-cur">${m2_weekCells(day,day)}</div></div><button class="m2-icon-btn" aria-label="Next week" onclick="m2_jumpDay(m2_add(m2_day,7))">${M2_ICON.right}</button>`;
@@ -18744,6 +18774,15 @@ function m2_bindWeekSwipe(){
     finish(Math.abs(dx)>M2_SWIPE_PX||v>M2_SWIPE_V);
   },{passive:true});
   el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) finish(false); tracking=false; },{passive:true});
+}
+function m2_todayBtn(away,unit){
+  const t=m2_today();
+  return `<button class="m2-today-btn" ${away?'':'disabled '}aria-label="${away?'Go to this '+unit:'Showing this '+unit}" onclick="m2_goToday()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5"/><path d="M16 2.5v4M8 2.5v4M3 9.5h18"/></svg><b aria-hidden="true">${+t.slice(8)}</b></button>`;
+}
+/* Today button + re-tapping the current bottom tab. */
+function m2_goToday(){
+  if(m2_tab==='whoson') m2_backToToday();
+  else if(m2_tab==='leave') m2_slideMonthTo(m2_monthStart(m2_today()));
 }
 function m2_backToToday(){ m2_jumpTo(m2_wmode==='day'?m2_today():0); }
 function m2_movePerson(n){ if(m2_el('m2-swipe')) m2_slideDay(n); else m2_jumpTo(m2_pOffset+n); }
