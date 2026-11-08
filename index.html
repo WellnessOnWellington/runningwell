@@ -2047,6 +2047,11 @@
      the browser's back/forward navigation (Chrome Android, trackpads). Class set by m2_route,
      so the kiosk and every other view keep the browser's normal behaviour. */
   html.m2-on, html.m2-on body { overscroll-behavior-x:none; }
+  /* iPhone: a quick double tap on the bottom tabs / bar zoomed the page. 'manipulation' turns
+     off double-tap zoom only — pinch zoom still works (accessibility). Children's own
+     touch-action (pan-y on the body, none on sheet handles) still applies: the browser takes
+     the intersection with every ancestor. */
+  .m2-root { touch-action:manipulation; }
   .m2-swipe-page { will-change:transform; }
   .m2-panel[hidden] { display:none; }
 
