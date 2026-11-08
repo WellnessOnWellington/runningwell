@@ -17961,7 +17961,7 @@ const M2_ICON={
    colour lives in the bar; a tint only for attention (open / annual / other leave). */
 /* Leave label on a shift tile (Joel 8 Nov, option "pill"): a grey pill exactly the width of
    the time column, same grey for annual and other leave (only the words differ). */
-function m2_leaveTag(kind){ return `<span class="m2-lpill">${kind==='annual'?'Annual leave':'On leave'}</span>`; }
+function m2_leaveTag(kind){ return `<span class="m2-lpill">${kind==='annual'?'Annual leave':'Other leave'}</span>`; }
 function m2_pill(o){
   const cls=['m2-pill-row',o.size||'md',o.kind||'',o.me?'me':''].join(' ');
   const style=`--ink:${o.ink||'#8B2535'}`;
@@ -18434,7 +18434,8 @@ async function m2_loadLeave(){
 }
 /* Who is away on each day of the month: leave entries, plus approved leave requests (the
    only record of leave approved for a fortnight nobody has rostered yet). Non-annual leave
-   is shown only as "On leave" — the roster PIN is shared. */
+   is shown only as "Other leave" — the roster PIN is shared. Joel 8 Nov: "Other leave", not
+   "On leave" — annual leave is also "on leave", so that pair overlapped. Same privacy. */
 function m2_awayByDay(d){
   const by={};
   const add=(date,empId,type)=>{ (by[date]=by[date]||new Map()); if(!by[date].has(empId)||type==='annual_leave') by[date].set(empId,type); };
@@ -18563,7 +18564,7 @@ function m2_renderLeave(panel,d){
   html+=`<h2 class="m2-h2" style="margin-top:12px">Away ${m2_esc(m2_long(m2_leaveSel))}</h2>`;
   if(!sel.length) html+=`<div class="m2-note">Nobody on leave.</div>`;
   else html+=`<div class="m2-box" style="gap:0;padding:2px 14px">`+sel.map(([id,type])=>{ const e=m2_emp(id);
-    return `<div class="m2-row" style="min-height:44px"><span class="m2-dot" style="background:${m2_groupColour(m2_groupOf(e))}"></span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(e?m2_first(e):'Staff member')}</span><span class="m2-chip ${type==='annual_leave'?'wait':'no'}">${type==='annual_leave'?'Annual leave':'On leave'}</span></div>`; }).join('')+`</div>`;
+    return `<div class="m2-row" style="min-height:44px"><span class="m2-dot" style="background:${m2_groupColour(m2_groupOf(e))}"></span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(e?m2_first(e):'Staff member')}</span><span class="m2-chip ${type==='annual_leave'?'wait':'no'}">${type==='annual_leave'?'Annual leave':'Other leave'}</span></div>`; }).join('')+`</div>`;
   html+=`</section>`;
   panel.innerHTML=html;
   m2_bindCalSwipe(); m2_renderBar();
