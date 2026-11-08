@@ -18438,16 +18438,28 @@ async function m2_fetchDay(date,force){
 function m2_prefetchAround(date){
   [-1,1].forEach(n=>{ const k=m2_add(date,n), c=m2_dayCache[k]; if(!c||Date.now()-c.at>M2_FRESH_MS) m2_fetchDay(k).catch(()=>{}); });
 }
+/* Person view pages are one person's fortnight, cached + prefetched like days so a swipe
+   slides in a page that is already drawn. Keyed person|offset (offset = fortnights from this one). */
+const m2_pCache={};
+async function m2_fetchPerson(person,off,force){
+  const key=person+'|'+off, c=m2_pCache[key];
+  if(!force&&c&&Date.now()-c.at<M2_FRESH_MS) return c;
+  const start=m2_add(m2_mondayOf(m2_today()),off*14), end=m2_add(start,13);
+  const [shifts,leave]=await Promise.all([
+    db.get('roster_shifts',{employee_id:person,date:{gte:start,lte:end}}),
+    db.get('entries',{employee_id:person,date:{gte:start,lte:end},leave_type:{'not.is':'null'}})
+  ]);
+  return (m2_pCache[key]={mode:'person',person,off,start,end,shifts,leave:m2_leaveRows(leave),at:Date.now()});
+}
+function m2_prefetchPerson(person,off){
+  [-1,1].forEach(n=>{ const c=m2_pCache[person+'|'+(off+n)]; if(!c||Date.now()-c.at>M2_FRESH_MS) m2_fetchPerson(person,off+n).catch(()=>{}); });
+}
 async function m2_loadWhoson(){
   if(!m2_day) m2_day=m2_today();
   if(m2_wmode==='day'){ const d=await m2_fetchDay(m2_day,true); m2_prefetchAround(m2_day); return d; }
   if(!m2_person) m2_person=m2_me()?.id||m2_emps.find(e=>!e.is_placeholder)?.id;
-  const start=m2_add(m2_mondayOf(m2_today()),m2_pOffset*14), end=m2_add(start,13);
-  const [shifts,leave]=await Promise.all([
-    db.get('roster_shifts',{employee_id:m2_person,date:{gte:start,lte:end}}),
-    db.get('entries',{employee_id:m2_person,date:{gte:start,lte:end},leave_type:{'not.is':'null'}})
-  ]);
-  return {mode:'person',person:m2_person,start,end,shifts,leave:m2_leaveRows(leave)};
+  const person=m2_person, off=m2_pOffset;
+  const d=await m2_fetchPerson(person,off,true); m2_prefetchPerson(person,off); return d;
 }
 function m2_setWmode(mode){ m2_wmode=mode; m2_data.whoson=null; m2_render('whoson'); m2_refresh('whoson',true); }
 /* ±1 slides like a swipe; 0 ("Back to today") slides to today. */
@@ -18460,15 +18472,31 @@ function m2_moveDay(n){
 /* Any day (week strip, ‹ › a week, Back to today): fetched first so the page that slides in
    is already drawn, then the same slide as a swipe, in the direction of the target. */
 async function m2_jumpDay(k){
-  if(m2_swAnimating||!k||k===m2_day) return;
-  if(m2_wmode!=='day'||!m2_el('m2-swipe')){ m2_day=k; m2_data.whoson=m2_dayCache[k]||null; m2_render('whoson'); m2_refresh('whoson',true); return; }
-  m2_swAnimating=true;   // blocks a second tap / a swipe while the target day loads
-  try{ await m2_fetchDay(k); }catch(e){}
+  if(m2_wmode!=='day'||!k||k===m2_day) return;
+  m2_jumpTo(k);
+}
+/* Any page in the CURRENT mode — a date in Day view, a fortnight offset in Person view. */
+async function m2_jumpTo(k){
+  if(m2_swAnimating||k==null||k===m2_curKey()) return;
+  if(!m2_el('m2-swipe')){ m2_setKey(k); m2_data.whoson=m2_cached(k); m2_render('whoson'); m2_refresh('whoson',true); return; }
+  const mode=m2_wmode, person=m2_person;
+  m2_swAnimating=true;   // blocks a second tap / a swipe while the target page loads
+  try{ await (mode==='day'?m2_fetchDay(k):m2_fetchPerson(person,k)); }catch(e){}
   m2_swAnimating=false;
-  if(m2_tab!=='whoson'||m2_wmode!=='day'||!m2_el('m2-swipe')) return;
-  const dir=k>m2_day?1:-1;
+  if(m2_tab!=='whoson'||m2_wmode!==mode||m2_person!==person||!m2_el('m2-swipe')) return;
+  const dir=k>m2_curKey()?1:-1;
   m2_swAdj(dir,k);
   requestAnimationFrame(()=>requestAnimationFrame(()=>m2_swCommit(dir)));
+}
+/* The swipe engine works on a page KEY: a date string in Day view, a fortnight offset in Person. */
+function m2_curKey(){ return m2_wmode==='day'?m2_day:m2_pOffset; }
+function m2_keyAt(dir){ return m2_wmode==='day'?m2_add(m2_day,dir):m2_pOffset+dir; }
+function m2_setKey(k){ if(m2_wmode==='day') m2_day=k; else m2_pOffset=+k; }
+function m2_cached(k){ return m2_wmode==='day'?(m2_dayCache[k]||null):(m2_pCache[m2_person+'|'+k]||null); }
+function m2_pageFor(k){
+  if(m2_wmode==='day') return m2_dayPage(m2_dayCache[k]||{day:k,shifts:null,entries:[]});
+  const d=m2_pCache[m2_person+'|'+k];
+  return d?m2_personPage(d):`<div class="m2-empty">Loading…</div>`;
 }
 /* One day's pills — the page that slides. The date lives in the fixed bar + strip above, so
    both halves of a swipe are just pills. d.shifts null = not loaded yet. */
@@ -18547,31 +18575,32 @@ function m2_renderBar(){
       <button class="m2-icon-btn" aria-label="Next fortnight" onclick="m2_movePerson(1)">${M2_ICON.right}</button>`;
   }
 }
-function m2_backToToday(){ if(m2_wmode==='day') m2_jumpDay(m2_today()); else { m2_pOffset=0; m2_data.whoson=null; m2_render('whoson'); m2_refresh('whoson',true); } }
-function m2_movePerson(n){ m2_pOffset+=n; m2_data.whoson=null; m2_render('whoson'); m2_refresh('whoson',true); }
+function m2_backToToday(){ m2_jumpTo(m2_wmode==='day'?m2_today():0); }
+function m2_movePerson(n){ if(m2_el('m2-swipe')) m2_slideDay(n); else m2_jumpTo(m2_pOffset+n); }
+/* One person's fortnight — the Person view's sliding page. */
+function m2_personPage(d){
+  const p=m2_emp(d.person); if(!p) return `<div class="m2-empty">Loading…</div>`;
+  let html=`<div>`;
+  const colour=m2_groupColour(m2_groupOf(p));
+  for(let k=d.start;k<=d.end;k=m2_add(k,1)){
+    const s=d.shifts.find(x=>x.date===k&&!x.is_day_off&&x.start_time&&x.end_time);
+    const label=m2_fmt(k,{weekday:'short',day:'numeric'});
+    if(k===m2_add(d.start,7)) html+=`<div style="height:8px"></div>`;
+    if(!s){ html+=m2_pill({size:'md',kind:'off',name:label,blank:'Off'}); continue; }
+    const lv=leaveEntryFor(p.id,k,s.id,d.leave);
+    const kind=lv?(lv.leaveType==='annual_leave'?'annual':'other'):'';
+    html+=m2_pill({size:'md',kind,name:label,s:s.start_time,e:s.end_time,ink:colour,
+      time:kind?`<span class="m2-tag">${kind==='annual'?'Annual leave':'On leave'}</span>`:m2_esc(m2_range(s.start_time,s.end_time)),
+      onclick:m2_on(()=>m2_openShift(s,p))});
+  }
+  return html+`</div>`;
+}
 function m2_renderWhoson(panel,d){
   if(!m2_person) m2_person=d.person||m2_me()?.id||m2_emps.find(e=>!e.is_placeholder)?.id;
   m2_renderBar();
   let html='';
-  if(d.mode==='day'){
-    html+=`<div class="m2-swipe" id="m2-swipe"><div class="m2-swipe-page" id="m2-swipe-cur">${m2_dayPage(d)}</div></div>`;
-  } else {
-    const p=m2_emp(d.person);
-    html+=`<div>`;
-    const colour=m2_groupColour(m2_groupOf(p));
-    for(let k=d.start;k<=d.end;k=m2_add(k,1)){
-      const s=d.shifts.find(x=>x.date===k&&!x.is_day_off&&x.start_time&&x.end_time);
-      const label=m2_fmt(k,{weekday:'short',day:'numeric'});
-      if(k===m2_add(d.start,7)) html+=`<div style="height:8px"></div>`;
-      if(!s){ html+=m2_pill({size:'md',kind:'off',name:label,blank:'Off'}); continue; }
-      const lv=leaveEntryFor(p.id,k,s.id,d.leave);
-      const kind=lv?(lv.leaveType==='annual_leave'?'annual':'other'):'';
-      html+=m2_pill({size:'md',kind,name:label,s:s.start_time,e:s.end_time,ink:colour,
-        time:kind?`<span class="m2-tag">${kind==='annual'?'Annual leave':'On leave'}</span>`:m2_esc(m2_range(s.start_time,s.end_time)),
-        onclick:m2_on(()=>m2_openShift(s,p))});
-    }
-    html+=`</div>`;
-  }
+  const page=d.mode==='day'?m2_dayPage(d):m2_personPage(d);
+  html+=`<div class="m2-swipe" id="m2-swipe"><div class="m2-swipe-page" id="m2-swipe-cur">${page}</div></div>`;
   panel.innerHTML=html;
   m2_bindSwipe();
 }
@@ -18586,23 +18615,24 @@ function m2_swSet(el,x,tr){ if(!el) return; el.style.transition=tr||'none'; el.s
 function m2_swAdj(dir,target){
   const wrap=m2_el('m2-swipe'); if(!wrap) return null;
   m2_el('m2-swipe-adj')?.remove();
-  const k=target||m2_add(m2_day,dir);
+  const k=target!=null?target:m2_keyAt(dir);
   const pane=document.createElement('div');
-  pane.id='m2-swipe-adj'; pane.className='m2-swipe-page'; pane.setAttribute('aria-hidden','true'); pane.dataset.day=k;
+  pane.id='m2-swipe-adj'; pane.className='m2-swipe-page'; pane.setAttribute('aria-hidden','true'); pane.dataset.key=k;
   pane.style.cssText=`position:absolute;top:0;left:${dir>0?100:-100}%;width:100%;pointer-events:none;`;
-  pane.innerHTML=m2_dayPage(m2_dayCache[k]||{day:k,shifts:null,entries:[]});
+  pane.innerHTML=m2_pageFor(k);
   wrap.appendChild(pane);
   return pane;
 }
 function m2_swCommit(dir){
   m2_swAnimating=true;
   const W=m2_el('m2-swipe').offsetWidth, ease=`transform ${M2_COMMIT_MS}ms ease-out`;
-  const target=m2_el('m2-swipe-adj')?.dataset.day||m2_add(m2_day,dir);
+  const adjKey=m2_el('m2-swipe-adj')?.dataset.key;
+  const target=adjKey==null?m2_keyAt(dir):(m2_wmode==='day'?adjKey:+adjKey);
   m2_swSet(m2_el('m2-swipe-cur'),-dir*W,ease); m2_swSet(m2_el('m2-swipe-adj'),-dir*W,ease);
-  /* The fixed strip + month move to the new day as the pills START sliding, not after. */
-  m2_day=target; m2_renderBar();
+  /* The fixed strip + month/fortnight label move as the pills START sliding, not after. */
+  m2_setKey(target); m2_renderBar();
   setTimeout(()=>{
-    m2_data.whoson=m2_dayCache[m2_day]||null;
+    m2_data.whoson=m2_cached(target);
     m2_swAnimating=false;
     m2_render('whoson'); m2_refresh('whoson',true);
   },M2_COMMIT_MS);
@@ -18620,8 +18650,8 @@ function m2_slideDay(dir){
 }
 /* Bound ONCE to the whole scrolling body — like the live app, which listens on the whole
    Who's On view — so a quiet day with one pill still swipes from the empty space below it.
-   Acts only while Who's On is showing in Day view. */
-function m2_canSwipe(){ return m2_tab==='whoson'&&m2_wmode==='day'&&!!m2_el('m2-swipe')&&!m2_swAnimating; }
+   Acts while Who's On is showing, in either view (Person swipes a fortnight). */
+function m2_canSwipe(){ return m2_tab==='whoson'&&!!m2_el('m2-swipe')&&!m2_swAnimating; }
 function m2_bindSwipe(){
   const el=m2_el('m2-body'); if(!el||el._m2sw) return; el._m2sw=true;
   let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false;
