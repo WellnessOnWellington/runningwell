@@ -2030,7 +2030,8 @@
   .m2-subbar { flex-shrink:0; display:flex; align-items:center; gap:2px; padding:4px 4px 8px; background:var(--white); border-bottom:1px solid var(--border); }
   .m2-subbar[hidden] { display:none; }
   .m2-subbar .m2-icon-btn { width:32px; height:50px; border-radius:10px; color:#6E5F62; }
-  .m2-week { flex:1; display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; }
+  .m2-weekwrap { flex:1; min-width:0; position:relative; overflow:hidden; touch-action:pan-y; }
+  .m2-week { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; }
   .m2-wd { min-height:50px; border:none; border-radius:12px; background:none; color:var(--text); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; font-family:'Nunito',sans-serif; cursor:pointer; padding:0; }
   .m2-wd small { font-size:11px; font-weight:800; opacity:0.75; }
   .m2-wd b { font-size:17px; font-weight:800; }
@@ -18561,19 +18562,80 @@ function m2_renderBar(){
   mid.innerHTML=`<div class="m2-seg compact" role="tablist" aria-label="Who's On view"><button role="tab" aria-selected="${m2_wmode==='day'}" onclick="m2_setWmode('day')">Day</button><button role="tab" aria-selected="${m2_wmode==='person'}" onclick="m2_setWmode('person')">Person</button></div>`;
   sub.hidden=false;
   if(m2_wmode==='day'){
-    const mon=m2_mondayOf(day);
-    let cells='';
-    for(let i=0;i<7;i++){
-      const k=m2_add(mon,i), cls=['m2-wd',k===day?'sel':'',k===t?'today':''].join(' ');
-      cells+=`<button class="${cls}" aria-label="${m2_esc(m2_long(k))}"${k===day?' aria-current="date"':''} onclick="m2_jumpDay('${k}')"><small>${m2_esc(m2_fmt(k,{weekday:'narrow'}))}</small><b>${+k.slice(8)}</b></button>`;
-    }
-    sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous week" onclick="m2_jumpDay(m2_add(m2_day,-7))">${M2_ICON.left}</button><div class="m2-week">${cells}</div><button class="m2-icon-btn" aria-label="Next week" onclick="m2_jumpDay(m2_add(m2_day,7))">${M2_ICON.right}</button>`;
+    sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous week" onclick="m2_jumpDay(m2_add(m2_day,-7))">${M2_ICON.left}</button><div class="m2-weekwrap" id="m2-weekwrap"><div class="m2-week" id="m2-week-cur">${m2_weekCells(day,day)}</div></div><button class="m2-icon-btn" aria-label="Next week" onclick="m2_jumpDay(m2_add(m2_day,7))">${M2_ICON.right}</button>`;
+    m2_bindWeekSwipe();
   } else {
     const people=m2_emps.filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
     sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous fortnight" onclick="m2_movePerson(-1)">${M2_ICON.left}</button>
       <select class="m2-select" style="flex:1;min-width:0" aria-label="Person" onchange="m2_person=this.value;m2_data.whoson=null;m2_render('whoson');m2_refresh('whoson',true)">${people.map(e=>`<option value="${m2_esc(e.id)}"${String(e.id)===String(m2_person)?' selected':''}>${m2_esc(e.name)}${me&&e.id===me.id?' (you)':''}</option>`).join('')}</select>
       <button class="m2-icon-btn" aria-label="Next fortnight" onclick="m2_movePerson(1)">${M2_ICON.right}</button>`;
   }
+}
+/* The 7 day buttons of the week holding `ref`, with `sel` highlighted. */
+function m2_weekCells(ref,sel){
+  const mon=m2_mondayOf(ref), t=m2_today(); let cells='';
+  for(let i=0;i<7;i++){
+    const k=m2_add(mon,i), cls=['m2-wd',k===sel?'sel':'',k===t?'today':''].join(' ');
+    cells+=`<button class="${cls}" aria-label="${m2_esc(m2_long(k))}"${k===sel?' aria-current="date"':''} onclick="m2_weekTap('${k}')"><small>${m2_esc(m2_fmt(k,{weekday:'narrow'}))}</small><b>${+k.slice(8)}</b></button>`;
+  }
+  return cells;
+}
+/* Swiping the STRIP moves a week (iOS/Google Calendar convention); swiping the pills moves a
+   day. The strip slides with the pills' numbers; the selected weekday is kept (Wed → next
+   Wed), then the pills slide to that day exactly as the › chevron does. A swipe that starts
+   on the strip never moves the day by itself. */
+let m2_wkNoTapUntil=0;
+function m2_weekTap(k){ if(Date.now()<m2_wkNoTapUntil) return; m2_jumpDay(k); }
+function m2_bindWeekSwipe(){
+  const el=m2_el('m2-subbar'); if(!el||el._m2wk) return; el._m2wk=true;
+  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false,dir=0;
+  const cur=()=>m2_el('m2-week-cur'), adj=()=>m2_el('m2-week-adj');
+  const ensureAdj=d=>{
+    if(dir===d&&adj()) return; dir=d; adj()?.remove();
+    const g=document.createElement('div'); g.id='m2-week-adj'; g.className='m2-week'; g.setAttribute('aria-hidden','true');
+    g.style.cssText=`position:absolute;top:0;left:${d>0?100:-100}%;width:100%;pointer-events:none;`;
+    const target=m2_add(m2_day,7*d);
+    g.innerHTML=m2_weekCells(target,target);
+    m2_el('m2-weekwrap').appendChild(g);
+    m2_fetchDay(target).catch(()=>{});   // warm the day the pills will slide to
+  };
+  el.addEventListener('touchstart',e=>{
+    tracking=false;
+    if(m2_tab!=='whoson'||m2_wmode!=='day'||m2_swAnimating||!e.target.closest('#m2-weekwrap')) return;
+    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now();
+    tracking=true; locked=false; horiz=false; dir=0;
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    if(!tracking) return;
+    const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX;
+    if(!locked){
+      if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
+      horiz=Math.abs(dx)>Math.abs(dy); locked=true;
+      if(!horiz){ tracking=false; return; }
+    }
+    e.preventDefault();
+    if(dx!==0) ensureAdj(dx<0?1:-1);
+    m2_swSet(cur(),dx); m2_swSet(adj(),dx);
+  },{passive:false});
+  const finish=commit=>{
+    tracking=false; m2_wkNoTapUntil=Date.now()+400;
+    const W=m2_el('m2-weekwrap').offsetWidth;
+    if(commit&&dir){
+      const d=dir, ease=`transform ${M2_COMMIT_MS}ms ease-out`;
+      m2_swAnimating=true;
+      m2_swSet(cur(),-d*W,ease); m2_swSet(adj(),-d*W,ease);
+      setTimeout(()=>{ m2_swAnimating=false; m2_jumpDay(m2_add(m2_day,7*d)); },M2_COMMIT_MS);
+    } else {
+      const spring=`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`, a=adj();
+      m2_swSet(cur(),0,spring); if(a){ m2_swSet(a,0,spring); setTimeout(()=>a.remove(),M2_CANCEL_MS); }
+    }
+  };
+  el.addEventListener('touchend',()=>{
+    if(!tracking||!horiz) { tracking=false; return; }
+    const dx=cx-x0, v=Math.abs(dx)/Math.max(1,Date.now()-t0);
+    finish(Math.abs(dx)>M2_SWIPE_PX||v>M2_SWIPE_V);
+  },{passive:true});
+  el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) finish(false); tracking=false; },{passive:true});
 }
 function m2_backToToday(){ m2_jumpTo(m2_wmode==='day'?m2_today():0); }
 function m2_movePerson(n){ if(m2_el('m2-swipe')) m2_slideDay(n); else m2_jumpTo(m2_pOffset+n); }
