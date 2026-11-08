@@ -2160,6 +2160,9 @@
   .m2-cal-h { text-align:center; font-size:11px; font-weight:800; color:#6E5F62; }
   .m2-cal-d { height:40px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:14px; font-weight:700; color:var(--text); border:none; background:none; font-family:'Nunito',sans-serif; cursor:pointer; padding:0; }
   .m2-cal-d.today { border:1.5px solid var(--burgundy); }
+  /* Public holiday (marked on the desktop roster): grey tint, the "not a normal working day"
+     grey the leave pills use. Selected still wins (rule order). */
+  .m2-cal-d.ph { background:#ECE4E6; }
   .m2-cal-d.sel { background:var(--burgundy); color:#fff; }
   .m2-cal-d.out { color:#CBBFC2; font-weight:600; }
   .m2-cal-dots { display:flex; gap:2px; height:5px; }
@@ -18421,11 +18424,13 @@ async function m2_fetchMonth(ms,force){
   const c=m2_mCache[ms];
   if(!force&&c&&Date.now()-c.at<M2_FRESH_MS) return c;
   const me_=m2_monthEnd(ms);
-  const [entries,approved]=await Promise.all([
+  const g0=m2_mondayOf(ms), g1=m2_add(g0,41);
+  const [entries,approved,phs]=await Promise.all([
     db.get('entries',{date:{gte:ms,lte:me_},leave_type:{'not.is':'null'}}),
-    db.get('requests',{type:'leave',status:'approved',leave_end_date:{gte:ms}})
+    db.get('requests',{type:'leave',status:'approved',leave_end_date:{gte:ms}}),
+    db.get('public_holidays',{date:{gte:g0,lte:g1}}).catch(()=>[])   // days the desktop roster marked; a handful a year
   ]);
-  return (m2_mCache[ms]={month:ms,entries:m2_leaveRows(entries),approved:approved.map(normaliseRequest).filter(r=>r.leaveStartDate<=me_),at:Date.now()});
+  return (m2_mCache[ms]={month:ms,entries:m2_leaveRows(entries),approved:approved.map(normaliseRequest).filter(r=>r.leaveStartDate<=me_),ph:new Set((phs||[]).map(r=>r.date)),at:Date.now()});
 }
 async function m2_loadLeave(){
   if(!m2_month) m2_month=m2_monthStart(m2_today());
@@ -18500,7 +18505,8 @@ function m2_calPage(d){
     if(k<ms||k>me_){ html+=`<button class="m2-cal-d out" tabindex="-1" aria-label="${m2_esc(m2_long(k))}, ${m2_esc(m2_monthLabel(m2_monthStart(k)))}" onclick="m2_calTapOut('${k}')">${+k.slice(8)}<span class="m2-cal-dots"></span></button>`; continue; }
     const away=by[k]?[...by[k].keys()]:[];
     const groups=[...new Set(away.map(id=>m2_groupOf(m2_emp(id))).filter(Boolean))].slice(0,3);
-    html+=`<button class="m2-cal-d${k===t?' today':''}${k===m2_leaveSel?' sel':''}" aria-label="${m2_esc(m2_long(k))}, ${away.length} away" onclick="${m2_on(()=>{ if(Date.now()<m2_calNoTapUntil) return; m2_leaveSel=k; m2_render('leave'); })}">${+k.slice(8)}<span class="m2-cal-dots">${groups.map(g=>`<i style="background:${k===m2_leaveSel?'#fff':m2_groupColour(g)}"></i>`).join('')}</span></button>`;
+    const isPH=!!d.ph&&d.ph.has(k);
+    html+=`<button class="m2-cal-d${k===t?' today':''}${isPH?' ph':''}${k===m2_leaveSel?' sel':''}" aria-label="${m2_esc(m2_long(k))}${isPH?', public holiday':''}, ${away.length} away" onclick="${m2_on(()=>{ if(Date.now()<m2_calNoTapUntil) return; m2_leaveSel=k; m2_render('leave'); })}">${+k.slice(8)}<span class="m2-cal-dots">${groups.map(g=>`<i style="background:${k===m2_leaveSel?'#fff':m2_groupColour(g)}"></i>`).join('')}</span></button>`;
   }
   return html+`</div></div>`;
 }
@@ -18611,7 +18617,7 @@ function m2_renderLeave(panel,d){
     <button class="m2-icon-btn" aria-label="Next month" onclick="m2_slideMonth(1)">${M2_ICON.right}</button></div>
     <div class="m2-calwrap" id="m2-calwrap"><div class="m2-calpage" id="m2-cal-cur">${m2_calPage(d)}</div></div>`;
   const sel=by[m2_leaveSel]?[...by[m2_leaveSel].entries()]:[];
-  html+=`<h2 class="m2-h2" style="margin-top:12px">Away ${m2_esc(m2_long(m2_leaveSel))}</h2>`;
+  html+=`<h2 class="m2-h2" style="margin-top:12px">${d.ph&&d.ph.has(m2_leaveSel)?'Public holiday · ':'Away '}${m2_esc(m2_long(m2_leaveSel))}</h2>`;
   html+=sel.length?m2_awayTiles(m2_leaveSel,sel):`<div class="m2-note">Nobody on leave.</div>`;
   html+=`</section>`;
   panel.innerHTML=html;
