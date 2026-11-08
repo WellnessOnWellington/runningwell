@@ -2093,18 +2093,18 @@
   .m2-pill-row.open { background:rgba(230,126,34,0.10); color:#8A4310; }
   /* Leave rows (Joel 8 Nov): greyed, no yellow. The bar keeps the rostered span as an outline
      so you can see which part of the day they are away; the time column holds a grey pill. */
-  .m2-pill-row.annual, .m2-pill-row.other { color:#A99DA0; }
-  .m2-pill-row.md.annual, .m2-pill-row.md.other, .m2-pill-row.lg.annual, .m2-pill-row.lg.other { background:transparent; }
-  .m2-pill-row.annual .m2-track, .m2-pill-row.other .m2-track { background:transparent; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.07); }
-  .m2-pill-row.annual .m2-fill, .m2-pill-row.other .m2-fill { background:transparent; opacity:1; box-shadow:inset 0 0 0 1.5px #A99DA0; }
+  .m2-pill-row.annual, .m2-pill-row.other, .m2-pill-row.ph { color:#A99DA0; }
+  .m2-pill-row.md.annual, .m2-pill-row.md.other, .m2-pill-row.md.ph, .m2-pill-row.lg.annual, .m2-pill-row.lg.other, .m2-pill-row.lg.ph { background:transparent; }
+  .m2-pill-row.annual .m2-track, .m2-pill-row.other .m2-track, .m2-pill-row.ph .m2-track { background:transparent; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.07); }
+  .m2-pill-row.annual .m2-fill, .m2-pill-row.other .m2-fill, .m2-pill-row.ph .m2-fill { background:transparent; opacity:1; box-shadow:inset 0 0 0 1.5px #A99DA0; }
   .m2-pill-row.off { background:transparent; min-height:28px; cursor:default; }
   .m2-pill-name { flex-shrink:0; font-weight:800; white-space:nowrap; color:var(--charcoal); }
   .lg .m2-pill-name { width:62px; font-size:14px; }
   .md .m2-pill-name, .sm .m2-pill-name { width:64px; font-size:12px; overflow:hidden; text-overflow:ellipsis; }
-  .m2-pill-row.annual .m2-pill-name, .m2-pill-row.other .m2-pill-name { color:#5E5659; font-weight:700; }
+  .m2-pill-row.annual .m2-pill-name, .m2-pill-row.other .m2-pill-name, .m2-pill-row.ph .m2-pill-name { color:#5E5659; font-weight:700; }
   .m2-pill-row.open .m2-pill-name, .m2-pill-row.open .m2-pill-time { color:#8A4310; }
   .m2-pill-row.me .m2-pill-name { color:var(--burgundy); }
-  .m2-pill-row.me.annual .m2-pill-name, .m2-pill-row.me.other .m2-pill-name { color:#5E5659; }
+  .m2-pill-row.me.annual .m2-pill-name, .m2-pill-row.me.other .m2-pill-name, .m2-pill-row.me.ph .m2-pill-name { color:#5E5659; }
   .m2-track { flex:1; position:relative; height:7px; border-radius:4px; background:rgba(0,0,0,0.08); overflow:hidden; min-width:40px; }
   .m2-fill { position:absolute; top:0; height:100%; border-radius:4px; background:currentColor; opacity:0.8; }
   .m2-pill-time { text-align:right; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--charcoal); display:flex; flex-direction:column; align-items:flex-end; }
@@ -2161,6 +2161,7 @@
   .m2-cal-d { height:40px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:14px; font-weight:700; color:var(--text); border:none; background:none; font-family:'Nunito',sans-serif; cursor:pointer; padding:0; }
   .m2-cal-d.today { border:1.5px solid var(--burgundy); }
   .m2-cal-d.sel { background:var(--burgundy); color:#fff; }
+  .m2-cal-d.out { color:#CBBFC2; font-weight:600; }
   .m2-cal-dots { display:flex; gap:2px; height:5px; }
   .m2-cal-dots i { width:5px; height:5px; border-radius:3px; display:block; }
   .m2-progress { display:flex; flex-direction:column; gap:10px; padding-left:4px; }
@@ -17961,7 +17962,11 @@ const M2_ICON={
    colour lives in the bar; a tint only for attention (open / annual / other leave). */
 /* Leave label on a shift tile (Joel 8 Nov, option "pill"): a grey pill exactly the width of
    the time column, same grey for annual and other leave (only the words differ). */
-function m2_leaveTag(kind){ return `<span class="m2-lpill">${kind==='annual'?'Annual leave':'Other leave'}</span>`; }
+function m2_leaveTag(kind){ return `<span class="m2-lpill">${kind==='annual'?'Annual leave':kind==='ph'?'Public holiday':'Other leave'}</span>`; }
+/* A leave entry → tile kind. public_holiday is NOT leave (the main app leaves it out of every
+   leave list and Analytics); on a tile it reads "Public holiday", greyed like leave because
+   the person is not working. Found 8 Nov: Easter Monday 2027 showed 5 people "Other leave". */
+function m2_leaveKind(lv){ return !lv?'':lv.leaveType==='annual_leave'?'annual':lv.leaveType==='public_holiday'?'ph':'other'; }
 function m2_pill(o){
   const cls=['m2-pill-row',o.size||'md',o.kind||'',o.me?'me':''].join(' ');
   const style=`--ink:${o.ink||'#8B2535'}`;
@@ -18288,7 +18293,7 @@ function m2_renderShifts(panel,d){
   const next=shifts.find(s=>!leaveOf(s));
   const horizon=m2_add(t,14);
   const items=[];
-  shifts.filter(s=>s!==next&&s.date<=horizon).forEach(s=>items.push({s,kind:leaveOf(s)?(leaveOf(s).leaveType==='annual_leave'?'annual':'other'):''}));
+  shifts.filter(s=>s!==next&&s.date<=horizon).forEach(s=>items.push({s,kind:m2_leaveKind(leaveOf(s))}));
   d.open.filter(s=>s.date<=horizon).forEach(s=>items.push({s,kind:'open'}));
   items.sort((a,b)=>(a.s.date+a.s.start_time).localeCompare(b.s.date+b.s.start_time));
   let html='';
@@ -18438,20 +18443,61 @@ async function m2_loadLeave(){
    "On leave" — annual leave is also "on leave", so that pair overlapped. Same privacy. */
 function m2_awayByDay(d){
   const by={};
-  const add=(date,empId,type)=>{ (by[date]=by[date]||new Map()); if(!by[date].has(empId)||type==='annual_leave') by[date].set(empId,type); };
+  const add=(date,empId,type)=>{ if(type==='public_holiday') return; (by[date]=by[date]||new Map()); if(!by[date].has(empId)||type==='annual_leave') by[date].set(empId,type); };
   d.entries.forEach(e=>add(e.date,String(e.employeeId),e.leaveType));
   d.approved.forEach(r=>{ let k=r.leaveStartDate; while(k<=r.leaveEndDate){ add(k,String(r.initiatorId),r.leaveType); k=m2_add(k,1); } });
   return by;
+}
+/* The "Away <day>" list as Who's On shift tiles (Joel 8 Nov — same look, same data, same tap
+   for the shift sheet). Needs that day's roster: the same cached two-read day fetch Who's On
+   uses. Someone with approved leave but no rostered shift gets a tile with no bar, not tappable. */
+function m2_awayTiles(day,sel){
+  const d=m2_dayCache[day];
+  if(!d){
+    m2_fetchDay(day).then(()=>{ if(m2_tab==='leave'&&m2_leaveSel===day&&!m2_calAnimating) m2_render('leave'); }).catch(()=>{});
+    return `<div class="m2-empty">Loading…</div>`;
+  }
+  const me=m2_me(); let html='';
+  M2_GROUPS.forEach(([g,label,colour])=>{
+    const people=sel.filter(([id])=>m2_groupOf(m2_emp(id))===g);
+    if(!people.length) return;
+    html+=`<section style="margin-top:8px"><h2 class="m2-h2"><span class="m2-dot" style="background:${colour}"></span>${label}</h2>`;
+    people.forEach(([id,type])=>{
+      const e=m2_emp(id); if(!e) return;
+      const mine=!!me&&String(e.id)===String(me.id), name=m2_first(e)+(mine?' (you)':'');
+      const shifts=d.shifts.filter(s=>String(s.employee_id)===String(id)&&!s.is_day_off&&s.start_time&&s.end_time).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+      if(!shifts.length){
+        const kind=type==='annual_leave'?'annual':'other';
+        html+=m2_pill({size:'md',kind,me:mine,name,blank:'Not rostered',time:m2_leaveTag(kind)});
+        return;
+      }
+      /* Leave recorded against only some of a split day's blocks: the other blocks are worked,
+         so they are not "away". With no leave entry at all (approved request only), all are. */
+      const hasEntries=d.entries.some(x=>String(x.employeeId)===String(id)&&x.leaveType&&x.leaveType!=='public_holiday');
+      shifts.forEach(s=>{
+        const lv=leaveEntryFor(e.id,day,s.id,d.entries);
+        if(!lv&&hasEntries) return;
+        const kind=m2_leaveKind(lv)||(type==='annual_leave'?'annual':'other');
+        html+=m2_pill({size:'md',kind,me:mine,name,s:s.start_time,e:s.end_time,ink:colour,time:m2_leaveTag(kind),onclick:m2_on(()=>m2_openShift(s,e))});
+      });
+    });
+    html+=`</section>`;
+  });
+  return html||`<div class="m2-note">Nobody on leave.</div>`;
 }
 function m2_monthLabel(ms){ return new Date(ms+'T12:00:00').toLocaleDateString('en-AU',{month:'long',year:'numeric'}); }
 /* One month's calendar box — the page that slides. A month not fetched yet draws without
    dots and fills in when its data lands. */
 function m2_calPage(d){
   const t=m2_today(), ms=d.month, me_=m2_monthEnd(ms), by=d.entries?m2_awayByDay(d):{};
-  const lead=(new Date(ms+'T12:00:00').getDay()+6)%7;
+  /* Always 6 weeks (42 days), so every month is the same height and a swipe never changes it
+     (Joel 8 Nov; the iOS/Android picker convention). Days of the months either side are faded,
+     dot-less, and tapping one slides to that month with that day selected. */
   let html=`<div class="m2-box" style="padding:10px"><div class="m2-cal">${['M','T','W','T','F','S','S'].map(x=>`<div class="m2-cal-h">${x}</div>`).join('')}`;
-  for(let i=0;i<lead;i++) html+=`<div></div>`;
-  for(let k=ms;k<=me_;k=m2_add(k,1)){
+  const g0=m2_mondayOf(ms);
+  for(let i=0;i<42;i++){
+    const k=m2_add(g0,i);
+    if(k<ms||k>me_){ html+=`<button class="m2-cal-d out" tabindex="-1" aria-label="${m2_esc(m2_long(k))}, ${m2_esc(m2_monthLabel(m2_monthStart(k)))}" onclick="m2_calTapOut('${k}')">${+k.slice(8)}<span class="m2-cal-dots"></span></button>`; continue; }
     const away=by[k]?[...by[k].keys()]:[];
     const groups=[...new Set(away.map(id=>m2_groupOf(m2_emp(id))).filter(Boolean))].slice(0,3);
     html+=`<button class="m2-cal-d${k===t?' today':''}${k===m2_leaveSel?' sel':''}" aria-label="${m2_esc(m2_long(k))}, ${away.length} away" onclick="${m2_on(()=>{ if(Date.now()<m2_calNoTapUntil) return; m2_leaveSel=k; m2_render('leave'); })}">${+k.slice(8)}<span class="m2-cal-dots">${groups.map(g=>`<i style="background:${k===m2_leaveSel?'#fff':m2_groupColour(g)}"></i>`).join('')}</span></button>`;
@@ -18500,6 +18546,10 @@ function m2_slideMonth(dir){
   if(!m2_el('m2-calwrap')){ m2_month=m2_addMonth(m2_month,dir); m2_data.leave=null; m2_render('leave'); m2_refresh('leave',true); return; }
   m2_calAdj(dir);
   requestAnimationFrame(()=>requestAnimationFrame(()=>m2_calCommit(dir)));
+}
+function m2_calTapOut(k){
+  if(m2_calAnimating||Date.now()<m2_calNoTapUntil) return;
+  m2_leaveSel=k; m2_slideMonthTo(m2_monthStart(k));
 }
 async function m2_slideMonthTo(k){
   if(m2_calAnimating||!m2_month||k===m2_month) return;
@@ -18562,9 +18612,7 @@ function m2_renderLeave(panel,d){
     <div class="m2-calwrap" id="m2-calwrap"><div class="m2-calpage" id="m2-cal-cur">${m2_calPage(d)}</div></div>`;
   const sel=by[m2_leaveSel]?[...by[m2_leaveSel].entries()]:[];
   html+=`<h2 class="m2-h2" style="margin-top:12px">Away ${m2_esc(m2_long(m2_leaveSel))}</h2>`;
-  if(!sel.length) html+=`<div class="m2-note">Nobody on leave.</div>`;
-  else html+=`<div class="m2-box" style="gap:0;padding:2px 14px">`+sel.map(([id,type])=>{ const e=m2_emp(id);
-    return `<div class="m2-row" style="min-height:44px"><span class="m2-dot" style="background:${m2_groupColour(m2_groupOf(e))}"></span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(e?m2_first(e):'Staff member')}</span><span class="m2-chip ${type==='annual_leave'?'wait':'no'}">${type==='annual_leave'?'Annual leave':'Other leave'}</span></div>`; }).join('')+`</div>`;
+  html+=sel.length?m2_awayTiles(m2_leaveSel,sel):`<div class="m2-note">Nobody on leave.</div>`;
   html+=`</section>`;
   panel.innerHTML=html;
   m2_bindCalSwipe(); m2_renderBar();
@@ -18666,7 +18714,7 @@ function m2_dayPage(d){
         return;
       }
       const lv=leaveEntryFor(e.id,s.date,s.id,d.entries);
-      const kind=lv?(lv.leaveType==='annual_leave'?'annual':'other'):'';
+      const kind=m2_leaveKind(lv);
       let dot;
       if(isToday&&!lv){ const ent=d.entries.find(x=>String(x.employeeId)===String(e.id)&&x.clockIn&&!x.leaveType); dot=!!(ent&&!ent.clockOut); }
       html+=m2_pill({size:'md',kind,me:me&&e.id===me.id,dot,name:m2_first(e)+(me&&e.id===me.id?' (you)':''),s:s.start_time,e:s.end_time,ink:colour,
@@ -18808,7 +18856,7 @@ function m2_personPage(d){
     if(k===m2_add(d.start,7)) html+=`<div style="height:8px"></div>`;
     if(!s){ html+=m2_pill({size:'md',kind:'off',name:label,blank:'Off'}); continue; }
     const lv=leaveEntryFor(p.id,k,s.id,d.leave);
-    const kind=lv?(lv.leaveType==='annual_leave'?'annual':'other'):'';
+    const kind=m2_leaveKind(lv);
     html+=m2_pill({size:'md',kind,name:label,s:s.start_time,e:s.end_time,ink:colour,
       time:kind?m2_leaveTag(kind):m2_esc(m2_range(s.start_time,s.end_time)),
       onclick:m2_on(()=>m2_openShift(s,p))});
@@ -19027,7 +19075,7 @@ function m2_dayPills(day,group,meId,openShiftId){
     if(isOpen&&String(s.id)!==String(openShiftId)) return m2_pill({size:'sm',kind:'open',name:'Cover',s:s.start_time,e:s.end_time,ink:'#8A4310'});
     if(isOpen) return m2_pill({size:'sm',kind:'open',name:'This shift',s:s.start_time,e:s.end_time,ink:'#8A4310'});
     const lv=leaveEntryFor(e.id,s.date,s.id,day.leave);
-    return m2_pill({size:'sm',me:mine,kind:lv?(lv.leaveType==='annual_leave'?'annual':'other'):'',name:mine?'You':m2_first(e),s:s.start_time,e:s.end_time,ink:mine?'#8B2535':m2_groupColour(group)});
+    return m2_pill({size:'sm',me:mine,kind:m2_leaveKind(lv),name:mine?'You':m2_first(e),s:s.start_time,e:s.end_time,ink:mine?'#8B2535':m2_groupColour(group)});
   }).join('')+`</div>`;
 }
 /* Why a shift can't be changed — the sheet still opens and says so. */
