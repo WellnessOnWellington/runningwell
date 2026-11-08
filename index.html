@@ -2023,10 +2023,9 @@
   .m2-bar.who .m2-title { flex:1 1 auto; min-width:0; }
   #m2-bar-mid { display:flex; align-items:center; gap:4px; flex-shrink:0; }
   #m2-bar-mid:empty { display:none; }
-  /* On Who's On the Preview pill shrinks to a dot (amber = dry run, burgundy = live) so a 360px
-     phone fits month + today + Day/Person + avatar. Full pill on every other tab. Goes at launch. */
-  .m2-bar.who .m2-pill { width:10px; height:10px; padding:0; border-radius:5px; font-size:0; overflow:hidden; background:#E0A63A; }
-  .m2-bar.who .m2-pill.live { background:var(--burgundy); }
+  /* Who's On hides the Preview pill (Joel 8 Nov: dot removed for room). Every other tab still
+     shows it. ⚠ LAUNCH STEP: live actions are OFF by default (dry run) — switch them on. */
+  .m2-bar.who .m2-pill { display:none; }
   .m2-month.fn { font-size:16px; letter-spacing:-0.01em; }
   .m2-bar.who .m2-signin-btn { white-space:nowrap; flex-shrink:0; padding:0 10px; font-size:13px; min-height:36px; }
   /* Today button (Joel 8 Nov, replaces the "Back to today" text link that appeared and
