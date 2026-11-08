@@ -2036,8 +2036,11 @@
   .m2-today-btn svg { width:26px; height:26px; }
   .m2-today-btn:disabled { color:#B9A9AC; cursor:default; }
   .m2-today-btn:not(:disabled):active { background:var(--blush-lt); }
-  .m2-seg.compact { width:98px; flex-shrink:0; border-radius:11px; }
-  .m2-seg.compact button { min-height:34px; font-size:12.5px; border-radius:8px; padding:0; }
+  /* Day/Person in the bar (Joel 8 Nov, option C): 124 × 40 with 14px text; each half's tap
+     area reaches over the switch's own padding to 46px tall (Apple 44 / Android 48 guidance). */
+  .m2-seg.compact { width:124px; flex-shrink:0; border-radius:11px; }
+  .m2-seg.compact button { position:relative; min-height:40px; font-size:14px; border-radius:8px; padding:0; }
+  .m2-seg.compact button::after { content:""; position:absolute; inset:-3px -2px; }
   .m2-subbar { flex-shrink:0; display:flex; align-items:center; gap:2px; padding:6px 4px; background:var(--white); border-bottom:1px solid var(--border); }
   .m2-subbar[hidden] { display:none; }
   .m2-subbar .m2-icon-btn { width:32px; height:50px; border-radius:10px; color:#6E5F62; }
@@ -18745,23 +18748,33 @@ function m2_renderBar(){
     return;
   }
   const t=m2_today(), day=m2_day||t, me=m2_me();
-  let label, away;
+  let label, short, away;
   if(m2_wmode==='day'){
-    label=day.slice(0,4)!==t.slice(0,4)?m2_fmt(day,{month:'short',year:'numeric'}):m2_fmt(day,{month:'long'});
+    const otherYear=day.slice(0,4)!==t.slice(0,4);
+    label=otherYear?m2_fmt(day,{month:'short',year:'numeric'}):m2_fmt(day,{month:'long'});
+    short=otherYear?`${m2_fmt(day,{month:'short'})} '${day.slice(2,4)}`:m2_fmt(day,{month:'short'});
     away=day!==t;
   } else {
     const st=m2_add(m2_mondayOf(t),m2_pOffset*14), en=m2_add(st,13);
     label=st.slice(5,7)===en.slice(5,7)?`${+st.slice(8)}–${m2_fmt(en,{day:'numeric',month:'short'})}`:`${m2_fmt(st,{day:'numeric',month:'short'})}–${m2_fmt(en,{day:'numeric',month:'short'})}`;
+    short=st.slice(5,7)===en.slice(5,7)?m2_fmt(st,{month:'short'}):`${m2_fmt(st,{month:'short'})}–${m2_fmt(en,{month:'short'})}`;   // months only; the pills carry the dates
     away=m2_pOffset!==0;
   }
   if(!m2_el('m2-month')) title.innerHTML=`<span class="m2-title-who"><span class="m2-month" id="m2-month"></span></span>`;
   const mEl=m2_el('m2-month'); mEl.classList.toggle('fn',m2_wmode!=='day');
-  if(mEl.textContent!==label){
-    if(mEl.textContent){ mEl.style.transition='none'; mEl.style.opacity='0'; mEl.textContent=label;
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{ mEl.style.transition='opacity 0.2s ease'; mEl.style.opacity='1'; })); }
-    else mEl.textContent=label;
-  }
   mid.innerHTML=m2_todayBtn(away,m2_wmode==='day'?'day':'fortnight')+`<div class="m2-seg compact" role="tablist" aria-label="Who's On view"><button role="tab" aria-selected="${m2_wmode==='day'}" onclick="m2_setWmode('day')">Day</button><button role="tab" aria-selected="${m2_wmode==='person'}" onclick="m2_setWmode('person')">Person</button></div>`;
+  /* Month label, drawn AFTER the switch so its real space is known: the full month when it
+     fits, the short one ("Nov", "Sept '27") when it doesn't — tiny or zoomed phones, large
+     text, the wider Sign in button. Measured, not guessed from the phone model (Joel 8 Nov). */
+  const prev=mEl.textContent;
+  mEl.textContent=label;
+  const fits=()=>mEl.scrollWidth<=mEl.clientWidth+1;
+  if(!fits()&&short!==label) mEl.textContent=short;
+  if(!fits()&&m2_wmode==='day') mEl.textContent=m2_fmt(day,{month:'short'});   // last resort: drop the year
+  if(prev&&prev!==mEl.textContent){
+    mEl.style.transition='none'; mEl.style.opacity='0';
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ mEl.style.transition='opacity 0.2s ease'; mEl.style.opacity='1'; }));
+  }
   sub.hidden=false;
   if(m2_wmode==='day'){
     sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous week" onclick="m2_jumpDay(m2_add(m2_day,-7))">${M2_ICON.left}</button><div class="m2-weekwrap" id="m2-weekwrap"><div class="m2-week" id="m2-week-cur">${m2_weekCells(day,day)}</div></div><button class="m2-icon-btn" aria-label="Next week" onclick="m2_jumpDay(m2_add(m2_day,7))">${M2_ICON.right}</button>`;
@@ -18848,6 +18861,10 @@ function m2_goToday(){
   if(m2_tab==='whoson') m2_backToToday();
   else if(m2_tab==='leave') m2_slideMonthTo(m2_monthStart(m2_today()));
 }
+let m2_rsT=0;
+/* The month is measured, so re-fit once the Lora font has loaded (fallback text is narrower). */
+try{ document.fonts&&document.fonts.ready.then(()=>{ if(m2_tab==='whoson'&&m2_el('m2-month')) m2_renderBar(); }); }catch(e){}
+window.addEventListener('resize',()=>{ clearTimeout(m2_rsT); m2_rsT=setTimeout(()=>{ if(m2_tab==='whoson'&&m2_el('m2-month')) m2_renderBar(); },150); });
 function m2_backToToday(){ m2_jumpTo(m2_wmode==='day'?m2_today():0); }
 function m2_movePerson(n){ if(m2_el('m2-swipe')) m2_slideDay(n); else m2_jumpTo(m2_pOffset+n); }
 /* One person's fortnight — the Person view's sliding page. */
