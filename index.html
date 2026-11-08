@@ -2129,6 +2129,13 @@
   .m2-good { display:flex; gap:10px; padding:10px 12px; background:var(--success-lt); border-radius:11px; font-size:13px; color:#2F5940; line-height:1.45; }
   .m2-choice { display:flex; align-items:center; gap:14px; padding:16px; background:var(--white); border:1.5px solid var(--border-dk); border-radius:16px; width:100%; text-align:left; font-family:'Nunito',sans-serif; cursor:pointer; }
   .m2-choice-ic { width:44px; height:44px; flex-shrink:0; border-radius:12px; background:var(--blush); color:var(--burgundy); display:flex; align-items:center; justify-content:center; }
+  /* Leave calendar: ‹ month › flanking a centred label (same as the Who's On strip), and the
+     calendar box swipes a month with the Who's On slide. */
+  .m2-monthnav { display:flex; align-items:center; gap:4px; margin:2px 0 6px; }
+  .m2-monthnav .m2-icon-btn { width:44px; height:44px; flex-shrink:0; color:#6E5F62; }
+  .m2-monthlabel { flex:1; text-align:center; font-family:'Lora',serif; font-size:18px; font-weight:600; color:var(--charcoal); }
+  .m2-calwrap { position:relative; overflow:hidden; touch-action:pan-y; margin:0 -14px; }
+  .m2-calpage { padding:0 14px; }
   .m2-cal { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; }
   .m2-cal-h { text-align:center; font-size:11px; font-weight:800; color:#6E5F62; }
   .m2-cal-d { height:40px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:14px; font-weight:700; color:var(--text); border:none; background:none; font-family:'Nunito',sans-serif; cursor:pointer; padding:0; }
@@ -18372,15 +18379,30 @@ function m2_requestCard(r){
 /* ── Leave ────────────────────────────────────────────────────────────── */
 function m2_monthStart(key){ return key.slice(0,7)+'-01'; }
 function m2_monthEnd(start){ const d=new Date(start+'T12:00:00'); d.setMonth(d.getMonth()+1); d.setDate(0); return rbDateKey(d); }
+/* Team-leave months are cached and the month either side prefetched, so a swipe slides in a
+   calendar whose dots are already drawn (same pattern as Who's On days). "Your leave" is not
+   per month — it is read once per load and carried across month changes. */
+const m2_mCache={};
+function m2_addMonth(ms,n){ const d=new Date(ms+'T12:00:00'); d.setDate(1); d.setMonth(d.getMonth()+n); return rbDateKey(d); }
+async function m2_fetchMonth(ms,force){
+  const c=m2_mCache[ms];
+  if(!force&&c&&Date.now()-c.at<M2_FRESH_MS) return c;
+  const me_=m2_monthEnd(ms);
+  const [entries,approved]=await Promise.all([
+    db.get('entries',{date:{gte:ms,lte:me_},leave_type:{'not.is':'null'}}),
+    db.get('requests',{type:'leave',status:'approved',leave_end_date:{gte:ms}})
+  ]);
+  return (m2_mCache[ms]={month:ms,entries:m2_leaveRows(entries),approved:approved.map(normaliseRequest).filter(r=>r.leaveStartDate<=me_),at:Date.now()});
+}
 async function m2_loadLeave(){
   if(!m2_month) m2_month=m2_monthStart(m2_today());
-  const ms=m2_month, me_=m2_monthEnd(ms), me=m2_me();
-  const [entries,approved,mineReq]=await Promise.all([
-    db.get('entries',{date:{gte:ms,lte:me_},leave_type:{'not.is':'null'}}),
-    db.get('requests',{type:'leave',status:'approved',leave_end_date:{gte:ms}}),
+  const ms=m2_month, me=m2_me();
+  const [mon,mineReq]=await Promise.all([
+    m2_fetchMonth(ms,true),
     me?db.get('requests',{initiator_id:me.id,type:'leave'}):Promise.resolve([])
   ]);
-  return {month:ms,entries:m2_leaveRows(entries),approved:approved.map(normaliseRequest).filter(r=>r.leaveStartDate<=me_),mine:mineReq.map(normaliseRequest)};
+  [-1,1].forEach(n=>{ const k=m2_addMonth(ms,n), c=m2_mCache[k]; if(!c||Date.now()-c.at>M2_FRESH_MS) m2_fetchMonth(k).catch(()=>{}); });
+  return {...mon,mine:mineReq.map(normaliseRequest)};
 }
 /* Who is away on each day of the month: leave entries, plus approved leave requests (the
    only record of leave approved for a fortnight nobody has rostered yet). Non-annual leave
@@ -18391,6 +18413,93 @@ function m2_awayByDay(d){
   d.entries.forEach(e=>add(e.date,String(e.employeeId),e.leaveType));
   d.approved.forEach(r=>{ let k=r.leaveStartDate; while(k<=r.leaveEndDate){ add(k,String(r.initiatorId),r.leaveType); k=m2_add(k,1); } });
   return by;
+}
+function m2_monthLabel(ms){ return new Date(ms+'T12:00:00').toLocaleDateString('en-AU',{month:'long',year:'numeric'}); }
+/* One month's calendar box — the page that slides. A month not fetched yet draws without
+   dots and fills in when its data lands. */
+function m2_calPage(d){
+  const t=m2_today(), ms=d.month, me_=m2_monthEnd(ms), by=d.entries?m2_awayByDay(d):{};
+  const lead=(new Date(ms+'T12:00:00').getDay()+6)%7;
+  let html=`<div class="m2-box" style="padding:10px"><div class="m2-cal">${['M','T','W','T','F','S','S'].map(x=>`<div class="m2-cal-h">${x}</div>`).join('')}`;
+  for(let i=0;i<lead;i++) html+=`<div></div>`;
+  for(let k=ms;k<=me_;k=m2_add(k,1)){
+    const away=by[k]?[...by[k].keys()]:[];
+    const groups=[...new Set(away.map(id=>m2_groupOf(m2_emp(id))).filter(Boolean))].slice(0,3);
+    html+=`<button class="m2-cal-d${k===t?' today':''}${k===m2_leaveSel?' sel':''}" aria-label="${m2_esc(m2_long(k))}, ${away.length} away" onclick="${m2_on(()=>{ if(Date.now()<m2_calNoTapUntil) return; m2_leaveSel=k; m2_render('leave'); })}">${+k.slice(8)}<span class="m2-cal-dots">${groups.map(g=>`<i style="background:${k===m2_leaveSel?'#fff':m2_groupColour(g)}"></i>`).join('')}</span></button>`;
+  }
+  return html+`</div></div>`;
+}
+/* Month swipe on the calendar box, and the ‹ › arrows — the Who's On slide (6 px axis lock,
+   50 px / 0.35 px/ms, 180 ms commit, 200 ms spring). The label cross-fades as the slide starts. */
+let m2_calNoTapUntil=0, m2_calAnimating=false;
+function m2_calAdj(dir){
+  const wrap=m2_el('m2-calwrap'); if(!wrap) return null;
+  const k=m2_addMonth(m2_month,dir); let pane=m2_el('m2-cal-adj');
+  if(pane&&pane.dataset.key===k) return pane;
+  pane?.remove();
+  pane=document.createElement('div'); pane.id='m2-cal-adj'; pane.className='m2-calpage'; pane.dataset.key=k; pane.setAttribute('aria-hidden','true');
+  pane.style.cssText=`position:absolute;top:0;left:${dir>0?100:-100}%;width:100%;pointer-events:none;`;
+  pane.innerHTML=m2_calPage(m2_mCache[k]||{month:k});
+  wrap.appendChild(pane);
+  wrap.style.minHeight=Math.max(m2_el('m2-cal-cur').offsetHeight,pane.offsetHeight)+'px';
+  m2_fetchMonth(k).catch(()=>{});
+  return pane;
+}
+function m2_calCommit(dir){
+  m2_calAnimating=true;
+  const W=m2_el('m2-calwrap').offsetWidth, ease=`transform ${M2_COMMIT_MS}ms ease-out`;
+  const k=m2_addMonth(m2_month,dir), mine=m2_data.leave?.mine||[];
+  m2_swSet(m2_el('m2-cal-cur'),-dir*W,ease); m2_swSet(m2_el('m2-cal-adj'),-dir*W,ease);
+  const lab=m2_el('m2-monthlabel');
+  if(lab){ lab.style.transition='none'; lab.style.opacity='0'; lab.textContent=m2_monthLabel(k);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ lab.style.transition='opacity 0.2s ease'; lab.style.opacity='1'; })); }
+  m2_month=k;
+  setTimeout(()=>{
+    m2_calAnimating=false;
+    const c=m2_mCache[k];
+    m2_data.leave=c?{...c,mine}:null;
+    m2_render('leave'); m2_refresh('leave',true);
+  },M2_COMMIT_MS);
+}
+function m2_calCancel(){
+  const adj=m2_el('m2-cal-adj'), spring=`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`;
+  m2_swSet(m2_el('m2-cal-cur'),0,spring);
+  if(adj){ m2_swSet(adj,0,spring); setTimeout(()=>{ adj.remove(); const w=m2_el('m2-calwrap'); if(w) w.style.minHeight=''; },M2_CANCEL_MS); }
+}
+function m2_slideMonth(dir){
+  if(m2_calAnimating) return;
+  if(!m2_el('m2-calwrap')){ m2_month=m2_addMonth(m2_month,dir); m2_data.leave=null; m2_render('leave'); m2_refresh('leave',true); return; }
+  m2_calAdj(dir);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>m2_calCommit(dir)));
+}
+function m2_bindCalSwipe(){
+  const el=m2_el('m2-panel-leave'); if(!el||el._m2cal) return; el._m2cal=true;
+  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false;
+  el.addEventListener('touchstart',e=>{
+    tracking=false;
+    if(m2_tab!=='leave'||m2_calAnimating||!e.target.closest('#m2-calwrap')) return;
+    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now();
+    tracking=true; locked=false; horiz=false;
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    if(!tracking) return;
+    const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX;
+    if(!locked){
+      if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
+      horiz=Math.abs(dx)>Math.abs(dy); locked=true;
+      if(!horiz){ tracking=false; return; }
+    }
+    e.preventDefault();
+    if(dx!==0) m2_calAdj(dx<0?1:-1);
+    m2_swSet(m2_el('m2-cal-cur'),dx); m2_swSet(m2_el('m2-cal-adj'),dx);
+  },{passive:false});
+  el.addEventListener('touchend',()=>{
+    if(!tracking||!horiz){ tracking=false; return; } tracking=false;
+    m2_calNoTapUntil=Date.now()+400;
+    const dx=cx-x0, v=Math.abs(dx)/Math.max(1,Date.now()-t0);
+    if((Math.abs(dx)>M2_SWIPE_PX||v>M2_SWIPE_V)&&dx!==0) m2_calCommit(dx<0?1:-1); else m2_calCancel();
+  },{passive:true});
+  el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_calCancel(); tracking=false; },{passive:true});
 }
 function m2_renderLeave(panel,d){
   const me=m2_me(), t=m2_today();
@@ -18407,19 +18516,12 @@ function m2_renderLeave(panel,d){
     html+=`<button class="m2-btn ghost" style="margin-top:8px" onclick="${m2_on(()=>m2_openLeaveForm({}))}">+ Request leave</button></section>`;
   }
   const by=m2_awayByDay(d), ms=d.month, me_=m2_monthEnd(ms);
-  const first=new Date(ms+'T12:00:00'), lead=(first.getDay()+6)%7;
   if(!m2_leaveSel||m2_leaveSel.slice(0,7)!==ms.slice(0,7)) m2_leaveSel=(t>=ms&&t<=me_)?t:ms;
-  html+=`<section><div style="display:flex;align-items:center"><h2 class="m2-h2" style="flex:1;margin:0">Team leave · ${m2_esc(first.toLocaleDateString('en-AU',{month:'long',year:'numeric'}))}</h2>
-    <button class="m2-icon-btn" aria-label="Previous month" onclick="${m2_on(()=>{ const x=new Date(ms+'T12:00:00'); x.setMonth(x.getMonth()-1); m2_month=rbDateKey(x); m2_data.leave=null; m2_render('leave'); m2_refresh('leave',true); })}">${M2_ICON.left}</button>
-    <button class="m2-icon-btn" aria-label="Next month" onclick="${m2_on(()=>{ const x=new Date(ms+'T12:00:00'); x.setMonth(x.getMonth()+1); m2_month=rbDateKey(x); m2_data.leave=null; m2_render('leave'); m2_refresh('leave',true); })}">${M2_ICON.right}</button></div>
-    <div class="m2-box" style="padding:10px"><div class="m2-cal">${['M','T','W','T','F','S','S'].map(x=>`<div class="m2-cal-h">${x}</div>`).join('')}`;
-  for(let i=0;i<lead;i++) html+=`<div></div>`;
-  for(let k=ms;k<=me_;k=m2_add(k,1)){
-    const away=by[k]?[...by[k].keys()]:[];
-    const groups=[...new Set(away.map(id=>m2_groupOf(m2_emp(id))).filter(Boolean))].slice(0,3);
-    html+=`<button class="m2-cal-d${k===t?' today':''}${k===m2_leaveSel?' sel':''}" aria-label="${m2_esc(m2_long(k))}, ${away.length} away" onclick="${m2_on(()=>{ m2_leaveSel=k; m2_render('leave'); })}">${+k.slice(8)}<span class="m2-cal-dots">${groups.map(g=>`<i style="background:${k===m2_leaveSel?'#fff':m2_groupColour(g)}"></i>`).join('')}</span></button>`;
-  }
-  html+=`</div></div>`;
+  html+=`<section><h2 class="m2-h2" style="margin:0">Team leave</h2>
+    <div class="m2-monthnav"><button class="m2-icon-btn" aria-label="Previous month" onclick="m2_slideMonth(-1)">${M2_ICON.left}</button>
+    <div class="m2-monthlabel" id="m2-monthlabel">${m2_esc(m2_monthLabel(ms))}</div>
+    <button class="m2-icon-btn" aria-label="Next month" onclick="m2_slideMonth(1)">${M2_ICON.right}</button></div>
+    <div class="m2-calwrap" id="m2-calwrap"><div class="m2-calpage" id="m2-cal-cur">${m2_calPage(d)}</div></div>`;
   const sel=by[m2_leaveSel]?[...by[m2_leaveSel].entries()]:[];
   html+=`<h2 class="m2-h2" style="margin-top:12px">Away ${m2_esc(m2_long(m2_leaveSel))}</h2>`;
   if(!sel.length) html+=`<div class="m2-note">Nobody on leave.</div>`;
@@ -18427,6 +18529,7 @@ function m2_renderLeave(panel,d){
     return `<div class="m2-row" style="min-height:44px"><span class="m2-dot" style="background:${m2_groupColour(m2_groupOf(e))}"></span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(e?m2_first(e):'Staff member')}</span><span class="m2-chip ${type==='annual_leave'?'wait':'no'}">${type==='annual_leave'?'Annual leave':'On leave'}</span></div>`; }).join('')+`</div>`;
   html+=`</section>`;
   panel.innerHTML=html;
+  m2_bindCalSwipe();
 }
 
 /* ── Who's On ─────────────────────────────────────────────────────────── */
