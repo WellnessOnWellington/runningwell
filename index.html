@@ -2035,7 +2035,6 @@
      Calendar's pattern. Re-tapping the current bottom tab does the same. */
   .m2-today-btn { position:relative; width:38px; height:40px; flex-shrink:0; border:none; background:none; padding:0; display:flex; align-items:center; justify-content:center; color:var(--burgundy); cursor:pointer; border-radius:10px; }
   .m2-today-btn svg { width:26px; height:26px; }
-  .m2-today-btn b { position:absolute; left:0; right:0; top:15px; text-align:center; font-family:'Nunito',sans-serif; font-size:11px; font-weight:800; line-height:1; }
   .m2-today-btn:disabled { color:#B9A9AC; cursor:default; }
   .m2-today-btn:not(:disabled):active { background:var(--blush-lt); }
   .m2-seg.compact { width:98px; flex-shrink:0; border-radius:11px; }
@@ -18777,7 +18776,7 @@ function m2_bindWeekSwipe(){
 }
 function m2_todayBtn(away,unit){
   const t=m2_today();
-  return `<button class="m2-today-btn" ${away?'':'disabled '}aria-label="${away?'Go to this '+unit:'Showing this '+unit}" onclick="m2_goToday()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5"/><path d="M16 2.5v4M8 2.5v4M3 9.5h18"/></svg><b aria-hidden="true">${+t.slice(8)}</b></button>`;
+  return `<button class="m2-today-btn" ${away?'':'disabled '}aria-label="${away?'Go to this '+unit:'Showing this '+unit}" onclick="m2_goToday()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5"/><path d="M16 2.5v4M8 2.5v4M3 9.5h18"/><text x="12" y="15.9" text-anchor="middle" dominant-baseline="central" fill="currentColor" stroke="none" font-family="Nunito,sans-serif" font-size="8.5" font-weight="800">${+t.slice(8)}</text></svg></button>`;
 }
 /* Today button + re-tapping the current bottom tab. */
 function m2_goToday(){
