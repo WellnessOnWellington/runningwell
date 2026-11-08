@@ -2091,20 +2091,28 @@
   .m2-pill-row.md { min-height:36px; padding:0 10px; border-radius:8px; margin-bottom:4px; }
   .m2-pill-row.sm { min-height:0; padding:5px 8px; border-radius:6px; background:#F3EDEE; cursor:default; }
   .m2-pill-row.open { background:rgba(230,126,34,0.10); color:#8A4310; }
-  .m2-pill-row.annual { background:#FEF7E2; color:#6B4A00; }
-  .m2-pill-row.other { background:transparent; color:#8A7F82; }
+  /* Leave rows (Joel 8 Nov): greyed, no yellow. The bar keeps the rostered span as an outline
+     so you can see which part of the day they are away; the time column holds a grey pill. */
+  .m2-pill-row.annual, .m2-pill-row.other { color:#A99DA0; }
+  .m2-pill-row.md.annual, .m2-pill-row.md.other, .m2-pill-row.lg.annual, .m2-pill-row.lg.other { background:transparent; }
+  .m2-pill-row.annual .m2-track, .m2-pill-row.other .m2-track { background:transparent; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.07); }
+  .m2-pill-row.annual .m2-fill, .m2-pill-row.other .m2-fill { background:transparent; opacity:1; box-shadow:inset 0 0 0 1.5px #A99DA0; }
   .m2-pill-row.off { background:transparent; min-height:28px; cursor:default; }
   .m2-pill-name { flex-shrink:0; font-weight:800; white-space:nowrap; color:var(--charcoal); }
   .lg .m2-pill-name { width:62px; font-size:14px; }
   .md .m2-pill-name, .sm .m2-pill-name { width:64px; font-size:12px; overflow:hidden; text-overflow:ellipsis; }
-  .m2-pill-row.annual .m2-pill-name, .m2-pill-row.annual .m2-pill-time { color:#6B4A00; }
-  .m2-pill-row.other .m2-pill-name, .m2-pill-row.other .m2-pill-time { color:#5E5659; }
+  .m2-pill-row.annual .m2-pill-name, .m2-pill-row.other .m2-pill-name { color:#5E5659; font-weight:700; }
   .m2-pill-row.open .m2-pill-name, .m2-pill-row.open .m2-pill-time { color:#8A4310; }
   .m2-pill-row.me .m2-pill-name { color:var(--burgundy); }
+  .m2-pill-row.me.annual .m2-pill-name, .m2-pill-row.me.other .m2-pill-name { color:#5E5659; }
   .m2-track { flex:1; position:relative; height:7px; border-radius:4px; background:rgba(0,0,0,0.08); overflow:hidden; min-width:40px; }
   .m2-fill { position:absolute; top:0; height:100%; border-radius:4px; background:currentColor; opacity:0.8; }
   .m2-pill-time { text-align:right; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--charcoal); display:flex; flex-direction:column; align-items:flex-end; }
   .lg .m2-pill-time { font-size:14px; }
+  /* Fixed time column: every bar has the same length, so one time scale down the list. */
+  .md .m2-pill-time { width:84px; flex-shrink:0; }
+  .lg .m2-pill-time { width:98px; flex-shrink:0; }
+  .m2-lpill { display:block; width:100%; box-sizing:border-box; text-align:center; padding:3px 0; border-radius:999px; background:#ECE4E6; color:#5E5659; font-size:11px; font-weight:800; line-height:14px; letter-spacing:0; text-transform:none; }
   .m2-tag { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; }
   .m2-chev { flex-shrink:0; width:18px; height:18px; color:currentColor; }
   .m2-indot { width:8px; height:8px; border-radius:4px; flex-shrink:0; background:var(--border-dk); }
@@ -17951,6 +17959,9 @@ const M2_ICON={
 };
 /* One shift pill, three sizes (lg My Shifts · md Who's On · sm inside sheets). Style C: white,
    colour lives in the bar; a tint only for attention (open / annual / other leave). */
+/* Leave label on a shift tile (Joel 8 Nov, option "pill"): a grey pill exactly the width of
+   the time column, same grey for annual and other leave (only the words differ). */
+function m2_leaveTag(kind){ return `<span class="m2-lpill">${kind==='annual'?'Annual leave':'On leave'}</span>`; }
 function m2_pill(o){
   const cls=['m2-pill-row',o.size||'md',o.kind||'',o.me?'me':''].join(' ');
   const style=`--ink:${o.ink||'#8B2535'}`;
@@ -18307,7 +18318,7 @@ function m2_renderShifts(panel,d){
         onclick:m2_on(()=>pend?m2_openRequest(pend):m2_openPickup(s))});
     } else {
       html+=m2_pill({size:'lg',kind,me:true,name:m2_short(s.date).replace(/ \w+$/,''),s:s.start_time,e:s.end_time,ink:'#8B2535',
-        time:kind?`<span class="m2-tag">${kind==='annual'?'Annual leave':'On leave'}</span>`:m2_esc(m2_range(s.start_time,s.end_time)),
+        time:kind?m2_leaveTag(kind):m2_esc(m2_range(s.start_time,s.end_time)),
         onclick:m2_on(()=>m2_openShift(s,me))});
     }
   });
@@ -18658,7 +18669,7 @@ function m2_dayPage(d){
       let dot;
       if(isToday&&!lv){ const ent=d.entries.find(x=>String(x.employeeId)===String(e.id)&&x.clockIn&&!x.leaveType); dot=!!(ent&&!ent.clockOut); }
       html+=m2_pill({size:'md',kind,me:me&&e.id===me.id,dot,name:m2_first(e)+(me&&e.id===me.id?' (you)':''),s:s.start_time,e:s.end_time,ink:colour,
-        time:kind?`<span class="m2-tag">${kind==='annual'?'Annual leave':'On leave'}</span>`:m2_esc(m2_range(s.start_time,s.end_time)),
+        time:kind?m2_leaveTag(kind):m2_esc(m2_range(s.start_time,s.end_time)),
         onclick:m2_on(()=>m2_openShift(s,e))});
     });
     html+=`</section>`;
@@ -18798,7 +18809,7 @@ function m2_personPage(d){
     const lv=leaveEntryFor(p.id,k,s.id,d.leave);
     const kind=lv?(lv.leaveType==='annual_leave'?'annual':'other'):'';
     html+=m2_pill({size:'md',kind,name:label,s:s.start_time,e:s.end_time,ink:colour,
-      time:kind?`<span class="m2-tag">${kind==='annual'?'Annual leave':'On leave'}</span>`:m2_esc(m2_range(s.start_time,s.end_time)),
+      time:kind?m2_leaveTag(kind):m2_esc(m2_range(s.start_time,s.end_time)),
       onclick:m2_on(()=>m2_openShift(s,p))});
   }
   return html+`</div>`;
