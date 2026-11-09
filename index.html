@@ -18756,8 +18756,10 @@ function m2_renderBar(){
     away=day!==t;
   } else {
     const st=m2_add(m2_mondayOf(t),m2_pOffset*14), en=m2_add(st,13);
-    label=st.slice(5,7)===en.slice(5,7)?`${+st.slice(8)}–${m2_fmt(en,{day:'numeric',month:'short'})}`:`${m2_fmt(st,{day:'numeric',month:'short'})}–${m2_fmt(en,{day:'numeric',month:'short'})}`;
-    short=st.slice(5,7)===en.slice(5,7)?m2_fmt(st,{month:'short'}):`${m2_fmt(st,{month:'short'})}–${m2_fmt(en,{month:'short'})}`;   // months only; the pills carry the dates
+    /* Always day + month at both ends ("2 Nov – 15 Nov"), even inside one month, so the label
+       keeps one shape every fortnight (Joel 9 Nov). Same style as "Your timesheet for 20 Oct – 2 Nov". */
+    label=`${m2_fmt(st,{day:'numeric',month:'short'})} – ${m2_fmt(en,{day:'numeric',month:'short'})}`;
+    short=st.slice(5,7)===en.slice(5,7)?m2_fmt(st,{month:'short'}):`${m2_fmt(st,{month:'short'})} – ${m2_fmt(en,{month:'short'})}`;   // months only; the pills carry the dates
     away=m2_pOffset!==0;
   }
   if(!m2_el('m2-month')) title.innerHTML=`<span class="m2-title-who"><span class="m2-month" id="m2-month"></span></span>`;
