@@ -1965,7 +1965,7 @@
      Runningwell-Vault/phone_ui_plan.md for the design rules these implement.
   ══════════════════════════════ */
   .m2-root, .m2-root * { -webkit-tap-highlight-color:transparent; box-sizing:border-box; }
-  .m2-root { position:fixed; top:0; left:0; right:0; height:var(--vvh,100vh); z-index:50; flex-direction:column; align-items:center; background:#F3EDEE; font-family:'Nunito',sans-serif; color:var(--text); }
+  .m2-root { position:fixed; top:var(--vvt,0px); left:0; right:0; height:var(--vvh,100vh); z-index:50; flex-direction:column; align-items:center; background:#F3EDEE; font-family:'Nunito',sans-serif; color:var(--text); }
   .m2-root[hidden] { display:none; }
   .m2-door, .m2-app { width:100%; max-width:520px; height:100%; display:flex; flex-direction:column; }
   .m2-door[hidden], .m2-app[hidden], .m2-shell[hidden], .m2-start[hidden] { display:none; }
@@ -2184,7 +2184,7 @@
   .m2-progress i { width:12px; height:12px; border-radius:6px; display:block; flex-shrink:0; box-sizing:border-box; }
 
   /* bottom sheet — one helper for every pop-up (m2_sheet*) */
-  .m2-sheet-wrap { position:fixed; top:0; left:0; right:0; height:var(--vvh,100vh); z-index:60; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; }
+  .m2-sheet-wrap { position:fixed; top:var(--vvt,0px); left:0; right:0; height:var(--vvh,100vh); z-index:60; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; }
   .m2-sheet-wrap[hidden] { display:none; }
   .m2-sheet-backdrop { position:absolute; inset:0; background:rgba(45,36,38,0.32); opacity:0; transition:opacity 0.22s ease; }
   @supports ((backdrop-filter:blur(6px)) or (-webkit-backdrop-filter:blur(6px))) {
@@ -17877,10 +17877,21 @@ window.addEventListener('load', ()=>{
 });
 (function(){
   function _setVVH(){
-    const h=(window.visualViewport||window).height;
-    document.documentElement.style.setProperty('--vvh',h+'px');
+    const vv=window.visualViewport||window;
+    /* Phone app: while a dropdown is open, hold the layout still — iPhone's option picker can
+       shrink the visible area, which would lift the open panel (Joel 9 Nov). Typing is
+       unaffected: text boxes still resize for the keyboard. */
+    const ae=document.activeElement;
+    if(ae&&ae.tagName==='SELECT'&&ae.closest&&ae.closest('#view-m2')) return;
+    document.documentElement.style.setProperty('--vvh',vv.height+'px');
+    /* And follow the visible area's POSITION: when the keyboard opens iPhone scrolls the page
+       to show the field, which slid the whole fixed app (header and panel title) up off the
+       top. --vvt keeps the phone app's fixed layers on the visible area. */
+    document.documentElement.style.setProperty('--vvt',(vv.offsetTop||0)+'px');
   }
+  window._setVVH=_setVVH;
   (window.visualViewport||window).addEventListener('resize',_setVVH);
+  if(window.visualViewport) window.visualViewport.addEventListener('scroll',_setVVH);
   window.addEventListener('load',_setVVH);
   _setVVH();
 })();
@@ -19480,9 +19491,12 @@ async function m2_downloadTimesheet(fnStart,btn){
 function m2_bindTyping(){
   if(m2_typingBound) return; m2_typingBound=true;
   const shell=m2_el('m2-shell'), sheet=m2_el('m2-sheet');
-  const isField=el=>!!el&&el.matches&&el.matches('input,textarea,select');
+  /* Typing mode (full-height panel, tabs hidden) is for the KEYBOARD — text boxes only. A
+     dropdown opens iPhone's option picker, not a keyboard, so it leaves the panel alone. */
+  const isField=el=>!!el&&el.matches&&el.matches('textarea,input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])');
   m2_el('view-m2').addEventListener('focusin',e=>{ if(!isField(e.target)) return; shell.classList.add('typing'); if(sheet.contains(e.target)) sheet.classList.add('full'); });
-  m2_el('view-m2').addEventListener('focusout',()=>{ setTimeout(()=>{ if(!isField(document.activeElement)){ shell.classList.remove('typing'); sheet.classList.remove('full'); } },60); });
+  m2_el('view-m2').addEventListener('focusout',()=>{ setTimeout(()=>{ if(!isField(document.activeElement)){ shell.classList.remove('typing'); sheet.classList.remove('full'); } if(window._setVVH) window._setVVH(); },60); });
+  m2_el('view-m2').addEventListener('change',e=>{ if(e.target.tagName==='SELECT'&&window._setVVH) setTimeout(window._setVVH,60); });
 }
 function m2_bindListeners(){
   if(m2_listenersBound) return; m2_listenersBound=true;
