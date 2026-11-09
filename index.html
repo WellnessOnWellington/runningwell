@@ -2043,7 +2043,17 @@
   .m2-seg.compact button::after { content:""; position:absolute; inset:-3px -2px; }
   .m2-subbar { flex-shrink:0; display:flex; align-items:center; gap:2px; padding:6px 4px; background:var(--white); border-bottom:1px solid var(--border); }
   .m2-subbar[hidden] { display:none; }
-  .m2-subbar .m2-icon-btn { width:32px; height:50px; border-radius:10px; color:#6E5F62; }
+  .m2-subbar .m2-icon-btn { position:relative; width:32px; height:50px; border-radius:10px; color:#6E5F62; flex-shrink:0; }
+  /* Chevron tap areas (Joel 9 Nov: too small). Week strip: the arrows can't widen without
+     squeezing the day tiles, so their tap area stretches OUTWARD only — to the screen edge and
+     the strip's top and bottom — never into the tiles. Person view has room: 48 × 48 arrows
+     sitting flush on the screen edges; the person picker takes what is left. */
+  .m2-subbar .m2-icon-btn::after { content:""; position:absolute; top:-6px; bottom:-7px; left:0; right:0; }
+  .m2-subbar > .m2-icon-btn:first-child::after { left:-4px; }
+  .m2-subbar > .m2-icon-btn:last-child::after { right:-4px; }
+  .m2-subbar.person { padding:6px 0; gap:0; }
+  .m2-subbar.person .m2-icon-btn { width:48px; height:48px; }
+  .m2-subbar.person .m2-icon-btn::after { top:-6px; bottom:-7px; left:0; right:0; }
   .m2-weekwrap { flex:1; min-width:0; position:relative; overflow:hidden; touch-action:pan-y; }
   .m2-week { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; }
   .m2-wd { min-height:50px; border:none; border-radius:12px; background:none; color:var(--text); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; font-family:'Nunito',sans-serif; cursor:pointer; padding:0; }
@@ -18647,7 +18657,7 @@ const m2_pCache={};
 async function m2_fetchPerson(person,off,force){
   const key=person+'|'+off, c=m2_pCache[key];
   if(!force&&c&&Date.now()-c.at<M2_FRESH_MS) return c;
-  const start=m2_add(m2_mondayOf(m2_today()),off*14), end=m2_add(start,13);
+  const start=m2_fnStart(off), end=m2_add(start,13);
   const [shifts,leave]=await Promise.all([
     db.get('roster_shifts',{employee_id:person,date:{gte:start,lte:end}}),
     db.get('entries',{employee_id:person,date:{gte:start,lte:end},leave_type:{'not.is':'null'}})
@@ -18755,7 +18765,7 @@ function m2_renderBar(){
     short=otherYear?`${m2_fmt(day,{month:'short'})} '${day.slice(2,4)}`:m2_fmt(day,{month:'short'});
     away=day!==t;
   } else {
-    const st=m2_add(m2_mondayOf(t),m2_pOffset*14), en=m2_add(st,13);
+    const st=m2_fnStart(m2_pOffset), en=m2_add(st,13);
     /* Always day + month at both ends ("2 Nov – 15 Nov"), even inside one month, so the label
        keeps one shape every fortnight (Joel 9 Nov). Same style as "Your timesheet for 20 Oct – 2 Nov". */
     label=`${m2_fmt(st,{day:'numeric',month:'short'})} – ${m2_fmt(en,{day:'numeric',month:'short'})}`;
@@ -18777,12 +18787,13 @@ function m2_renderBar(){
     mEl.style.transition='none'; mEl.style.opacity='0';
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ mEl.style.transition='opacity 0.2s ease'; mEl.style.opacity='1'; }));
   }
-  sub.hidden=false;
+  sub.hidden=false; sub.classList.remove('person');
   if(m2_wmode==='day'){
     sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous week" onclick="m2_jumpDay(m2_add(m2_day,-7))">${M2_ICON.left}</button><div class="m2-weekwrap" id="m2-weekwrap"><div class="m2-week" id="m2-week-cur">${m2_weekCells(day,day)}</div></div><button class="m2-icon-btn" aria-label="Next week" onclick="m2_jumpDay(m2_add(m2_day,7))">${M2_ICON.right}</button>`;
     m2_bindWeekSwipe();
   } else {
     const people=m2_emps.filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
+    sub.classList.add('person');
     sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous fortnight" onclick="m2_movePerson(-1)">${M2_ICON.left}</button>
       <select class="m2-select" style="flex:1;min-width:0" aria-label="Person" onchange="m2_person=this.value;m2_data.whoson=null;m2_render('whoson');m2_refresh('whoson',true)">${people.map(e=>`<option value="${m2_esc(e.id)}"${String(e.id)===String(m2_person)?' selected':''}>${m2_esc(e.name)}${me&&e.id===me.id?' (you)':''}</option>`).join('')}</select>
       <button class="m2-icon-btn" aria-label="Next fortnight" onclick="m2_movePerson(1)">${M2_ICON.right}</button>`;
@@ -18854,6 +18865,11 @@ function m2_bindWeekSwipe(){
   },{passive:true});
   el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) finish(false); tracking=false; },{passive:true});
 }
+/* Person view's fortnight = the ROSTER's fortnight (Monday-anchored off roster_config.
+   cycle_start_date, via the desktop's getFortnightStart), not "from this week's Monday" —
+   that slid a week every Monday and straddled two roster fortnights half the time (found 9 Nov).
+   Not the pay period, which is Tuesday-anchored (see CLAUDE.md: two fortnight grids). */
+function m2_fnStart(off){ return getFortnightStart(off||0); }
 function m2_todayBtn(away,unit){
   const t=m2_today();
   return `<button class="m2-today-btn" ${away?'':'disabled '}aria-label="${away?'Go to this '+unit:'Showing this '+unit}" onclick="m2_goToday()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5"/><path d="M16 2.5v4M8 2.5v4M3 9.5h18"/><text x="12" y="15.9" text-anchor="middle" dominant-baseline="central" fill="currentColor" stroke="none" font-family="Nunito,sans-serif" font-size="8.5" font-weight="800">${+t.slice(8)}</text></svg></button>`;
