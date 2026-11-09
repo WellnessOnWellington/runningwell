@@ -2071,6 +2071,8 @@
      the browser's back/forward navigation (Chrome Android, trackpads). Class set by m2_route,
      so the kiosk and every other view keep the browser's normal behaviour. */
   html.m2-on, html.m2-on body { overscroll-behavior-x:none; }
+  /* The page behind the phone app never scrolls: only the app's own panels do. */
+  html.m2-on, html.m2-on body { overflow:hidden; overscroll-behavior:none; height:100%; }
   /* iPhone: a quick double tap on the bottom tabs / bar zoomed the page. 'manipulation' turns
      off double-tap zoom only — pinch zoom still works (accessibility). Children's own
      touch-action (pan-y on the body, none on sheet handles) still applies: the browser takes
@@ -17887,7 +17889,11 @@ window.addEventListener('load', ()=>{
     /* And follow the visible area's POSITION: when the keyboard opens iPhone scrolls the page
        to show the field, which slid the whole fixed app (header and panel title) up off the
        top. --vvt keeps the phone app's fixed layers on the visible area. */
-    document.documentElement.style.setProperty('--vvt',(vv.offsetTop||0)+'px');
+    /* ONLY while typing in the phone app: iPhone also reports offsetTop during the page's
+       rubber-band bounce, and following that made every tab drag up and down (Joel 9 Nov,
+       right after a504b0f). The keyboard is the only thing --vvt is for. */
+    const typing=ae&&ae.closest&&ae.closest('#view-m2')&&ae.matches&&ae.matches('textarea,input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])');
+    document.documentElement.style.setProperty('--vvt',(typing?Math.max(0,vv.offsetTop||0):0)+'px');
   }
   window._setVVH=_setVVH;
   (window.visualViewport||window).addEventListener('resize',_setVVH);
