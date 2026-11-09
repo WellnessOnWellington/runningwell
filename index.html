@@ -2201,7 +2201,8 @@
   .m2-sheet-grab i { width:40px; height:4px; border-radius:2px; background:var(--border-dk); display:block; }
   .m2-sheet-head { flex-shrink:0; display:flex; align-items:flex-start; gap:4px; padding:0 16px 6px 8px; touch-action:none; }
   .m2-sheet-head h2 { flex:1; margin:8px 0 0; font-family:'Lora',serif; font-size:21px; font-weight:600; color:var(--charcoal); }
-  .m2-sheet-body { overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:4px 16px calc(24px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:14px; }
+  .m2-step { display:flex; flex-direction:column; gap:14px; }
+  .m2-sheet-body { position:relative; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:4px 16px calc(24px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:14px; }
   .m2-eyebrow { font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; }
   .m2-bigtime { font-size:26px; font-weight:800; color:var(--charcoal); font-variant-numeric:tabular-nums; }
   .m2-dry-list { font-family:ui-monospace,Menlo,monospace; font-size:12px; background:var(--white); border:1px solid var(--border); border-radius:10px; padding:10px; white-space:pre-wrap; word-break:break-word; color:var(--text); max-height:40vh; overflow:auto; }
@@ -19012,28 +19013,58 @@ function m2_sheetPush(step){
   m2_sheetSaveDraft();
   m2_sheet.push(step);
   if(M2_USE_HISTORY) try{ history.pushState({m2s:m2_sheet.length},''); }catch(e){}
-  m2_sheetRender(true);
+  m2_sheetRender(true,m2_sheet.length>1?1:0);
 }
-function m2_sheetRender(animate){
+/* dir: 1 = a new step pushed (slides in from the right), -1 = back (slides in from the left),
+   0/undefined = same step redrawn or first open. Steps slide like iPhone's navigation: the new
+   step travels the full width, the old one shifts a third and fades; the sheet's height
+   animates between the two (Joel 9 Nov: steps used to swap and the top edge jumped). */
+const M2_STEP_MS=300, M2_STEP_EASE='cubic-bezier(.32,.72,0,1)';
+let m2_stepAnim=null;
+function m2_sheetRender(animate,dir){
   const wrap=m2_el('m2-sheet-wrap'), step=m2_sheet[m2_sheet.length-1];
   if(!step){ m2_sheetHide(); return; }
+  const sheet=m2_el('m2-sheet'), body=m2_el('m2-sheet-body');
+  const slide=!!dir&&!wrap.hidden&&wrap.classList.contains('open')&&!sheet.classList.contains('full')&&!!body.firstElementChild
+    &&!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
+  if(m2_stepAnim){ m2_stepAnim(); m2_stepAnim=null; }          // finish any slide still running
+  const oldH=slide?sheet.offsetHeight:0;
+  const oldPane=slide?body.firstElementChild:null, oldTop=slide?oldPane.offsetTop-body.scrollTop:0;
   wrap.hidden=false;
-  const sheet=m2_el('m2-sheet'); sheet.classList.remove('full'); sheet.style.transform='';
+  sheet.classList.remove('full'); sheet.style.transform='';
   m2_el('m2-sheet-title').textContent=step.title||'';
   const nav=m2_el('m2-sheet-nav'), first=m2_sheet.length===1;
   nav.innerHTML=first?M2_ICON.down:M2_ICON.back; nav.setAttribute('aria-label',first?'Close':'Back');
-  m2_el('m2-sheet-body').innerHTML=step.render();
+  const pane=document.createElement('div'); pane.className='m2-step'; pane.innerHTML=step.render();
+  if(slide){
+    /* New step goes FIRST in the DOM so getElementById in step.after() finds its fields, not
+       the outgoing copy; the old one is pinned where it was and slides off over the top. */
+    oldPane.style.cssText=`position:absolute;left:16px;right:16px;top:${oldTop}px;pointer-events:none;`;
+    oldPane.setAttribute('aria-hidden','true'); oldPane.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));
+    body.insertBefore(pane,oldPane); body.scrollTop=0;
+  } else body.replaceChildren(pane);
   m2_sheetRestoreDraft();
   if(step.after) try{ step.after(); }catch(e){ console.error(e); }
-  /* Commit the closed position before opening, or the browser can merge "show" and "open" into
-     one frame and the sheet pops in instead of sliding up. */
-  if(animate){ void sheet.offsetHeight; wrap.classList.add('open'); }
+  if(slide){
+    sheet.style.height=''; const newH=sheet.offsetHeight;
+    sheet.style.transition='none'; sheet.style.height=oldH+'px'; body.style.overflow='hidden';
+    pane.style.transform=`translateX(${dir*100}%)`; pane.style.transition='none';
+    oldPane.style.transform='translateX(0)'; oldPane.style.opacity='1';
+    void sheet.offsetHeight;
+    const tr=`transform ${M2_STEP_MS}ms ${M2_STEP_EASE}, opacity ${M2_STEP_MS}ms ease`;
+    sheet.style.transition=`height ${M2_STEP_MS}ms ${M2_STEP_EASE}`; sheet.style.height=newH+'px';
+    pane.style.transition=tr; pane.style.transform='translateX(0)';
+    oldPane.style.transition=tr; oldPane.style.transform=`translateX(${-dir*33}%)`; oldPane.style.opacity='0';
+    let t=0; const fin=()=>{ clearTimeout(t); oldPane.remove(); pane.style.cssText=''; sheet.style.height=''; sheet.style.transition=''; body.style.overflow=''; m2_stepAnim=null; };
+    t=setTimeout(fin,M2_STEP_MS+40); m2_stepAnim=fin;
+  }
+  if(animate&&!slide){ void sheet.offsetHeight; wrap.classList.add('open'); }
 }
 function m2_sheetNav(){
   if(m2_sheet.length>1){ if(M2_USE_HISTORY){ try{ history.back(); }catch(e){ m2_sheetPopStep(); } } else m2_sheetPopStep(); }
   else m2_sheetClose();
 }
-function m2_sheetPopStep(){ m2_sheetSaveDraft(); m2_sheet.pop(); if(m2_sheet.length) m2_sheetRender(false); else m2_sheetHide(); }
+function m2_sheetPopStep(){ m2_sheetSaveDraft(); m2_sheet.pop(); if(m2_sheet.length) m2_sheetRender(false,-1); else m2_sheetHide(); }
 function m2_sheetClose(){
   const n=m2_sheet.length;
   m2_sheetSaveDraft();
