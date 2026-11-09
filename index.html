@@ -2202,6 +2202,10 @@
   .m2-sheet-head { flex-shrink:0; display:flex; align-items:flex-start; gap:4px; padding:0 16px 6px 8px; touch-action:none; }
   .m2-sheet-head h2 { flex:1; margin:8px 0 0; font-family:'Lora',serif; font-size:21px; font-weight:600; color:var(--charcoal); }
   .m2-step { display:flex; flex-direction:column; gap:14px; }
+  .m2-skel { height:30px; border-radius:6px; background:linear-gradient(90deg,#F1E9EB 0%,#F8F3F4 50%,#F1E9EB 100%); background-size:200% 100%; animation:m2skel 1.2s ease-in-out infinite; }
+  .m2-skel.btn { height:50px; border-radius:11px; }
+  @keyframes m2skel { from { background-position:100% 0; } to { background-position:-100% 0; } }
+  @media (prefers-reduced-motion: reduce) { .m2-skel { animation:none; } }
   .m2-sheet-body { position:relative; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:4px 16px calc(24px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:14px; }
   .m2-eyebrow { font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; }
   .m2-bigtime { font-size:26px; font-weight:800; color:var(--charcoal); font-variant-numeric:tabular-nums; }
@@ -19181,24 +19185,48 @@ function m2_blockReason(s,me,leaveList,reqs){
   if(m2_pendingFor(reqs,me,s.id)) return 'A request for this shift is already waiting — see Swaps.';
   return null;
 }
-function m2_openShift(s,owner){
+/* Shift details (Joel 9 Nov: the panel opened short, then jumped taller when the colleagues
+   list landed — usually just after the slide on a phone). Now: (1) a day Who's On already
+   holds is used at once, so the panel opens at its final size; (2) otherwise wait up to
+   ~180 ms for the reads before opening; (3) if still not back, open with placeholder rows of
+   about the right height and ease the height to fit when the data arrives. */
+function m2_dayFromCache(date){
+  const c=m2_dayCache[date]; if(!c||Date.now()-c.at>M2_FRESH_MS) return null;
+  return {shifts:c.shifts,leave:c.entries.filter(e=>e.leaveType)};
+}
+async function m2_openShift(s,owner){
   const me=m2_me(), own=!!me&&String(owner.id)===String(me.id), group=m2_groupOf(owner);
+  const load=Promise.all([m2_dayFromCache(s.date)||m2_dayRoster(s.date),own?m2_shiftContext(me):Promise.resolve(null)]);
+  let ready=null;
+  try{ ready=await Promise.race([load,new Promise(r=>setTimeout(()=>r(null),180))]); }catch(e){}
+  const dayHTML=([day])=>m2_dayPills(day,group,me?.id,null);
+  const actHTML=([day,extra])=>{ const why=m2_blockReason(s,me,day.leave,extra.reqs);
+    return why?`<div class="m2-note">${m2_esc(why)}</div>`:`<button class="m2-btn ghost" onclick="${m2_on(()=>m2_openCantWork(s))}">I can't work this shift</button>`; };
+  const skel=`<div style="display:flex;flex-direction:column;gap:4px" aria-label="Loading">${'<div class="m2-skel"></div>'.repeat(4)}</div>`;
   m2_sheetOpen({key:'shift:'+s.id,title:'',render:()=>`
     ${m2_sheetHeader(own?'Your shift':`${m2_first(owner)}'s shift`,own?'#8B2535':m2_groupColour(group),m2_long(s.date),m2_range(s.start_time,s.end_time),m2_groupLabel(group).replace(/s$/,'')+(s.lane==='75plus'?' · 75+ clinic':''))}
-    <section><h2 class="m2-h2">${m2_esc(m2_groupLabel(group))} on that day</h2><div id="m2-sh-day"><div class="m2-note">Loading…</div></div></section>
-    ${own?`<div id="m2-sh-act"><div class="m2-note">Checking…</div></div>`:''}`,
+    <section><h2 class="m2-h2">${m2_esc(m2_groupLabel(group))} on that day</h2><div id="m2-sh-day">${ready?dayHTML(ready):skel}</div></section>
+    ${own?`<div id="m2-sh-act">${ready?actHTML(ready):'<div class="m2-skel btn"></div>'}</div>`:''}`,
     after:async()=>{
+      if(ready) return;
       try{
-        const [day,extra]=await Promise.all([m2_dayRoster(s.date),own?m2_shiftContext(me):Promise.resolve(null)]);
-        const box=m2_el('m2-sh-day'); if(box) box.innerHTML=m2_dayPills(day,group,me?.id,null);
-        if(own){
-          const act=m2_el('m2-sh-act'); if(!act) return;
-          const why=m2_blockReason(s,me,day.leave,extra.reqs);
-          act.innerHTML=why?`<div class="m2-note">${m2_esc(why)}</div>`
-            :`<button class="m2-btn ghost" onclick="${m2_on(()=>m2_openCantWork(s))}">I can't work this shift</button>`;
-        }
-      }catch(e){ const box=m2_el('m2-sh-day'); if(box) box.innerHTML=`<div class="m2-note">Couldn't load the day.</div>`; }
+        const res=await load;
+        m2_sheetGrow(()=>{
+          const box=m2_el('m2-sh-day'); if(box) box.innerHTML=dayHTML(res);
+          const act=m2_el('m2-sh-act'); if(act&&own) act.innerHTML=actHTML(res);
+        });
+      }catch(e){ const box=m2_el('m2-sh-day'); if(box) m2_sheetGrow(()=>{ box.innerHTML=`<div class="m2-note">Couldn't load the day.</div>`; }); }
     }});
+}
+/* Change an open sheet's content with its height easing to the new size (never a jump). */
+function m2_sheetGrow(update){
+  const sheet=m2_el('m2-sheet'), wrap=m2_el('m2-sheet-wrap');
+  if(!sheet||wrap.hidden||sheet.classList.contains('full')){ update(); return; }
+  const h0=sheet.offsetHeight; update(); sheet.style.height=''; const h1=sheet.offsetHeight;
+  if(Math.abs(h1-h0)<2) return;
+  sheet.style.transition='none'; sheet.style.height=h0+'px'; void sheet.offsetHeight;
+  sheet.style.transition=`height ${M2_STEP_MS}ms ${M2_STEP_EASE}`; sheet.style.height=h1+'px';
+  setTimeout(()=>{ if(sheet.style.height===h1+'px'){ sheet.style.height=''; sheet.style.transition=''; } },M2_STEP_MS+40);
 }
 async function m2_shiftContext(me){ return {reqs:m2_data.swaps?.reqs||m2_data.shifts?.reqs||await m2_myRequests(me)}; }
 function m2_openCantWork(s){
