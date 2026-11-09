@@ -2165,6 +2165,8 @@
   .m2-choice-ic { width:44px; height:44px; flex-shrink:0; border-radius:12px; background:var(--blush); color:var(--burgundy); display:flex; align-items:center; justify-content:center; }
   /* Leave calendar: ‹ month › flanking a centred label (same as the Who's On strip), and the
      calendar box swipes a month with the Who's On slide. */
+  .m2-rolefilter { margin:8px 0 2px; }
+  .m2-rolefilter button { min-height:36px; font-size:13px; padding:0 2px; }
   .m2-monthnav { display:flex; align-items:center; gap:4px; margin:2px 0 6px; }
   .m2-monthnav .m2-icon-btn { width:44px; height:44px; flex-shrink:0; color:#6E5F62; }
   .m2-monthlabel { flex:1; text-align:center; font-family:'Lora',serif; font-size:18px; font-weight:600; color:var(--charcoal); }
@@ -18263,6 +18265,7 @@ async function m2_refresh(tab,force){
 function m2_invalidate(){ m2_at={}; }
 function m2_render(tab){
   const panel=m2_el('m2-panel-'+tab); if(!panel) return;
+  if(tab==='whoson'&&typeof m2_swGuardRender==='function'&&m2_swGuardRender()) return;
   if(!m2_data[tab]){ panel.innerHTML=`<div class="m2-empty">Loading…</div>`; return; }
   ({shifts:m2_renderShifts,swaps:m2_renderSwaps,leave:m2_renderLeave,whoson:m2_renderWhoson})[tab](panel,m2_data[tab]);
 }
@@ -18498,7 +18501,8 @@ async function m2_loadLeave(){
    "On leave" — annual leave is also "on leave", so that pair overlapped. Same privacy. */
 function m2_awayByDay(d){
   const by={};
-  const add=(date,empId,type)=>{ if(type==='public_holiday') return; (by[date]=by[date]||new Map()); if(!by[date].has(empId)||type==='annual_leave') by[date].set(empId,type); };
+  const role=m2_leaveRole();
+  const add=(date,empId,type)=>{ if(type==='public_holiday') return; if(role!=='all'&&m2_groupOf(m2_emp(empId))!==role) return; (by[date]=by[date]||new Map()); if(!by[date].has(empId)||type==='annual_leave') by[date].set(empId,type); };
   d.entries.forEach(e=>add(e.date,String(e.employeeId),e.leaveType));
   d.approved.forEach(r=>{ let k=r.leaveStartDate; while(k<=r.leaveEndDate){ add(k,String(r.initiatorId),r.leaveType); k=m2_add(k,1); } });
   return by;
@@ -18513,7 +18517,7 @@ function m2_awayTiles(day,sel){
     return `<div class="m2-empty">Loading…</div>`;
   }
   const me=m2_me(); let html='';
-  M2_GROUPS.forEach(([g,label,colour])=>{
+  m2_groupsOrdered().forEach(([g,label,colour])=>{
     const people=sel.filter(([id])=>m2_groupOf(m2_emp(id))===g);
     if(!people.length) return;
     html+=`<section style="margin-top:8px"><h2 class="m2-h2"><span class="m2-dot" style="background:${colour}"></span>${label}</h2>`;
@@ -18539,6 +18543,27 @@ function m2_awayTiles(day,sel){
     html+=`</section>`;
   });
   return html||`<div class="m2-note">Nobody on leave.</div>`;
+}
+/* Leave calendar role filter (Joel 10 Nov: 'must'): All · Nurses · Reception · Managers.
+   Defaults to the signed-in person's own group (shared roster view: All); remembered on the
+   device. Filters the calendar dots AND the Away list. Groups via m2_groupOf (Sue = Nurses). */
+const M2_LROLE_KEY='rw_m2_leave_role';
+function m2_leaveRole(){
+  const v=m2_load(M2_LROLE_KEY);
+  if(v&&(v==='all'||M2_GROUPS.some(g=>g[0]===v))) return v;
+  const me=m2_me(); return me?(m2_groupOf(me)||'all'):'all';
+}
+function m2_roleChips(){
+  const cur=m2_leaveRole();
+  const opts=[['all','All'],...M2_GROUPS.map(([g,label])=>[g,label])];
+  return `<div class="m2-seg m2-rolefilter" role="tablist" aria-label="Show leave for">${opts.map(([v,l])=>`<button role="tab" aria-selected="${cur===v}" onclick="m2_setLeaveRole('${v}')">${m2_esc(l)}</button>`).join('')}</div>`;
+}
+function m2_setLeaveRole(v){ m2_store(M2_LROLE_KEY,v); if(m2_data.leave) m2_render('leave'); }
+/* Signed-in person's own group first (Who's On + the Away list); shared roster view keeps the
+   usual order. Joel 10 Nov — instead of a Who's On filter. */
+function m2_groupsOrdered(){
+  const me=m2_me(), g=me&&m2_groupOf(me);
+  return g?[...M2_GROUPS.filter(x=>x[0]===g),...M2_GROUPS.filter(x=>x[0]!==g)]:M2_GROUPS;
 }
 function m2_monthLabel(ms){ return new Date(ms+'T12:00:00').toLocaleDateString('en-AU',{month:'long',year:'numeric'}); }
 /* One month's calendar box — the page that slides. A month not fetched yet draws without
@@ -18618,16 +18643,16 @@ async function m2_slideMonthTo(k){
 }
 function m2_bindCalSwipe(){
   const el=m2_el('m2-panel-leave'); if(!el||el._m2cal) return; el._m2cal=true;
-  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false;
+  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false; const cvt=m2_vt();
   el.addEventListener('touchstart',e=>{
     tracking=false;
     if(m2_tab!=='leave'||m2_calAnimating||!e.target.closest('#m2-calwrap')) return;
-    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now();
+    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now(); cvt.reset(cx);
     tracking=true; locked=false; horiz=false;
   },{passive:true});
   el.addEventListener('touchmove',e=>{
     if(!tracking) return;
-    const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX;
+    const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX; cvt.add(cx);
     if(!locked){
       if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
       horiz=Math.abs(dx)>Math.abs(dy); locked=true;
@@ -18641,14 +18666,17 @@ function m2_bindCalSwipe(){
     if(!tracking||!horiz){ tracking=false; return; } tracking=false;
     m2_calNoTapUntil=Date.now()+400;
     const dx=cx-x0;
-    if(m2_swipeCommits(dx,Date.now()-t0,m2_el('m2-calwrap')?.offsetWidth)) m2_calCommit(dx<0?1:-1); else m2_calCancel();
+    if(m2_swipeCommits(dx,cvt.v(),m2_el('m2-calwrap')?.offsetWidth)) m2_calCommit(dx<0?1:-1); else m2_calCancel();
   },{passive:true});
   el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_calCancel(); tracking=false; },{passive:true});
 }
 function m2_renderLeave(panel,d){
   const me=m2_me(), t=m2_today();
-  let html='';
+  /* Order (Joel 10 Nov): TEAM LEAVE first — the today button in the bar drives its calendar —
+     then Your leave underneath. */
+  let html='', mineHTML='';
   if(me){
+    let html='';
     const mine=d.mine.filter(r=>!reqIsClosed(r)||(r.status==='approved'&&r.leaveEndDate>=t)).sort((a,b)=>a.leaveStartDate.localeCompare(b.leaveStartDate));
     html+=`<section><h2 class="m2-h2">Your leave</h2>`;
     if(mine.length){
@@ -18658,18 +18686,21 @@ function m2_renderLeave(panel,d){
           <span class="m2-chip ${st.cls}" style="align-self:center">${m2_esc(st.text)}</span></button>`; }).join('')+`</div>`;
     } else html+=`<div class="m2-note">No leave booked.</div>`;
     html+=`<button class="m2-btn ghost" style="margin-top:8px" onclick="${m2_on(()=>m2_openLeaveForm({}))}">+ Request leave</button></section>`;
+    mineHTML=html;
   }
   const by=m2_awayByDay(d), ms=d.month, me_=m2_monthEnd(ms);
   if(!m2_leaveSel||m2_leaveSel.slice(0,7)!==ms.slice(0,7)) m2_leaveSel=(t>=ms&&t<=me_)?t:ms;
   html+=`<section><h2 class="m2-h2" style="margin:0">Team leave</h2>
+    ${m2_roleChips()}
     <div class="m2-monthnav"><button class="m2-icon-btn" aria-label="Previous month" onclick="m2_slideMonth(-1)">${M2_ICON.left}</button>
     <div class="m2-monthlabel" id="m2-monthlabel">${m2_esc(m2_monthLabel(ms))}</div>
     <button class="m2-icon-btn" aria-label="Next month" onclick="m2_slideMonth(1)">${M2_ICON.right}</button></div>
     <div class="m2-calwrap" id="m2-calwrap"><div class="m2-calpage" id="m2-cal-cur">${m2_calPage(d)}</div></div>`;
   const sel=by[m2_leaveSel]?[...by[m2_leaveSel].entries()]:[];
   html+=`<h2 class="m2-h2" style="margin-top:12px">${d.ph&&d.ph.has(m2_leaveSel)?'Public holiday · ':'Away '}${m2_esc(m2_long(m2_leaveSel))}</h2>`;
-  html+=sel.length?m2_awayTiles(m2_leaveSel,sel):`<div class="m2-note">Nobody on leave.</div>`;
+  html+=sel.length?m2_awayTiles(m2_leaveSel,sel):`<div class="m2-note">${({Nurse:'No nurses',Receptionist:'No reception staff',Manager:'No managers'})[m2_leaveRole()]||'Nobody'} on leave.</div>`;
   html+=`</section>`;
+  html+=mineHTML;
   panel.innerHTML=html;
   m2_bindCalSwipe(); m2_renderBar();
 }
@@ -18758,7 +18789,7 @@ function m2_dayPage(d){
   const isToday=d.day===t;
   const working=d.shifts.filter(s=>!s.is_day_off&&s.start_time&&s.end_time);
   let any=false;
-  M2_GROUPS.forEach(([g,label,colour])=>{
+  m2_groupsOrdered().forEach(([g,label,colour])=>{
     const rows=working.filter(s=>{ const e=m2_emp(s.employee_id); return e&&m2_groupOf(e)===g; })
       .sort((a,b)=>{ const pa=m2_emp(a.employee_id).is_placeholder?1:0, pb=m2_emp(b.employee_id).is_placeholder?1:0; return pa-pb||a.start_time.localeCompare(b.start_time); });
     if(!rows.length) return; any=true;
@@ -18854,7 +18885,7 @@ let m2_wkNoTapUntil=0;
 function m2_weekTap(k){ if(Date.now()<m2_wkNoTapUntil) return; m2_jumpDay(k); }
 function m2_bindWeekSwipe(){
   const el=m2_el('m2-subbar'); if(!el||el._m2wk) return; el._m2wk=true;
-  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false,dir=0;
+  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false,dir=0; const wvt=m2_vt();
   const cur=()=>m2_el('m2-week-cur'), adj=()=>m2_el('m2-week-adj');
   const ensureAdj=d=>{
     if(dir===d&&adj()) return; dir=d; adj()?.remove();
@@ -18868,12 +18899,12 @@ function m2_bindWeekSwipe(){
   el.addEventListener('touchstart',e=>{
     tracking=false;
     if(m2_tab!=='whoson'||m2_wmode!=='day'||m2_swAnimating||!e.target.closest('#m2-weekwrap')) return;
-    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now();
+    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now(); wvt.reset(cx);
     tracking=true; locked=false; horiz=false; dir=0;
   },{passive:true});
   el.addEventListener('touchmove',e=>{
     if(!tracking) return;
-    const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX;
+    const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX; wvt.add(cx);
     if(!locked){
       if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
       horiz=Math.abs(dx)>Math.abs(dy); locked=true;
@@ -18899,7 +18930,7 @@ function m2_bindWeekSwipe(){
   el.addEventListener('touchend',()=>{
     if(!tracking||!horiz) { tracking=false; return; }
     const dx=cx-x0;
-    finish(m2_swipeCommits(dx,Date.now()-t0,m2_el('m2-weekwrap')?.offsetWidth));
+    finish(m2_swipeCommits(dx,wvt.v(),m2_el('m2-weekwrap')?.offsetWidth));
   },{passive:true});
   el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) finish(false); tracking=false; },{passive:true});
 }
@@ -18962,9 +18993,20 @@ const M2_COMMIT_MS=180, M2_CANCEL_MS=200;
    (>= 0.5 px/ms, Android's ~400 dp/s) and has moved >= 30 px (Android's ~25 dp), so a short
    twitch springs back. Shared by every m2 swipe: days, fortnights, week strip, leave months. */
 const M2_SWIPE_FRAC=0.35, M2_FLICK_V=0.5, M2_FLICK_PX=30;
-function m2_swipeCommits(dx,ms,width){
+/* v = the finger's SIGNED speed at release (px/ms, from m2_vt), as iPhone's pagers use — not
+   the average over the whole gesture, which read a quick flick with a slow start as slow
+   (Joel 10 Nov). A flick back the other way cancels, as on the home screen. */
+function m2_swipeCommits(dx,v,width){
   const a=Math.abs(dx); if(!a) return false;
-  return a>=M2_SWIPE_FRAC*(width||360)||(a>=M2_FLICK_PX&&a/Math.max(1,ms)>=M2_FLICK_V);
+  if(Math.abs(v)>=M2_FLICK_V&&a>=M2_FLICK_PX) return Math.sign(v)===Math.sign(dx);
+  return a>=M2_SWIPE_FRAC*(width||360)&&!(Math.abs(v)>=M2_FLICK_V&&Math.sign(v)!==Math.sign(dx));
+}
+/* Release-velocity tracker: the last ~100 ms of finger positions. */
+function m2_vt(){
+  let pts=[];
+  return { add(x){ const t=performance.now(); pts.push([t,x]); while(pts.length>2&&t-pts[0][0]>100) pts.shift(); },
+           v(){ const t=performance.now(); const p=pts.filter(q=>t-q[0]<=120); if(p.length<2) return 0; const a=p[0], b=p[p.length-1]; return (b[1]-a[1])/Math.max(1,b[0]-a[0]); },
+           reset(x){ pts=[]; if(x!=null) this.add(x); } };
 }
 let m2_swAnimating=false;
 function m2_swSet(el,x,tr){ if(!el) return; el.style.transition=tr||'none'; el.style.transform=x===0?'':`translateX(${x}px)`; }
@@ -18979,19 +19021,59 @@ function m2_swAdj(dir,target){
   wrap.appendChild(pane);
   return pane;
 }
-function m2_swCommit(dir){
+/* Home-screen feel (Joel 10 Nov): the slide carries the flick's speed (duration from the
+   distance left and the release speed, decelerating), and it can be CAUGHT — a new touch
+   during it finishes it at once and starts the next swipe. Finishing promotes the incoming
+   page in place (no rebuild), and only the new day is fetched, and only if not fresh; the
+   old code reloaded base + day (5 reads) and re-rendered under the next swipe every time. */
+let m2_swPending=null, m2_swTracking=false, m2_swDirty=false;
+function m2_swBusy(){ return m2_swTracking||m2_swAnimating; }
+function m2_swX(el){ const m=el&&getComputedStyle(el).transform; return !m||m==='none'?0:parseFloat(m.split(',')[4])||0; }
+function m2_swCommit(dir,v){
   m2_swAnimating=true;
-  const W=m2_el('m2-swipe').offsetWidth, ease=`transform ${M2_COMMIT_MS}ms ease-out`;
+  const W=m2_el('m2-swipe').offsetWidth, cur=m2_el('m2-swipe-cur');
+  const left=Math.max(0,W-Math.abs(m2_swX(cur)));
+  const sp=Math.abs(v||0);
+  const dur=sp>0.05?Math.round(Math.min(320,Math.max(140,left/sp*1.8))):240;
+  const ease=`transform ${dur}ms cubic-bezier(.25,.8,.25,1)`;
   const adjKey=m2_el('m2-swipe-adj')?.dataset.key;
   const target=adjKey==null?m2_keyAt(dir):(m2_wmode==='day'?adjKey:+adjKey);
-  m2_swSet(m2_el('m2-swipe-cur'),-dir*W,ease); m2_swSet(m2_el('m2-swipe-adj'),-dir*W,ease);
+  m2_swSet(cur,-dir*W,ease); m2_swSet(m2_el('m2-swipe-adj'),-dir*W,ease);
   /* The fixed strip + month/fortnight label move as the pills START sliding, not after. */
   m2_setKey(target); m2_renderBar();
-  setTimeout(()=>{
-    m2_data.whoson=m2_cached(target);
-    m2_swAnimating=false;
-    m2_render('whoson'); m2_refresh('whoson',true);
-  },M2_COMMIT_MS);
+  let t=0;
+  const finish=()=>{ clearTimeout(t); if(m2_swPending!==finish) return; m2_swPending=null; m2_swAnimating=false; m2_swLand(target); };
+  t=setTimeout(finish,dur); m2_swPending=finish;
+}
+/* Incoming page becomes the current one in place. The outgoing pane is hidden, not removed,
+   because a finger that caught the slide may have started on it (a removed touch target
+   stops delivering moves); m2_swGC clears it when no finger is down. */
+function m2_swLand(k){
+  const cur=m2_el('m2-swipe-cur'), adj=m2_el('m2-swipe-adj');
+  if(adj){ if(cur){ cur.removeAttribute('id'); cur.style.display='none'; cur.dataset.dead='1'; }
+    adj.id='m2-swipe-cur'; adj.removeAttribute('aria-hidden'); adj.style.cssText=''; }
+  const c=m2_cached(k), fresh=c&&Date.now()-c.at<M2_FRESH_MS;
+  m2_data.whoson=c||m2_data.whoson;
+  if(!adj||!c) m2_swDirty=true;   // nothing usable on screen yet: draw when idle
+  if(m2_wmode==='day'){
+    if(!fresh) m2_fetchDay(k,true).then(d=>m2_swLanded(k,d)).catch(()=>{});
+    m2_prefetchAround(k);
+  } else {
+    const p=m2_person;
+    if(!fresh) m2_fetchPerson(p,k,true).then(d=>m2_swLanded(k,d,p)).catch(()=>{});
+    m2_prefetchPerson(p,k);
+  }
+  m2_swFlush();
+}
+function m2_swLanded(k,d,p){
+  if(m2_tab!=='whoson'||m2_curKey()!==k||(p!=null&&p!==m2_person)) return;
+  m2_data.whoson=d; m2_swDirty=true; m2_swFlush();
+}
+function m2_swGC(){ document.querySelectorAll('#m2-swipe [data-dead]').forEach(e=>e.remove()); }
+function m2_swFlush(){
+  if(m2_swBusy()) return;
+  m2_swGC();
+  if(m2_swDirty){ m2_swDirty=false; m2_render('whoson'); }
 }
 function m2_swCancel(){
   const adj=m2_el('m2-swipe-adj'), spring=`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`;
@@ -19008,34 +19090,42 @@ function m2_slideDay(dir){
    Who's On view — so a quiet day with one pill still swipes from the empty space below it.
    Acts while Who's On is showing, in either view (Person swipes a fortnight). */
 function m2_canSwipe(){ return m2_tab==='whoson'&&!!m2_el('m2-swipe')&&!m2_swAnimating; }
+/* While a finger is down or a page is sliding, Who's On is never rebuilt under it. */
+function m2_swGuardRender(){ if(m2_tab==='whoson'&&m2_swBusy()){ m2_swDirty=true; return true; } return false; }
 function m2_bindSwipe(){
   const el=m2_el('m2-body'); if(!el||el._m2sw) return; el._m2sw=true;
-  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false;
+  let x0=0,y0=0,cx=0,tracking=false,locked=false,horiz=false,side=0; const vt=m2_vt();
+  const end=()=>{ tracking=false; m2_swTracking=false; };
   el.addEventListener('touchstart',e=>{
     tracking=false;
-    if(!m2_canSwipe()) return;
-    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now();
-    tracking=true; locked=false; horiz=false;
+    /* Catch a slide in flight: finish it now, with the finger already counted as down so
+       the landing can't rebuild the page under it (that dropped quick repeat swipes). */
+    if(m2_swPending){ m2_swTracking=true; m2_swPending(); }
+    if(!m2_canSwipe()){ m2_swTracking=false; m2_swFlush(); return; }
+    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; vt.reset(cx);
+    tracking=true; m2_swTracking=true; locked=false; horiz=false; side=0;
   },{passive:true});
   el.addEventListener('touchmove',e=>{
     if(!tracking) return;
-    const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX;
+    const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX; vt.add(cx);
     if(!locked){
       if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
       horiz=Math.abs(dx)>Math.abs(dy); locked=true;
-      if(horiz) m2_swAdj(dx<0?1:-1);
+      if(!horiz){ end(); m2_swFlush(); return; }
     }
-    if(!horiz) return;
     e.preventDefault();
+    const want=dx<0?1:-1;
+    if(dx!==0&&want!==side){ side=want; m2_swAdj(side); }   // drawn on whichever side the finger heads
     m2_swSet(m2_el('m2-swipe-cur'),dx); m2_swSet(m2_el('m2-swipe-adj'),dx);
   },{passive:false});
   el.addEventListener('touchend',()=>{
-    if(!tracking) return; tracking=false;
-    if(!horiz) return;
-    const dx=cx-x0;
-    if(m2_swipeCommits(dx,Date.now()-t0,m2_el('m2-swipe')?.offsetWidth)) m2_swCommit(dx<0?1:-1); else m2_swCancel();
+    if(!tracking){ m2_swFlush(); return; }
+    const was=horiz; end();
+    if(!was){ m2_swFlush(); return; }
+    const dx=cx-x0, v=vt.v();
+    if(m2_swipeCommits(dx,v,m2_el('m2-swipe')?.offsetWidth)) m2_swCommit(dx<0?1:-1,v); else { m2_swCancel(); setTimeout(m2_swFlush,M2_CANCEL_MS+20); }
   },{passive:true});
-  el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_swCancel(); tracking=false; },{passive:true});
+  el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_swCancel(); end(); setTimeout(m2_swFlush,M2_CANCEL_MS+20); },{passive:true});
 }
 /* ── bottom sheets: ONE helper for every pop-up ──────────────────────────
    Height = content (capped at 90%), full height while typing. Backdrop = the page blurred.
