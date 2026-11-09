@@ -2191,8 +2191,11 @@
     .m2-sheet-backdrop { -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); }
   }
   .m2-sheet-wrap.open .m2-sheet-backdrop { opacity:1; }
-  .m2-sheet { position:relative; width:100%; max-width:520px; max-height:calc(var(--vvh,100vh) * 0.9); background:#FDFAF9; border-radius:22px 22px 0 0; display:flex; flex-direction:column; transform:translateY(100%); transition:transform 0.26s cubic-bezier(.2,.8,.2,1), height 0.22s ease; }
-  .m2-sheet-wrap.open .m2-sheet { transform:translateY(0); }
+  /* Motion (Joel 9 Nov: open/close janky). The transition on the DESTINATION state applies:
+     opening uses iOS's sheet curve (300 ms, soft settle), closing a quicker accelerate-out
+     (220 ms). m2_sheetHide waits for the close to finish before hiding. */
+  .m2-sheet { position:relative; width:100%; max-width:520px; max-height:calc(var(--vvh,100vh) * 0.9); background:#FDFAF9; border-radius:22px 22px 0 0; display:flex; flex-direction:column; transform:translateY(100%); transition:transform 0.22s cubic-bezier(.4,0,1,1), height 0.22s ease; will-change:transform; }
+  .m2-sheet-wrap.open .m2-sheet { transform:translateY(0); transition:transform 0.3s cubic-bezier(.32,.72,0,1), height 0.22s ease; }
   .m2-sheet.full { height:calc(var(--vvh,100vh) * 0.9); }
   .m2-sheet-grab { flex-shrink:0; padding:10px 0 4px; display:flex; justify-content:center; touch-action:none; cursor:grab; }
   .m2-sheet-grab i { width:40px; height:4px; border-radius:2px; background:var(--border-dk); display:block; }
@@ -19022,7 +19025,9 @@ function m2_sheetRender(animate){
   m2_el('m2-sheet-body').innerHTML=step.render();
   m2_sheetRestoreDraft();
   if(step.after) try{ step.after(); }catch(e){ console.error(e); }
-  if(animate) requestAnimationFrame(()=>wrap.classList.add('open'));
+  /* Commit the closed position before opening, or the browser can merge "show" and "open" into
+     one frame and the sheet pops in instead of sliding up. */
+  if(animate){ void sheet.offsetHeight; wrap.classList.add('open'); }
 }
 function m2_sheetNav(){
   if(m2_sheet.length>1){ if(M2_USE_HISTORY){ try{ history.back(); }catch(e){ m2_sheetPopStep(); } } else m2_sheetPopStep(); }
@@ -19036,9 +19041,17 @@ function m2_sheetClose(){
   if(n&&M2_USE_HISTORY){ m2_suppressPop++; try{ history.go(-n); }catch(e){ m2_suppressPop--; } }
 }
 function m2_sheetHide(){
-  const wrap=m2_el('m2-sheet-wrap'); if(!wrap) return;
+  const wrap=m2_el('m2-sheet-wrap'), sheet=m2_el('m2-sheet'); if(!wrap) return;
+  /* A drag leaves an inline translateY(dy) that would override the closed position and freeze
+     the sheet under the finger; clear it so the close slides on from where the finger let go. */
+  if(sheet){ sheet.style.transition=''; sheet.style.transform=''; }
   wrap.classList.remove('open'); m2_sheet=[];
-  setTimeout(()=>{ if(!m2_sheet.length) wrap.hidden=true; },220);
+  /* Hide only once the slide has finished (it used to hide at 220 ms of a 260 ms slide). */
+  let done=false;
+  const fin=()=>{ if(done) return; done=true; sheet?.removeEventListener('transitionend',onEnd); if(!m2_sheet.length&&!wrap.classList.contains('open')) wrap.hidden=true; };
+  const onEnd=e=>{ if(e.target===sheet&&e.propertyName==='transform') fin(); };
+  sheet?.addEventListener('transitionend',onEnd);
+  setTimeout(fin,400);
 }
 /* Android's Back (the edge swipe in an installed app) can't be switched off, but what it does
    can. A "guard" history entry sits under the app, so Back never falls through to the kiosk
@@ -19151,7 +19164,7 @@ function m2_openShift(s,owner){
           const act=m2_el('m2-sh-act'); if(!act) return;
           const why=m2_blockReason(s,me,day.leave,extra.reqs);
           act.innerHTML=why?`<div class="m2-note">${m2_esc(why)}</div>`
-            :`<button class="m2-btn ghost" onclick="${m2_on(()=>m2_openCantWork(s))}">I can't work this shift</button><div class="m2-note" style="text-align:center;margin-top:-6px">Swap it, give it away, or take leave</div>`;
+            :`<button class="m2-btn ghost" onclick="${m2_on(()=>m2_openCantWork(s))}">I can't work this shift</button>`;
         }
       }catch(e){ const box=m2_el('m2-sh-day'); if(box) box.innerHTML=`<div class="m2-note">Couldn't load the day.</div>`; }
     }});
