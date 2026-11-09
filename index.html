@@ -2202,6 +2202,16 @@
   .m2-sheet-head { flex-shrink:0; display:flex; align-items:flex-start; gap:4px; padding:0 16px 6px 8px; touch-action:none; }
   .m2-sheet-head h2 { flex:1; margin:8px 0 0; font-family:'Lora',serif; font-size:21px; font-weight:600; color:var(--charcoal); }
   .m2-step { display:flex; flex-direction:column; gap:14px; }
+  /* Fixed-height flow (shift details → Can't work → Swap / Give / Leave, and + Request leave):
+     one height for every step, so steps slide purely sideways and the main button (in
+     .m2-foot) sits in the same place at the bottom. Content longer than the sheet scrolls
+     under the pinned footer. Without .fixed, .m2-foot is just the end of the content. */
+  .m2-foot { display:flex; flex-direction:column; gap:12px; }
+  .m2-sheet.fixed { height:min(560px, calc(var(--vvh,100vh) * 0.72)); }
+  .m2-sheet.fixed.full { height:calc(var(--vvh,100vh) * 0.9); }
+  .m2-sheet.fixed .m2-sheet-body { flex:1; min-height:0; }
+  .m2-sheet.fixed .m2-step { flex:1 0 auto; }
+  .m2-sheet.fixed .m2-foot { margin-top:auto; position:sticky; bottom:calc(-24px - env(safe-area-inset-bottom)); margin-bottom:calc(-24px - env(safe-area-inset-bottom)); padding:12px 0 calc(16px + env(safe-area-inset-bottom)); background:#FDFAF9; box-shadow:0 -10px 12px -10px rgba(45,36,38,0.10); z-index:1; }
   .m2-skel { height:30px; border-radius:6px; background:linear-gradient(90deg,#F1E9EB 0%,#F8F3F4 50%,#F1E9EB 100%); background-size:200% 100%; animation:m2skel 1.2s ease-in-out infinite; }
   .m2-skel.btn { height:50px; border-radius:11px; }
   @keyframes m2skel { from { background-position:100% 0; } to { background-position:-100% 0; } }
@@ -17907,7 +17917,10 @@ window.addEventListener('load', ()=>{
    are identical to the Staff Portal's. With "Live actions" off (the default) an action shows
    what WOULD be written and saves nothing.
 ═══════════════════════════════════════════ */
-const M2_DOOR_KEY='rw_m2_door', M2_WHO_KEY='rw_m2_who', M2_LIVE_KEY='rw_m2_live';
+const M2_DOOR_KEY='rw_m2_door', M2_WHO_KEY='rw_m2_who', M2_LIVE_KEY='rw_m2_live', M2_FIXED_KEY='rw_m2_fixed';
+/* Fixed-height shift panels (Joel 9 Nov, on trial): ON unless switched off in Preview options.
+   Remove the toggle once Joel picks; the pinned footers work either way. */
+function m2_fixedOn(){ return m2_load(M2_FIXED_KEY)!==false; }
 const M2_LAST_KEY='rw_m2_last', M2_SEEN_KEY='rw_m2_seen_open', M2_HIDDEN_KEY='rw_m2_hidden';
 const M2_DOOR_DAYS=7, M2_WHO_DAYS=30, M2_DOOR_MAX_FAILS=5, M2_DOOR_LOCK_MS=60000;
 const M2_FRESH_MS=30000, M2_RESUME_MS=30*60000;
@@ -19036,6 +19049,7 @@ function m2_sheetRender(animate,dir){
   const oldPane=slide?body.firstElementChild:null, oldTop=slide?oldPane.offsetTop-body.scrollTop:0;
   wrap.hidden=false;
   sheet.classList.remove('full'); sheet.style.transform='';
+  sheet.classList.toggle('fixed',m2_fixedOn()&&!!m2_sheet[0].fixed);
   m2_el('m2-sheet-title').textContent=step.title||'';
   const nav=m2_el('m2-sheet-nav'), first=m2_sheet.length===1;
   nav.innerHTML=first?M2_ICON.down:M2_ICON.back; nav.setAttribute('aria-label',first?'Close':'Back');
@@ -19203,10 +19217,10 @@ async function m2_openShift(s,owner){
   const actHTML=([day,extra])=>{ const why=m2_blockReason(s,me,day.leave,extra.reqs);
     return why?`<div class="m2-note">${m2_esc(why)}</div>`:`<button class="m2-btn ghost" onclick="${m2_on(()=>m2_openCantWork(s))}">I can't work this shift</button>`; };
   const skel=`<div style="display:flex;flex-direction:column;gap:4px" aria-label="Loading">${'<div class="m2-skel"></div>'.repeat(4)}</div>`;
-  m2_sheetOpen({key:'shift:'+s.id,title:'',render:()=>`
+  m2_sheetOpen({key:'shift:'+s.id,title:'',fixed:true,render:()=>`
     ${m2_sheetHeader(own?'Your shift':`${m2_first(owner)}'s shift`,own?'#8B2535':m2_groupColour(group),m2_long(s.date),m2_range(s.start_time,s.end_time),m2_groupLabel(group).replace(/s$/,'')+(s.lane==='75plus'?' · 75+ clinic':''))}
     <section><h2 class="m2-h2">${m2_esc(m2_groupLabel(group))} on that day</h2><div id="m2-sh-day">${ready?dayHTML(ready):skel}</div></section>
-    ${own?`<div id="m2-sh-act">${ready?actHTML(ready):'<div class="m2-skel btn"></div>'}</div>`:''}`,
+    ${own?`<div class="m2-foot" id="m2-sh-act">${ready?actHTML(ready):'<div class="m2-skel btn"></div>'}</div>`:''}`,
     after:async()=>{
       if(ready) return;
       try{
@@ -19232,7 +19246,7 @@ async function m2_shiftContext(me){ return {reqs:m2_data.swaps?.reqs||m2_data.sh
 function m2_openCantWork(s){
   const me=m2_me(), give=GIVEAWAY_ENABLED[me.role]!==false;
   const choice=(icon,title,sub,fn)=>`<button class="m2-choice" onclick="${m2_on(fn)}"><span class="m2-choice-ic">${icon}</span><span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;font-weight:800;color:var(--charcoal)">${title}</span><span style="font-size:14px;color:#6E5F62;line-height:1.4">${sub}</span></span>${M2_ICON.chev}</button>`;
-  m2_sheetPush({title:"Can't work this shift?",render:()=>`<div style="font-size:14px;font-weight:700;margin-top:-8px">${m2_esc(m2_short(s.date))} · ${m2_esc(m2_range(s.start_time,s.end_time))}</div>
+  m2_sheetPush({title:"Can't work this shift?",fixed:true,render:()=>`<div style="font-size:14px;font-weight:700;margin-top:-8px">${m2_esc(m2_short(s.date))} · ${m2_esc(m2_range(s.start_time,s.end_time))}</div>
     ${choice(M2_ICON.swap,'Swap with a colleague','They take this shift, you take one of theirs.',()=>m2_openSwapForm(s))}
     ${give?choice(M2_ICON.give,'Give it away',"A colleague takes it. You don't take one back.",()=>m2_openGiveForm(s)):''}
     ${choice(M2_ICON.sun,'Apply for leave','Personal, annual or other leave for this day.',()=>m2_openLeaveForm({start:s.date,end:s.date,fixed:true,type:'personal_leave',shift:s}))}
@@ -19242,13 +19256,13 @@ function m2_colleagues(me){ return m2_emps.filter(e=>!e.is_placeholder&&e.id!==m
 function m2_openSwapForm(s){
   const me=m2_me(), key='swap:'+s.id;
   let theirs=[];
-  m2_sheetPush({key,title:'Swap this shift',render:()=>`
+  m2_sheetPush({key,title:'Swap this shift',fixed:true,render:()=>`
     <div style="font-size:14px;font-weight:700;margin-top:-8px">Your ${m2_esc(m2_short(s.date))} · ${m2_esc(m2_range(s.start_time,s.end_time))}</div>
     <label class="m2-label">Swap with<select class="m2-select" id="m2-sw-col" data-d="col"><option value="">Choose a colleague</option>${m2_colleagues(me).map(e=>`<option value="${m2_esc(e.id)}">${m2_esc(e.name)}</option>`).join('')}</select></label>
     <label class="m2-label">Their shift you'll take<select class="m2-select" id="m2-sw-shift" data-d="shift" disabled><option value="">Choose a colleague first</option></select></label>
     <label class="m2-label">Reason (optional)<input class="m2-input" id="m2-sw-reason" data-d="reason" placeholder="e.g. family commitment"></label>
     <div class="m2-note" id="m2-sw-note">Your colleague answers first, then a manager approves.</div>
-    <button class="m2-btn" id="m2-sw-send" disabled>Send</button>`,
+    <div class="m2-foot"><button class="m2-btn" id="m2-sw-send" disabled>Send</button></div>`,
     after:()=>{
       const col=m2_el('m2-sw-col'), sel=m2_el('m2-sw-shift'), send=m2_el('m2-sw-send');
       const loadTheirs=async()=>{
@@ -19273,26 +19287,26 @@ function m2_openSwapForm(s){
 }
 function m2_openGiveForm(s){
   const me=m2_me(), key='give:'+s.id;
-  m2_sheetPush({key,title:'Give this shift away',render:()=>`
+  m2_sheetPush({key,title:'Give this shift away',fixed:true,render:()=>`
     <div style="font-size:14px;font-weight:700;margin-top:-8px">Your ${m2_esc(m2_short(s.date))} · ${m2_esc(m2_range(s.start_time,s.end_time))}</div>
     <label class="m2-label">Give it to<select class="m2-select" id="m2-gv-col" data-d="col"><option value="">Choose a colleague</option>${m2_colleagues(me).map(e=>`<option value="${m2_esc(e.id)}">${m2_esc(e.name)}</option>`).join('')}</select></label>
     <label class="m2-label">Reason (optional)<input class="m2-input" id="m2-gv-reason" data-d="reason" placeholder="e.g. appointment"></label>
     <div class="m2-note">They answer first, then a manager approves.</div>
-    <button class="m2-btn" id="m2-gv-send">Send</button>`,
+    <div class="m2-foot"><button class="m2-btn" id="m2-gv-send">Send</button></div>`,
     after:()=>{ m2_el('m2-gv-send').onclick=()=>m2_commit(reqBuildGiveaway(me,s,m2_emp(m2_el('m2-gv-col').value),m2_el('m2-gv-reason').value.trim()),key); }});
 }
 /* ONE leave form, two ways in: from a shift (date fixed to that day) or "+ Request leave". */
 function m2_openLeaveForm(o){
   const me=m2_me(), key='leave:'+(o.fixed?o.start:'new');
   const types=Object.entries(LEAVE_TYPES).filter(([k])=>k!=='public_holiday');
-  const step={key,title:'Apply for leave',render:()=>`
+  const step={key,title:'Apply for leave',fixed:true,render:()=>`
     ${o.fixed?`<div style="display:flex;flex-direction:column;padding:12px 14px;background:#FAF0F2;border-radius:12px"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">${m2_esc(m2_long(o.start))}</span>${o.shift?`<span style="font-size:13px;color:#6E5F62">Your shift ${m2_esc(m2_range(o.shift.start_time,o.shift.end_time))}</span>`:''}</div>`
       :`<div style="display:flex;gap:10px"><label class="m2-label" style="flex:1">First day<input class="m2-input" type="date" id="m2-lv-start" data-d="start" min="${m2_today()}"></label><label class="m2-label" style="flex:1">Last day<input class="m2-input" type="date" id="m2-lv-end" data-d="end" min="${m2_today()}"></label></div>`}
     <label class="m2-label">Leave type<select class="m2-select" id="m2-lv-type" data-d="type">${types.map(([k,v])=>`<option value="${k}"${k===(o.type||'annual_leave')?' selected':''}>${m2_esc(v)}</option>`).join('')}</select></label>
     <label class="m2-label">Reason (optional)<input class="m2-input" id="m2-lv-reason" data-d="reason" placeholder="e.g. unwell"></label>
     <div id="m2-lv-check"></div>
-    <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.45"><input type="checkbox" id="m2-lv-ok" data-d="ok" style="width:20px;height:20px;margin:0;flex-shrink:0;accent-color:#8B2535"> I have checked I have enough leave to cover this. If unsure, I'll check with my manager first.</label>
-    <button class="m2-btn" id="m2-lv-send" disabled>Send to manager</button>`,
+    <div class="m2-foot"><label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.45"><input type="checkbox" id="m2-lv-ok" data-d="ok" style="width:20px;height:20px;margin:0;flex-shrink:0;accent-color:#8B2535"> I have checked I have enough leave to cover this. If unsure, I'll check with my manager first.</label>
+    <button class="m2-btn" id="m2-lv-send" disabled>Send to manager</button></div>`,
     after:()=>{
       const typeEl=m2_el('m2-lv-type'), ok=m2_el('m2-lv-ok'), send=m2_el('m2-lv-send'), check=m2_el('m2-lv-check');
       const dates=()=>o.fixed?[o.start,o.end]:[m2_el('m2-lv-start').value,m2_el('m2-lv-end').value];
@@ -19411,6 +19425,8 @@ function m2_previewOptions(){
   return `<section><h2 class="m2-h2">Preview options</h2><div class="m2-box" style="gap:0;padding:0 14px">
     <label class="m2-row" style="cursor:pointer"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Live actions</span><span style="font-size:13px;color:#6E5F62">${live?'On — actions save for real':'Off — actions show what would be saved'}</span></span>
       <input type="checkbox" ${live?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_LIVE_KEY,this.checked);m2_markLive();m2_sheetRender(false)"></label>
+    <label class="m2-row" style="cursor:pointer"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Fixed-height panels</span><span style="font-size:13px;color:#6E5F62">${m2_fixedOn()?'On — shift panels and their steps share one height':'Off — each panel fits its content'}</span></span>
+      <input type="checkbox" ${m2_fixedOn()?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_FIXED_KEY,this.checked);m2_sheetRender(false)"></label>
     <button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;cursor:pointer;padding:0" onclick="m2_exit()">Exit preview to the kiosk</button>
     <button class="m2-row" style="width:100%;border:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;color:var(--burgundy);cursor:pointer;padding:0" onclick="m2_lockDevice()">Lock the preview on this device</button>
   </div></section>`;
