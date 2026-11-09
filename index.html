@@ -2165,8 +2165,21 @@
   .m2-choice-ic { width:44px; height:44px; flex-shrink:0; border-radius:12px; background:var(--blush); color:var(--burgundy); display:flex; align-items:center; justify-content:center; }
   /* Leave calendar: ‹ month › flanking a centred label (same as the Who's On strip), and the
      calendar box swipes a month with the Who's On slide. */
-  .m2-rolefilter { margin:8px 0 2px; }
-  .m2-rolefilter button { min-height:36px; font-size:13px; padding:0 2px; }
+  /* Leave role filter button + checklist pop-up (desktop roster's filter pattern). */
+  .m2-bar { position:relative; }
+  .m2-filter-btn { position:relative; width:40px; height:40px; flex-shrink:0; border:none; background:none; border-radius:10px; color:#6E5F62; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
+  .m2-filter-btn svg { width:22px; height:22px; }
+  .m2-filter-btn.on { background:var(--burgundy); color:#fff; }
+  .m2-filter-btn i { position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:4px; background:#fff; box-shadow:0 0 0 1.5px var(--burgundy); }
+  .m2-pop { position:absolute; top:calc(100% - 4px); right:56px; z-index:30; min-width:210px; background:var(--white); border:1px solid var(--border); border-radius:14px; box-shadow:0 12px 28px rgba(45,36,38,0.18); padding:6px; display:flex; flex-direction:column; }
+  .m2-pop-title { font-size:11px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#6E5F62; padding:8px 10px 4px; }
+  .m2-pop-row { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 10px; border:none; background:none; border-radius:10px; font-family:'Nunito',sans-serif; font-size:15px; font-weight:700; color:var(--charcoal); cursor:pointer; text-align:left; }
+  .m2-pop-row:active { background:var(--blush-lt); }
+  .m2-check { width:20px; height:20px; border-radius:6px; border:2px solid #CDBFC2; box-sizing:border-box; position:relative; flex-shrink:0; }
+  .m2-check.on { background:var(--burgundy); border-color:var(--burgundy); }
+  .m2-check.on::after { content:''; position:absolute; left:5px; top:1px; width:5px; height:10px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
+  /* Preview pill removed (Joel 10 Nov). ⚠ LAUNCH STEP still stands: switch on live actions. */
+  #m2-preview-pill { display:none !important; }
   .m2-monthnav { display:flex; align-items:center; gap:4px; margin:2px 0 6px; }
   .m2-monthnav .m2-icon-btn { width:44px; height:44px; flex-shrink:0; color:#6E5F62; }
   .m2-monthlabel { flex:1; text-align:center; font-family:'Lora',serif; font-size:18px; font-weight:600; color:var(--charcoal); }
@@ -18501,8 +18514,8 @@ async function m2_loadLeave(){
    "On leave" — annual leave is also "on leave", so that pair overlapped. Same privacy. */
 function m2_awayByDay(d){
   const by={};
-  const role=m2_leaveRole();
-  const add=(date,empId,type)=>{ if(type==='public_holiday') return; if(role!=='all'&&m2_groupOf(m2_emp(empId))!==role) return; (by[date]=by[date]||new Map()); if(!by[date].has(empId)||type==='annual_leave') by[date].set(empId,type); };
+  const roles=m2_leaveRoles(), all=roles.length===M2_GROUPS.length;
+  const add=(date,empId,type)=>{ if(type==='public_holiday') return; if(!all&&!roles.includes(m2_groupOf(m2_emp(empId)))) return; (by[date]=by[date]||new Map()); if(!by[date].has(empId)||type==='annual_leave') by[date].set(empId,type); };
   d.entries.forEach(e=>add(e.date,String(e.employeeId),e.leaveType));
   d.approved.forEach(r=>{ let k=r.leaveStartDate; while(k<=r.leaveEndDate){ add(k,String(r.initiatorId),r.leaveType); k=m2_add(k,1); } });
   return by;
@@ -18547,18 +18560,43 @@ function m2_awayTiles(day,sel){
 /* Leave calendar role filter (Joel 10 Nov: 'must'): All · Nurses · Reception · Managers.
    Defaults to the signed-in person's own group (shared roster view: All); remembered on the
    device. Filters the calendar dots AND the Away list. Groups via m2_groupOf (Sue = Nurses). */
-const M2_LROLE_KEY='rw_m2_leave_role';
-function m2_leaveRole(){
-  const v=m2_load(M2_LROLE_KEY);
-  if(v&&(v==='all'||M2_GROUPS.some(g=>g[0]===v))) return v;
-  const me=m2_me(); return me?(m2_groupOf(me)||'all'):'all';
+const M2_LROLE_KEY='rw_m2_leave_roles';
+/* Ticked roles (Joel 10 Nov): a checklist of Nurses / Reception / Managers behind a filter
+   button in the bar — no 'All' (all ticked = everyone), at least one always ticked. */
+function m2_leaveRoles(){
+  const v=m2_load(M2_LROLE_KEY), ok=M2_GROUPS.map(g=>g[0]);
+  if(Array.isArray(v)){ const r=v.filter(x=>ok.includes(x)); if(r.length) return r; }
+  const me=m2_me(), g=me&&m2_groupOf(me); return g&&ok.includes(g)?[g]:ok;
 }
-function m2_roleChips(){
-  const cur=m2_leaveRole();
-  const opts=[['all','All'],...M2_GROUPS.map(([g,label])=>[g,label])];
-  return `<div class="m2-seg m2-rolefilter" role="tablist" aria-label="Show leave for">${opts.map(([v,l])=>`<button role="tab" aria-selected="${cur===v}" onclick="m2_setLeaveRole('${v}')">${m2_esc(l)}</button>`).join('')}</div>`;
+function m2_leaveFiltered(){ return m2_leaveRoles().length<M2_GROUPS.length; }
+function m2_toggleLeaveRole(g){
+  const cur=m2_leaveRoles(); let next=cur.includes(g)?cur.filter(x=>x!==g):[...cur,g];
+  if(!next.length){ m2_toast('Keep at least one role ticked'); m2_renderRolePop(); return; }
+  m2_store(M2_LROLE_KEY,M2_GROUPS.map(x=>x[0]).filter(x=>next.includes(x)));
+  m2_renderRolePop(); m2_renderBar(); if(m2_data.leave) m2_render('leave');
 }
-function m2_setLeaveRole(v){ m2_store(M2_LROLE_KEY,v); if(m2_data.leave) m2_render('leave'); }
+/* The checklist pop-up, anchored under the filter button. Tapping outside closes it. */
+function m2_roleBtn(){
+  const on=m2_leaveFiltered();
+  return `<button class="m2-filter-btn${on?' on':''}" id="m2-filter-btn" aria-label="Filter leave by role${on?' (filtered)':''}" aria-haspopup="true" aria-expanded="${!!m2_el('m2-rolepop')}" onclick="m2_toggleRolePop()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z"/></svg>${on?'<i></i>':''}</button>`;
+}
+function m2_renderRolePop(){
+  const pop=m2_el('m2-rolepop'); if(!pop) return;
+  const cur=m2_leaveRoles();
+  pop.innerHTML=`<div class="m2-pop-title">Show leave for</div>`+M2_GROUPS.map(([g,label,colour])=>`<button class="m2-pop-row" role="menuitemcheckbox" aria-checked="${cur.includes(g)}" onclick="m2_toggleLeaveRole('${g}')"><span class="m2-dot" style="background:${colour}"></span><span style="flex:1">${m2_esc(label)}</span><span class="m2-check${cur.includes(g)?' on':''}"></span></button>`).join('');
+}
+function m2_toggleRolePop(force){
+  let pop=m2_el('m2-rolepop');
+  if(pop&&force!==true){ pop.remove(); m2_el('m2-filter-btn')?.setAttribute('aria-expanded','false'); return; }
+  if(force===false) return;
+  if(!pop){ pop=document.createElement('div'); pop.id='m2-rolepop'; pop.className='m2-pop'; pop.setAttribute('role','menu'); document.querySelector('.m2-bar').appendChild(pop); }
+  m2_renderRolePop(); m2_el('m2-filter-btn')?.setAttribute('aria-expanded','true');
+}
+document.addEventListener('pointerdown',e=>{ const pop=document.getElementById('m2-rolepop'); if(pop&&!pop.contains(e.target)&&!e.target.closest('#m2-filter-btn')) m2_toggleRolePop(false); },true);
+function m2_roleNames(){
+  const r=m2_leaveRoles(); const name={Nurse:'Nurses',Receptionist:'Reception',Manager:'Managers'};
+  return r.map(g=>name[g]||g).join(' & ');
+}
 /* Signed-in person's own group first (Who's On + the Away list); shared roster view keeps the
    usual order. Joel 10 Nov — instead of a Who's On filter. */
 function m2_groupsOrdered(){
@@ -18691,14 +18729,15 @@ function m2_renderLeave(panel,d){
   const by=m2_awayByDay(d), ms=d.month, me_=m2_monthEnd(ms);
   if(!m2_leaveSel||m2_leaveSel.slice(0,7)!==ms.slice(0,7)) m2_leaveSel=(t>=ms&&t<=me_)?t:ms;
   html+=`<section><h2 class="m2-h2" style="margin:0">Team leave</h2>
-    ${m2_roleChips()}
     <div class="m2-monthnav"><button class="m2-icon-btn" aria-label="Previous month" onclick="m2_slideMonth(-1)">${M2_ICON.left}</button>
     <div class="m2-monthlabel" id="m2-monthlabel">${m2_esc(m2_monthLabel(ms))}</div>
     <button class="m2-icon-btn" aria-label="Next month" onclick="m2_slideMonth(1)">${M2_ICON.right}</button></div>
     <div class="m2-calwrap" id="m2-calwrap"><div class="m2-calpage" id="m2-cal-cur">${m2_calPage(d)}</div></div>`;
   const sel=by[m2_leaveSel]?[...by[m2_leaveSel].entries()]:[];
-  html+=`<h2 class="m2-h2" style="margin-top:12px">${d.ph&&d.ph.has(m2_leaveSel)?'Public holiday · ':'Away '}${m2_esc(m2_long(m2_leaveSel))}</h2>`;
-  html+=sel.length?m2_awayTiles(m2_leaveSel,sel):`<div class="m2-note">${({Nurse:'No nurses',Receptionist:'No reception staff',Manager:'No managers'})[m2_leaveRole()]||'Nobody'} on leave.</div>`;
+  /* The heading names the filter, so a filtered list is never mistaken for everyone. */
+  const who=m2_leaveFiltered()?m2_esc(m2_roleNames())+' away · ':'Away ';
+  html+=`<h2 class="m2-h2" style="margin-top:12px">${d.ph&&d.ph.has(m2_leaveSel)?'Public holiday · ':''}${who}${m2_esc(m2_long(m2_leaveSel))}</h2>`;
+  html+=sel.length?m2_awayTiles(m2_leaveSel,sel):`<div class="m2-note">${m2_leaveFiltered()?'No '+m2_esc(m2_roleNames().replace('Reception','reception staff').replace('Nurses','nurses').replace('Managers','managers'))+' on leave.':'Nobody on leave.'}</div>`;
   html+=`</section>`;
   html+=mineHTML;
   panel.innerHTML=html;
@@ -18823,7 +18862,8 @@ function m2_renderBar(){
   title.closest('.m2-bar').classList.toggle('who',m2_tab==='whoson');
   if(m2_tab!=='whoson'){
     title.textContent=M2_TITLES[m2_tab]; sub.hidden=true; sub.innerHTML='';
-    mid.innerHTML=m2_tab==='leave'?m2_todayBtn(!!m2_month&&m2_month!==m2_monthStart(m2_today()),'month'):'';
+    mid.innerHTML=m2_tab==='leave'?m2_roleBtn()+m2_todayBtn(!!m2_month&&m2_month!==m2_monthStart(m2_today()),'month'):'';
+    if(m2_tab!=='leave') m2_toggleRolePop(false); else if(m2_el('m2-rolepop')) m2_el('m2-filter-btn')?.setAttribute('aria-expanded','true');
     return;
   }
   const t=m2_today(), day=m2_day||t, me=m2_me();
