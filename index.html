@@ -2189,10 +2189,31 @@
   .m2-cal-h { text-align:center; font-size:11px; font-weight:800; color:#6E5F62; }
   .m2-cal-d { height:40px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:14px; font-weight:700; color:var(--text); border:none; background:none; font-family:'Nunito',sans-serif; cursor:pointer; padding:0; }
   .m2-cal-d.today { border:1.5px solid var(--burgundy); }
-  /* Public holiday (marked on the desktop roster): grey tint, the "not a normal working day"
-     grey the leave pills use. Selected still wins (rule order). */
-  .m2-cal-d.ph { background:#ECE4E6; }
-  .m2-cal-d.sel { background:var(--burgundy); color:#fff; }
+  /* Calendar day shading (Joel 11 Nov). Public holiday = FAINT BLUE, the desktop roster
+     builder's holiday colour (the clinic is open on them). Any leave under the current role
+     filter = FAINT YELLOW, so block-out days read at a glance; the dots still say which roles.
+     Both = yellow with a blue bar under the date. Selected (burgundy) wins; today keeps its
+     outline. The leave picker uses the same classes. */
+  .m2-cal-d.ph { background:#E4EEF9; }
+  /* Leave range picker */
+  .m2-datebtn { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:48px; padding:0 12px; border:1.5px solid #D9C4C8; border-radius:11px; background:#fff; font-family:'Nunito',sans-serif; font-size:16px; font-weight:700; color:#8A7F82; cursor:pointer; text-align:left; }
+  .m2-datebtn span.set { color:var(--charcoal); font-weight:800; }
+  .m2-datesub { font-size:13px; font-weight:600; color:#6E5F62; min-height:18px; }
+  .m2-cal-d.pk { position:relative; }
+  .m2-cal.pkcal { column-gap:0; }   /* so a picked range reads as one continuous band */
+  .m2-cal .m2-cal-d.pk.pend { background:repeating-linear-gradient(135deg,#FBF0CC 0 4px,#FFFFFF 4px 8px); }
+  .m2-cal .m2-cal-d.pk.past { color:#CBBFC2; background:none; box-shadow:none; }
+  .m2-cal .m2-cal-d.pk.blocked { color:#B3A7AA; background:repeating-linear-gradient(135deg,#EFE8E9 0 3px,#F8F4F5 3px 7px); text-decoration:line-through; }
+  .m2-cal .m2-cal-d.pk.mine { box-shadow:inset 0 0 0 1.5px var(--burgundy); color:var(--burgundy); }
+  .m2-cal .m2-cal-d.pk.rng { background:#F1D9DE; color:var(--charcoal); border-radius:0; box-shadow:none; }
+  .m2-cal .m2-cal-d.pk.rs, .m2-cal .m2-cal-d.pk.re { background:var(--burgundy); color:#fff; }
+  .m2-cal .m2-cal-d.pk.rs { border-radius:8px 0 0 8px; } .m2-cal .m2-cal-d.pk.re { border-radius:0 8px 8px 0; } .m2-cal .m2-cal-d.pk.rs.re { border-radius:8px; }
+  .m2-pk-note:empty { display:none; }
+  .m2-pk-note { min-height:20px; font-size:13px; font-weight:700; color:var(--burgundy); line-height:1.4; }
+  .m2-pk-sum { font-size:14px; color:#6E5F62; } .m2-pk-sum b { color:var(--charcoal); }
+  .m2-cal-d.lv { background:#FBF0CC; }
+  .m2-cal-d.lv.ph { background:#FBF0CC; box-shadow:inset 0 -3px 0 #9DC0E6; }
+  .m2-cal-d.sel, .m2-cal-d.sel.lv.ph { background:var(--burgundy); color:#fff; box-shadow:none; }
   .m2-cal-d.out { color:#CBBFC2; font-weight:600; }
   .m2-cal-dots { display:flex; gap:2px; height:5px; }
   .m2-cal-dots i { width:5px; height:5px; border-radius:3px; display:block; }
@@ -18619,7 +18640,7 @@ function m2_calPage(d){
     const away=by[k]?[...by[k].keys()]:[];
     const groups=[...new Set(away.map(id=>m2_groupOf(m2_emp(id))).filter(Boolean))].slice(0,3);
     const isPH=!!d.ph&&d.ph.has(k);
-    html+=`<button class="m2-cal-d${k===t?' today':''}${isPH?' ph':''}${k===m2_leaveSel?' sel':''}" aria-label="${m2_esc(m2_long(k))}${isPH?', public holiday':''}, ${away.length} away" onclick="${m2_on(()=>{ if(Date.now()<m2_calNoTapUntil) return; m2_leaveSel=k; m2_render('leave'); })}">${+k.slice(8)}<span class="m2-cal-dots">${groups.map(g=>`<i style="background:${k===m2_leaveSel?'#fff':m2_groupColour(g)}"></i>`).join('')}</span></button>`;
+    html+=`<button class="m2-cal-d${k===t?' today':''}${isPH?' ph':''}${away.length?' lv':''}${k===m2_leaveSel?' sel':''}" aria-label="${m2_esc(m2_long(k))}${isPH?', public holiday':''}, ${away.length} away" onclick="${m2_on(()=>{ if(Date.now()<m2_calNoTapUntil) return; m2_leaveSel=k; m2_render('leave'); })}">${+k.slice(8)}<span class="m2-cal-dots">${groups.map(g=>`<i style="background:${k===m2_leaveSel?'#fff':m2_groupColour(g)}"></i>`).join('')}</span></button>`;
   }
   return html+`</div></div>`;
 }
@@ -19446,10 +19467,15 @@ function m2_openGiveForm(s){
 function m2_openLeaveForm(o){
   const me=m2_me(), key='leave:'+(o.fixed?o.start:'new');
   const types=Object.entries(LEAVE_TYPES).filter(([k])=>k!=='public_holiday');
+  /* Order (Joel 11 Nov): leave TYPE first — it decides what the date picker blocks — then the
+     dates (one row that opens the range picker), then the reason. The "Can't work this shift"
+     route keeps its fixed single day and has no picker. Dates live in hidden fields so the
+     sheet's drafts keep them across steps. */
+  const typeRow=`<label class="m2-label">Leave type<select class="m2-select" id="m2-lv-type" data-d="type">${types.map(([k,v])=>`<option value="${k}"${k===(o.type||'annual_leave')?' selected':''}>${m2_esc(v)}</option>`).join('')}</select></label>`;
   const step={key,title:'Apply for leave',fixed:true,render:()=>`
-    ${o.fixed?`<div style="display:flex;flex-direction:column;padding:12px 14px;background:#FAF0F2;border-radius:12px"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">${m2_esc(m2_long(o.start))}</span>${o.shift?`<span style="font-size:13px;color:#6E5F62">Your shift ${m2_esc(m2_range(o.shift.start_time,o.shift.end_time))}</span>`:''}</div>`
-      :`<div style="display:flex;gap:10px"><label class="m2-label" style="flex:1">First day<input class="m2-input" type="date" id="m2-lv-start" data-d="start" min="${m2_today()}"></label><label class="m2-label" style="flex:1">Last day<input class="m2-input" type="date" id="m2-lv-end" data-d="end" min="${m2_today()}"></label></div>`}
-    <label class="m2-label">Leave type<select class="m2-select" id="m2-lv-type" data-d="type">${types.map(([k,v])=>`<option value="${k}"${k===(o.type||'annual_leave')?' selected':''}>${m2_esc(v)}</option>`).join('')}</select></label>
+    ${o.fixed?`<div style="display:flex;flex-direction:column;padding:12px 14px;background:#FAF0F2;border-radius:12px"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">${m2_esc(m2_long(o.start))}</span>${o.shift?`<span style="font-size:13px;color:#6E5F62">Your shift ${m2_esc(m2_range(o.shift.start_time,o.shift.end_time))}</span>`:''}</div>${typeRow}`
+      :`${typeRow}<div class="m2-label">Dates<button type="button" class="m2-datebtn" id="m2-lv-dates"><span id="m2-lv-dates-t">Choose dates</span>${M2_ICON.chev}</button><span class="m2-datesub" id="m2-lv-dates-s"></span></div>
+       <input type="hidden" id="m2-lv-start" data-d="start"><input type="hidden" id="m2-lv-end" data-d="end">`}
     <label class="m2-label">Reason (optional)<input class="m2-input" id="m2-lv-reason" data-d="reason" placeholder="e.g. unwell"></label>
     <div id="m2-lv-check"></div>
     <div class="m2-foot"><label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.45"><input type="checkbox" id="m2-lv-ok" data-d="ok" style="width:20px;height:20px;margin:0;flex-shrink:0;accent-color:#8B2535"> I have checked I have enough leave to cover this. If unsure, I'll check with my manager first.</label>
@@ -19458,23 +19484,201 @@ function m2_openLeaveForm(o){
       const typeEl=m2_el('m2-lv-type'), ok=m2_el('m2-lv-ok'), send=m2_el('m2-lv-send'), check=m2_el('m2-lv-check');
       const dates=()=>o.fixed?[o.start,o.end]:[m2_el('m2-lv-start').value,m2_el('m2-lv-end').value];
       let blocked=false, seq=0;
+      const showDates=async()=>{
+        if(o.fixed) return;
+        const [a,b]=dates(), t=m2_el('m2-lv-dates-t'), sub=m2_el('m2-lv-dates-s'); if(!t) return;
+        if(!a){ t.textContent='Choose dates'; t.classList.remove('set'); sub.textContent=''; return; }
+        t.textContent=m2_pkRangeLabel(a,b||a); t.classList.add('set');
+        sub.textContent='';
+        try{ const n=(await db.get('roster_shifts',{employee_id:me.id,date:{gte:a,lte:b||a}})).filter(x=>!x.is_day_off&&x.start_time).length;
+          if(dates()[0]===a) sub.textContent=n?`Covers ${n} of your shift${n===1?'':'s'}`:'No rostered shifts yet (roster may not be out)'; }catch(e){}
+      };
       const recheck=async()=>{
         const my=++seq; const [a,b]=dates(); blocked=false;
-        if(typeEl.value!=='annual_leave'||!a||!b){ check.innerHTML=''; upd(); return; }
+        if(typeEl.value!=='annual_leave'||!a){ check.innerHTML=''; upd(); return; }
         check.innerHTML=`<div class="m2-note">Checking who else is on leave…</div>`;
-        const c=await reqAnnualLeaveConflicts(me,typeEl.value,a,b<a?a:b); if(my!==seq) return;
+        const c=await m2_pkConflicts(me,a,b||a); if(my!==seq) return;
         blocked=c.length>0;
-        check.innerHTML=blocked?`<div class="m2-warn">${M2_ICON.warn}<span><b>Someone in your group already has annual leave then:</b> ${c.map(x=>`${m2_esc(String(x.empName).split(' ')[0])} (${m2_esc(m2_short(x.date))})`).join(', ')}. Speak to your manager before booking.</span></div>`
+        if(blocked&&!o.fixed){
+          /* Annual leave chosen after picking dates that include a colleague's leave: clear them. */
+          m2_el('m2-lv-start').value=''; m2_el('m2-lv-end').value=''; blocked=false; showDates();
+          check.innerHTML=`<div class="m2-warn">${M2_ICON.warn}<span>${m2_esc(c[0].name)} already has leave on ${m2_esc(m2_pkRangeLabel(c[0].date,c[0].date))}. Your dates were cleared — pick again, or talk to your manager.</span></div>`;
+        } else check.innerHTML=blocked?`<div class="m2-warn">${M2_ICON.warn}<span>${m2_esc(c[0].name)} already has leave on this day, please talk to your manager.</span></div>`
           :`<div class="m2-good">${M2_ICON.tick}<span>No one else in your group is on annual leave then.</span></div>`;
         upd();
       };
-      const upd=()=>{ send.disabled=!ok.checked||blocked; };
+      const upd=()=>{ const [a]=dates(); send.disabled=!ok.checked||blocked||!a; };
       typeEl.onchange=recheck; ok.onchange=upd;
-      if(!o.fixed){ m2_el('m2-lv-start').onchange=()=>{ const e=m2_el('m2-lv-end'); if(!e.value||e.value<m2_el('m2-lv-start').value) e.value=m2_el('m2-lv-start').value; recheck(); }; m2_el('m2-lv-end').onchange=recheck; }
-      recheck();
-      send.onclick=()=>{ const [a,b]=dates(); m2_commit(reqBuildLeave(me,typeEl.value,a,b,m2_el('m2-lv-reason').value.trim()),key); };
+      if(!o.fixed) m2_el('m2-lv-dates').onclick=()=>{ m2_sheetSaveDraft(); const [a,b]=dates(); m2_openLeavePicker({key,type:typeEl.value,start:a,end:b}); };
+      showDates(); recheck();
+      send.onclick=()=>{ const [a,b]=dates(); m2_commit(reqBuildLeave(me,typeEl.value,a,b||a,m2_el('m2-lv-reason').value.trim()),key); };
     }};
   if(o.fixed) m2_sheetPush(step); else m2_sheetOpen(step);
+}
+function m2_pkRangeLabel(a,b){
+  const f=(k,o)=>m2_fmt(k,o).replace(/,/g,'');   // en-AU adds "Mon, 16 Nov" in some forms
+  if(a===b) return f(a,{weekday:'short',day:'numeric',month:'short'});
+  const sameM=a.slice(0,7)===b.slice(0,7);
+  return `${f(a,sameM?{weekday:'short',day:'numeric'}:{weekday:'short',day:'numeric',month:'short'})} – ${f(b,{weekday:'short',day:'numeric',month:'short'})}`;
+}
+/* Annual-leave clashes with my staff group over a range: leave ENTRIES and APPROVED requests
+   (the old check read entries only, so leave approved for an unrostered fortnight never
+   blocked). Pending requests do not block (Joel 11 Nov) — the picker only marks them. */
+async function m2_pkConflicts(me,a,b){
+  const out=[];
+  for(let ms=m2_monthStart(a);ms<=b;ms=m2_addMonth(ms,1)){
+    const d=await m2_pkMonth(ms);
+    Object.entries(d.annual).forEach(([day,ids])=>{ if(day>=a&&day<=b) ids.forEach(id=>out.push({date:day,name:m2_first(m2_emp(id)||{name:'A colleague'})})); });
+  }
+  return out.sort((x,y)=>x.date.localeCompare(y.date));
+}
+/* Picker data for one month, from the Leave tab's month cache plus colleagues' pending leave
+   requests (one extra read per month, cached). Everything is for MY staff group. */
+const m2_pkCache={};
+async function m2_pkMonth(ms){
+  const c=m2_pkCache[ms]; if(c&&Date.now()-c.at<M2_FRESH_MS) return c;
+  const me=m2_me(), g=m2_groupOf(me), me_=m2_monthEnd(ms);
+  const [mon,reqs]=await Promise.all([m2_fetchMonth(ms),db.get('requests',{type:'leave',leave_end_date:{gte:ms}}).catch(()=>[])]);
+  const annual={}, any={}, pending={}, mine={};
+  const mark=(map,day,id)=>{ (map[day]=map[day]||new Set()).add(String(id)); };
+  const span=(a,b,fn)=>{ for(let k=a<ms?ms:a;k<=b&&k<=me_;k=m2_add(k,1)) fn(k); };
+  mon.entries.forEach(e=>{ if(e.leaveType==='public_holiday') return; const id=String(e.employeeId);
+    if(id===String(me.id)){ mark(mine,e.date,id); return; }
+    if(m2_groupOf(m2_emp(id))!==g) return;
+    mark(any,e.date,id); if(e.leaveType==='annual_leave') mark(annual,e.date,id); });
+  mon.approved.forEach(r=>{ const id=String(r.initiatorId);
+    if(id===String(me.id)){ span(r.leaveStartDate,r.leaveEndDate,k=>mark(mine,k,id)); return; }
+    if(m2_groupOf(m2_emp(id))!==g) return;
+    span(r.leaveStartDate,r.leaveEndDate,k=>{ mark(any,k,id); if(r.leaveType==='annual_leave') mark(annual,k,id); }); });
+  reqs.map(normaliseRequest).filter(r=>!reqIsClosed(r)&&r.leaveStartDate<=me_).forEach(r=>{ const id=String(r.initiatorId);
+    if(id===String(me.id)){ span(r.leaveStartDate,r.leaveEndDate,k=>mark(mine,k,id)); return; }
+    if(m2_groupOf(m2_emp(id))!==g||r.leaveType!=='annual_leave') return;
+    span(r.leaveStartDate,r.leaveEndDate,k=>mark(pending,k,id)); });
+  return (m2_pkCache[ms]={month:ms,annual,any,pending,mine,ph:mon.ph||new Set(),at:Date.now()});
+}
+/* The range picker step (Joel 11 Nov): tap the first day, then the last (airline style); the
+   same day twice = one day. Annual leave: days a colleague in my group already has leave are
+   greyed and can't be picked, and a range can't cross one; a colleague's PENDING request is
+   striped but pickable. My own leave days are outlined and can't be picked. Past days can't
+   be picked (no backdating — a manager task). Shading matches the Leave calendar. */
+let m2_pk=null;
+function m2_openLeavePicker(o){
+  const t=m2_today();
+  m2_pk={key:o.key,type:o.type,a:o.start||null,b:o.end||null,ms:m2_monthStart(o.start||m2_month||t),note:''};
+  m2_sheetPush({title:'Choose dates',render:()=>`
+    <div class="m2-monthnav"><button class="m2-icon-btn" aria-label="Previous month" onclick="m2_pkMove(-1)">${M2_ICON.left}</button>
+      <div class="m2-monthlabel" id="m2-pk-label">${m2_esc(m2_monthLabel(m2_pk.ms))}</div>
+      <button class="m2-icon-btn" aria-label="Next month" onclick="m2_pkMove(1)">${M2_ICON.right}</button></div>
+    <div class="m2-calwrap" id="m2-pk-wrap"><div class="m2-calpage" id="m2-pk-grid"><div class="m2-empty">Loading…</div></div></div>
+    <div class="m2-foot"><div class="m2-pk-note" id="m2-pk-note" role="status"></div><div class="m2-pk-sum" id="m2-pk-sum"></div><button class="m2-btn" id="m2-pk-done" onclick="m2_pkDone()" disabled>Done</button></div>`,
+    after:()=>{ m2_pkDraw(); m2_bindPkSwipe(); }});
+}
+async function m2_pkDraw(){
+  const pk=m2_pk, grid=m2_el('m2-pk-grid'); if(!pk||!grid) return;
+  const ms=pk.ms; let d;
+  try{ d=await m2_pkMonth(ms); }catch(e){ grid.innerHTML=`<div class="m2-note">Couldn't load the month.</div>`; return; }
+  if(m2_pk!==pk||pk.ms!==ms||!m2_el('m2-pk-grid')) return;
+  m2_el('m2-pk-grid').innerHTML=m2_pkGrid(d);
+  m2_pkFoot();
+  [-1,1].forEach(n=>m2_pkMonth(m2_addMonth(ms,n)).catch(()=>{}));
+}
+function m2_pkState(d,k){
+  const t=m2_today(), annual=m2_pk.type==='annual_leave';
+  if(k<t) return 'past';
+  if(d.mine[k]) return 'mine';
+  if(annual&&d.annual[k]) return 'blocked';
+  return '';
+}
+function m2_pkGrid(d){
+  const pk=m2_pk, ms=d.month, me_=m2_monthEnd(ms), t=m2_today(), g0=m2_mondayOf(ms), a=pk.a, b=pk.b||pk.a;
+  let html=`<div class="m2-box" style="padding:10px"><div class="m2-cal pkcal">${['M','T','W','T','F','S','S'].map(x=>`<div class="m2-cal-h">${x}</div>`).join('')}`;
+  for(let i=0;i<42;i++){
+    const k=m2_add(g0,i);
+    if(k<ms||k>me_){ html+=`<div class="m2-cal-d out" aria-hidden="true">${+k.slice(8)}</div>`; continue; }
+    const st=m2_pkState(d,k), cls=['m2-cal-d','pk'];
+    if(k===t) cls.push('today'); if(d.ph.has(k)) cls.push('ph'); if(d.any[k]) cls.push('lv');
+    if(d.pending[k]&&!d.any[k]) cls.push('pend');
+    if(st) cls.push(st);
+    if(a&&k>=a&&k<=b){ cls.push('rng'); if(k===a) cls.push('rs'); if(k===b) cls.push('re'); }
+    const who=d.any[k]?[...d.any[k]].map(id=>m2_first(m2_emp(id)||{name:'Colleague'})).join(', '):'';
+    const lab=`${m2_long(k)}${d.ph.has(k)?', public holiday':''}${who?', on leave: '+who:''}${d.pending[k]?', requested':''}${st==='blocked'?', not available':st==='mine'?', you already have leave':''}`;
+    html+=`<button class="${cls.join(' ')}" aria-label="${m2_esc(lab)}"${a&&k>=a&&k<=b?' aria-pressed="true"':''} onclick="m2_pkTap('${k}')">${+k.slice(8)}</button>`;
+  }
+  return html+`</div></div>`;
+}
+function m2_pkTap(k){
+  const pk=m2_pk; if(!pk||Date.now()<m2_pkNoTap) return;
+  const d=m2_pkCache[pk.ms]; if(!d) return;
+  const st=m2_pkState(d,k);
+  pk.note='';
+  if(st==='past'){ pk.note="Leave can't start in the past — ask your manager to record it."; }
+  else if(st==='mine'){ pk.note='You already have leave on this day.'; }
+  else if(st==='blocked'){ const id=[...d.annual[k]][0]; pk.note=`${m2_first(m2_emp(id)||{name:'A colleague'})} already has leave on this day, please talk to your manager.`; }
+  else if(!pk.a||pk.b||k<pk.a){ pk.a=k; pk.b=null; }
+  else if(k===pk.a){ pk.b=k; }
+  else {
+    /* A range can't cross a blocked day or my own leave: start again from the tapped day. */
+    const bad=m2_pkFirstBad(pk.a,k);
+    if(bad){ pk.a=k; pk.b=null; pk.note=bad.mine?'That range crosses leave you already have — starting again from here.':`That range crosses ${bad.name}'s leave — starting again from here.`; }
+    else pk.b=k;
+  }
+  const grid=m2_el('m2-pk-grid'); if(grid) grid.innerHTML=m2_pkGrid(d);
+  m2_pkFoot();
+}
+function m2_pkFirstBad(a,b){
+  for(let k=a;k<=b;k=m2_add(k,1)){
+    const d=m2_pkCache[m2_monthStart(k)]; if(!d) continue;
+    const st=m2_pkState(d,k);
+    if(st==='mine') return {mine:true};
+    if(st==='blocked') return {name:m2_first(m2_emp([...d.annual[k]][0])||{name:'a colleague'})};
+  }
+  return null;
+}
+function m2_pkFoot(){
+  const pk=m2_pk, sum=m2_el('m2-pk-sum'), done=m2_el('m2-pk-done'), note=m2_el('m2-pk-note'); if(!sum) return;
+  note.textContent=pk.note||'';
+  if(!pk.a){ sum.textContent='Tap your first day of leave'; done.disabled=true; return; }
+  const b=pk.b||pk.a;
+  sum.innerHTML=pk.b?`<b>${m2_esc(m2_pkRangeLabel(pk.a,b))}</b>`:`<b>${m2_esc(m2_pkRangeLabel(pk.a,pk.a))}</b> · tap your last day, or Done for one day`;
+  done.disabled=false;
+}
+function m2_pkDone(){
+  const pk=m2_pk; if(!pk||!pk.a) return;
+  const b=pk.b||pk.a;
+  /* Write the dates into the form's draft, then step back: the form redraws from its draft. */
+  const dr=m2_drafts[pk.key]||(m2_drafts[pk.key]={}); dr.start=pk.a; dr.end=b;
+  m2_sheetNav();
+}
+let m2_pkNoTap=0, m2_pkAnimating=false;
+function m2_pkMove(dir){
+  const pk=m2_pk; if(!pk||m2_pkAnimating) return;
+  const t=m2_monthStart(m2_today()), next=m2_addMonth(pk.ms,dir);
+  if(next<t) return;   // nothing to pick before this month
+  pk.ms=next; pk.note='';
+  const lab=m2_el('m2-pk-label'); if(lab) lab.textContent=m2_monthLabel(next);
+  const grid=m2_el('m2-pk-grid'); if(!grid){ return; }
+  /* Slide the month across, the Leave calendar's motion. */
+  m2_pkAnimating=true;
+  grid.style.transition='transform 160ms ease-in, opacity 160ms ease-in'; grid.style.transform=`translateX(${-dir*30}%)`; grid.style.opacity='0';
+  setTimeout(async()=>{
+    const cached=m2_pkCache[next];
+    grid.style.transition='none'; grid.style.transform=`translateX(${dir*30}%)`;
+    grid.innerHTML=cached?m2_pkGrid(cached):`<div class="m2-empty">Loading…</div>`;
+    void grid.offsetWidth;
+    grid.style.transition='transform 220ms cubic-bezier(.25,.8,.25,1), opacity 220ms ease-out'; grid.style.transform=''; grid.style.opacity='1';
+    setTimeout(()=>{ m2_pkAnimating=false; },230);
+    if(!cached) m2_pkDraw(); else { m2_pkFoot(); [-1,1].forEach(n=>m2_pkMonth(m2_addMonth(next,n)).catch(()=>{})); }
+  },160);
+}
+function m2_bindPkSwipe(){
+  const el=m2_el('m2-pk-wrap'); if(!el) return;
+  let x0=0,y0=0,cx=0,on=false,locked=false,horiz=false; const vt=m2_vt();
+  el.addEventListener('touchstart',e=>{ const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; on=true; locked=false; horiz=false; vt.reset(cx); },{passive:true});
+  el.addEventListener('touchmove',e=>{ if(!on) return; const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX; vt.add(cx);
+    if(!locked){ if(Math.abs(dx)<6&&Math.abs(dy)<6) return; horiz=Math.abs(dx)>Math.abs(dy); locked=true; }
+    if(horiz) e.preventDefault(); },{passive:false});
+  el.addEventListener('touchend',()=>{ if(!on) return; on=false; if(!horiz) return; m2_pkNoTap=Date.now()+350;
+    const dx=cx-x0; if(m2_swipeCommits(dx,vt.v(),el.offsetWidth)) m2_pkMove(dx<0?1:-1); },{passive:true});
 }
 
 /* ── pick up / accept / decline / your request ─────────────────────────── */
