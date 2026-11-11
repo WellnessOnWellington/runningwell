@@ -18776,7 +18776,7 @@ function m2_awayTiles(day,sel){
     html+=`<section style="margin-top:8px"><h2 class="m2-h2"><span class="m2-dot" style="background:${colour}"></span>${label}</h2>`;
     people.forEach(([id,type])=>{
       const e=m2_emp(id); if(!e) return;
-      const mine=!!me&&String(e.id)===String(me.id), name=m2_first(e)+(mine?' (you)':'');
+      const mine=!!me&&String(e.id)===String(me.id), name=m2_first(e);   // burgundy name marks you; no "(you)" (Joel 12 Nov)
       const shifts=d.shifts.filter(s=>String(s.employee_id)===String(id)&&!s.is_day_off&&s.start_time&&s.end_time).sort((a,b)=>a.start_time.localeCompare(b.start_time));
       if(!shifts.length){
         const kind=type==='annual_leave'?'annual':'other';
@@ -19120,7 +19120,7 @@ function m2_dayPage(d){
       const kind=m2_leaveKind(lv);
       let dot;
       if(isToday&&!lv){ const ent=d.entries.find(x=>String(x.employeeId)===String(e.id)&&x.clockIn&&!x.leaveType); dot=!!(ent&&!ent.clockOut); }
-      html+=m2_pill({size:'md',kind,me:me&&e.id===me.id,dot,name:m2_first(e)+(me&&e.id===me.id?' (you)':''),s:s.start_time,e:s.end_time,ink:colour,
+      html+=m2_pill({size:'md',kind,me:me&&e.id===me.id,dot,name:m2_first(e),s:s.start_time,e:s.end_time,ink:colour,
         time:kind?m2_leaveTag(kind):m2_esc(m2_range(s.start_time,s.end_time)),
         onclick:m2_on(()=>m2_openShift(s,e))});
     });
