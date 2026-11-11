@@ -2250,6 +2250,15 @@
   .m2-sheet.fixed .m2-sheet-body { flex:1; min-height:0; }
   .m2-sheet.fixed .m2-step { flex:1 0 auto; }
   .m2-sheet.fixed .m2-foot { margin-top:auto; position:sticky; bottom:calc(-24px - env(safe-area-inset-bottom)); margin-bottom:calc(-24px - env(safe-area-inset-bottom)); padding:12px 0 calc(16px + env(safe-area-inset-bottom)); background:#FDFAF9; box-shadow:0 -10px 12px -10px rgba(45,36,38,0.10); z-index:1; }
+  /* Request charts: the exchanged shifts tinted and labelled from my side. */
+  .m2-pill-row.sm.mk.give { background:#F6E1E6; }
+  .m2-pill-row.sm.mk.take { background:#DFF0E5; }
+  .m2-pill-row.sm.mk .m2-pill-name { color:var(--charcoal); }
+  .sm .m2-pill-time { width:66px; flex-shrink:0; }
+  .m2-xtag { display:inline-block; width:100%; box-sizing:border-box; text-align:center; padding:2px 0; border-radius:999px; font-size:11px; font-weight:800; line-height:14px; }
+  .m2-xtag.give { background:#8B2535; color:#fff; }
+  .m2-xtag.take { background:#2E7D52; color:#fff; }
+  .m2-rq-open { display:flex; align-items:center; gap:8px; width:100%; border:none; background:none; padding:0; text-align:left; font-family:'Nunito',sans-serif; color:inherit; cursor:pointer; }
   .m2-skel { height:30px; border-radius:6px; background:linear-gradient(90deg,#F1E9EB 0%,#F8F3F4 50%,#F1E9EB 100%); background-size:200% 100%; animation:m2skel 1.2s ease-in-out infinite; }
   .m2-skel.btn { height:50px; border-radius:11px; }
   @keyframes m2skel { from { background-position:100% 0; } to { background-position:-100% 0; } }
@@ -18452,10 +18461,11 @@ function m2_renderSwaps(panel,d){
       const detail=r.type==='swap'
         ?`Their ${m2_esc(m2_short(r.initiatorShiftDate))} ${m2_esc(m2_range(r.initiatorShiftStart,r.initiatorShiftEnd))} for your ${m2_esc(m2_short(r.colleagueShiftDate))} ${m2_esc(m2_range(r.colleagueShiftStart,r.colleagueShiftEnd))}`
         :`${m2_esc(m2_short(r.initiatorShiftDate))} · ${m2_esc(m2_range(r.initiatorShiftStart,r.initiatorShiftEnd))}`;
-      html+=`<div class="m2-box" style="margin-bottom:8px"><div style="display:flex;flex-direction:column;gap:2px">
+      /* The whole top of the card opens the details with the day charts (Joel 11 Nov). */
+      html+=`<div class="m2-box" style="margin-bottom:8px"><button class="m2-rq-open" onclick="${m2_on(()=>m2_openRequest(r))}"><span style="flex:1;display:flex;flex-direction:column;gap:2px">
         <span style="font-size:15px;font-weight:800;color:var(--charcoal)">${head}</span>
         <span style="font-size:14px">${detail}</span>
-        <span class="m2-note">${r.type==='swap'?'A swap: you each take the other\'s shift':'A give-away: you take it, nothing comes back'}</span></div>
+        <span class="m2-note">${r.type==='swap'?'A swap: you each take the other\'s shift':'A give-away: you take it, nothing comes back'}</span></span>${M2_ICON.chev}</button>
         <div style="display:flex;gap:8px"><button class="m2-btn plain" style="min-height:44px;font-size:15px" onclick="${m2_on(()=>m2_openDecline(r))}">Decline</button>
         <button class="m2-btn" style="min-height:44px;font-size:15px" onclick="${m2_on(()=>m2_openAccept(r))}">Accept</button></div></div>`;
     });
@@ -19414,16 +19424,19 @@ async function m2_dayRoster(date){
   const [shifts,entries]=await Promise.all([db.get('roster_shifts',{date}),db.get('entries',{date,leave_type:{'not.is':'null'}})]);
   return {shifts,leave:m2_leaveRows(entries)};
 }
-function m2_dayPills(day,group,meId,openShiftId){
+function m2_dayPills(day,group,meId,openShiftId,marks){
   const rows=day.shifts.filter(s=>!s.is_day_off&&s.start_time&&s.end_time).filter(s=>{ const e=m2_emp(s.employee_id); return e&&m2_groupOf(e)===group; })
     .sort((a,b)=>a.start_time.localeCompare(b.start_time));
   if(!rows.length) return `<div class="m2-note">Nobody else rostered.</div>`;
   return `<div style="display:flex;flex-direction:column;gap:4px">`+rows.map(s=>{
     const e=m2_emp(s.employee_id), mine=meId&&e.id===meId, isOpen=e.is_placeholder;
-    if(isOpen&&String(s.id)!==String(openShiftId)) return m2_pill({size:'sm',kind:'open',name:'Cover',s:s.start_time,e:s.end_time,ink:'#8A4310'});
-    if(isOpen) return m2_pill({size:'sm',kind:'open',name:'This shift',s:s.start_time,e:s.end_time,ink:'#8A4310'});
+    const mk=marks&&marks[String(s.id)];
+    if(mk) return m2_pill({size:'sm',kind:'mk '+mk.cls,me:mine,name:isOpen?'Cover':mine?'You':m2_first(e),s:s.start_time,e:s.end_time,ink:mk.cls==='give'?'#8B2535':'#2E7D52',time:`<span class="m2-xtag ${mk.cls}">${m2_esc(mk.label)}</span>`});
+    const col=marks?{time:''}:{};   // with labels in play, every row keeps the same bar length
+    if(isOpen&&String(s.id)!==String(openShiftId)) return m2_pill({size:'sm',kind:'open',name:'Cover',s:s.start_time,e:s.end_time,ink:'#8A4310',...col});
+    if(isOpen) return m2_pill({size:'sm',kind:'open',name:'This shift',s:s.start_time,e:s.end_time,ink:'#8A4310',...col});
     const lv=leaveEntryFor(e.id,s.date,s.id,day.leave);
-    return m2_pill({size:'sm',me:mine,kind:m2_leaveKind(lv),name:mine?'You':m2_first(e),s:s.start_time,e:s.end_time,ink:mine?'#8B2535':m2_groupColour(group)});
+    return m2_pill({size:'sm',me:mine,kind:m2_leaveKind(lv),name:mine?'You':m2_first(e),s:s.start_time,e:s.end_time,ink:mine?'#8B2535':m2_groupColour(group),...col});
   }).join('')+`</div>`;
 }
 /* Why a shift can't be changed — the sheet still opens and says so. */
@@ -19841,9 +19854,9 @@ function m2_openPickup(s){
       }catch(e){ const a=m2_el('m2-pu-act'); if(a) a.innerHTML=`<div class="m2-note">Couldn't check this shift — try again.</div>`; }
     }});
 }
-function m2_openAccept(r){
+function m2_openAccept(r,push){
   const me=m2_me(), who=String(r.initiatorName).split(' ')[0];
-  m2_sheetOpen({title:r.type==='swap'?`Accept ${who}'s swap?`:`Accept ${who}'s shift?`,render:()=>`
+  (push?m2_sheetPush:m2_sheetOpen)({title:r.type==='swap'?`Accept ${who}'s swap?`:`Accept ${who}'s shift?`,render:()=>`
     <section><h2 class="m2-h2">What will change</h2><div class="m2-box" style="gap:0;padding:4px 14px">
       <div class="m2-row">${M2_ICON.tick}<span style="font-size:15px">You'll be working <b>${m2_esc(m2_short(r.initiatorShiftDate))}, ${m2_esc(m2_range(r.initiatorShiftStart,r.initiatorShiftEnd))}</b></span></div>
       ${r.type==='swap'?`<div class="m2-row"><span style="width:18px;text-align:center;font-weight:800;color:var(--burgundy)">←</span><span style="font-size:15px">You'll no longer work your <b>${m2_esc(m2_short(r.colleagueShiftDate))}, ${m2_esc(m2_range(r.colleagueShiftStart,r.colleagueShiftEnd))}</b></span></div>`:''}
@@ -19858,29 +19871,64 @@ function m2_openAccept(r){
       act.querySelector('button').onclick=()=>m2_commit(reqBuildPeerResponse(r,'accepted',''));
     }});
 }
-function m2_openDecline(r){
+function m2_openDecline(r,push){
   const who=String(r.initiatorName).split(' ')[0], key='decline:'+r.id;
-  m2_sheetOpen({key,title:`Decline ${who}'s ${r.type==='swap'?'swap':'offer'}?`,render:()=>`
+  (push?m2_sheetPush:m2_sheetOpen)({key,title:`Decline ${who}'s ${r.type==='swap'?'swap':'offer'}?`,render:()=>`
     <div class="m2-box" style="flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">${m2_esc(m2_short(r.initiatorShiftDate))} · ${m2_esc(m2_range(r.initiatorShiftStart,r.initiatorShiftEnd))}</span><span style="font-size:13px;color:#6E5F62">${m2_esc(who)}'s ${r.type==='swap'?'swap':'give-away'}</span></div>
     <label class="m2-label">Reason (optional)<textarea class="m2-textarea" id="m2-dc-reason" data-d="reason" rows="3" placeholder="e.g. I'm away that week"></textarea></label>
     <div class="m2-note">${m2_esc(who)} will be told, with your reason if you add one.</div>
     <button class="m2-btn ghost" id="m2-dc-send">Decline</button>`,
     after:()=>{ m2_el('m2-dc-send').onclick=()=>m2_commit(reqBuildPeerResponse(r,'declined',m2_el('m2-dc-reason').value.trim()),key); }});
 }
-function m2_openRequest(r){
-  const me=m2_me(), st=m2_requestState(r), canWithdraw=me&&r.initiatorId===me.id&&(r.status==='pending_peer'||r.status==='pending_manager');
-  const rows=r.type==='swap'?[['You give',`${m2_short(r.initiatorShiftDate)} · ${m2_range(r.initiatorShiftStart,r.initiatorShiftEnd)}`],['You take',`${m2_short(r.colleagueShiftDate)} · ${m2_range(r.colleagueShiftStart,r.colleagueShiftEnd)}`]]
-    :r.type==='leave'?[['Leave',formatLeaveType(r.leaveType)],['When',m2_requestWhen(r)]]
-    :[[r.type==='pickup'?'Shift':'You give',`${m2_short(r.initiatorShiftDate)} · ${m2_range(r.initiatorShiftStart,r.initiatorShiftEnd)}`]];
+/* A request's details (Joel 11 Nov): for swaps, give-aways and pick-ups, each day involved is
+   drawn as the same mini day chart as shift details — that role's day, with the shifts being
+   exchanged highlighted and labelled from MY side ("You give" / "You take"). A same-day swap
+   is one chart. Progress underneath. Opened from my own request cards AND from an incoming
+   request (then Accept / Decline sit in the pinned footer). Day data: Who's On's cache, else
+   up to ~180 ms wait, else placeholder rows that ease to size (as shift details). */
+async function m2_openRequest(r){
+  const me=m2_me(), st=m2_requestState(r), mine=!!me&&r.initiatorId===me.id;
+  const incoming=!!me&&!mine&&r.colleagueId===me.id&&r.status==='pending_peer';
+  const canWithdraw=mine&&(r.status==='pending_peer'||r.status==='pending_manager');
   const ds=reqDisplayStatus(r);
   const steps=r.type==='leave'||r.type==='pickup'
     ?[['Sent',true],['Waiting for a manager',ds==='pending_manager'],['Manager decides',false]]
-    :[['Sent',true],[`Waiting for ${String(r.colleagueName||'').split(' ')[0]} to answer`,ds==='pending_peer'],['Then a manager approves',ds==='pending_manager']];
-  m2_sheetOpen({title:m2_requestTitle(r),render:()=>`
-    <div class="m2-box" style="gap:0;padding:4px 14px">${rows.map(([k,v])=>`<div class="m2-row"><span style="width:84px;font-size:13px;font-weight:800;color:#6E5F62">${m2_esc(k)}</span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(v)}</span></div>`).join('')}</div>
-    ${reqIsClosed(r)?`<span class="m2-chip ${st.cls}">${m2_esc(st.text)}</span>`:`<section><h2 class="m2-h2">Progress</h2><div class="m2-progress">${steps.map(([t,cur],i)=>`<div><i style="${i===0?'background:#3A6B4F':cur?'border:2.5px solid #A07228;background:#FDF3E2':'border:2px solid #D9C4C8'}"></i><span${!cur&&i?' style="color:#6E5F62"':''}>${i===0?`<b>Sent</b> · ${m2_esc(m2_short(String(r.createdAt).slice(0,10)))}`:cur?`<b>${m2_esc(t)}</b>`:m2_esc(t)}</span></div>`).join('')}</div></section>`}
-    ${r.reason?`<div class="m2-note">Your reason: ${m2_esc(r.reason)}</div>`:''}
-    ${canWithdraw?`<button class="m2-btn ghost" onclick="${m2_on(()=>m2_openWithdraw(r))}">Withdraw request</button>`:''}`});
+    :[['Sent',true],[`Waiting for ${incoming?'your answer':String(r.colleagueName||'').split(' ')[0]+' to answer'}`,ds==='pending_peer'],['Then a manager approves',ds==='pending_manager']];
+  const progress=reqIsClosed(r)?`<span class="m2-chip ${st.cls}">${m2_esc(st.text)}</span>`
+    :`<section><h2 class="m2-h2">Progress</h2><div class="m2-progress">${steps.map(([t,cur],i)=>`<div><i style="${i===0?'background:#3A6B4F':cur?'border:2.5px solid #A07228;background:#fff':'border:2px solid #CDBFC2;background:#fff'}"></i><span style="${cur?'font-weight:800;color:var(--charcoal)':''}">${m2_esc(t)}</span></div>`).join('')}</div></section>`;
+  const reason=r.reason?`<div class="m2-note">${mine?'Your reason':'Their reason'}: ${m2_esc(r.reason)}</div>`:'';
+  const foot=incoming?`<div class="m2-foot"><div style="display:flex;gap:8px"><button class="m2-btn plain" onclick="${m2_on(()=>m2_openDecline(r,true))}">Decline</button><button class="m2-btn" onclick="${m2_on(()=>m2_openAccept(r,true))}">Accept</button></div></div>`
+    :canWithdraw?`<div class="m2-foot"><button class="m2-btn ghost" onclick="${m2_on(()=>m2_openWithdraw(r))}">Withdraw request</button></div>`:'';
+  if(r.type==='leave'){
+    const rows=[['Leave',formatLeaveType(r.leaveType)],['When',m2_requestWhen(r)]];
+    m2_sheetOpen({title:m2_requestTitle(r),render:()=>`<div class="m2-box" style="gap:0;padding:4px 14px">${rows.map(([k,v])=>`<div class="m2-row"><span style="width:84px;font-size:13px;font-weight:800;color:#6E5F62">${m2_esc(k)}</span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(v)}</span></div>`).join('')}</div>${progress}${reason}${foot}`});
+    return;
+  }
+  /* Which shift I give and which I take, from my side of the request. */
+  const iS={id:r.initiatorShiftId,date:r.initiatorShiftDate,s:r.initiatorShiftStart,e:r.initiatorShiftEnd};
+  const cS={id:r.colleagueShiftId,date:r.colleagueShiftDate,s:r.colleagueShiftStart,e:r.colleagueShiftEnd};
+  let give=null, take=null;
+  if(r.type==='swap'){ give=mine?iS:cS; take=mine?cS:iS; }
+  else if(r.type==='giveaway'){ if(mine) give=iS; else take=iS; }
+  else if(r.type==='pickup'){ take=iS; }
+  const marks={}; if(give&&give.id) marks[String(give.id)]={label:'You give',cls:'give'}; if(take&&take.id) marks[String(take.id)]={label:'You take',cls:'take'};
+  const dates=[...new Set([give&&give.date,take&&take.date].filter(Boolean))].sort();
+  const group=m2_groupOf(me)||m2_groupOf(m2_emp(r.initiatorId));
+  const load=Promise.all(dates.map(d=>m2_dayFromCache(d)||m2_dayRoster(d)));
+  let ready=null; try{ ready=await Promise.race([load,new Promise(res=>setTimeout(()=>res(null),180))]); }catch(e){}
+  const skel=`<div style="display:flex;flex-direction:column;gap:4px">${'<div class="m2-skel"></div>'.repeat(4)}</div>`;
+  const summary=[give&&['You give',give],take&&['You take',take]].filter(Boolean).map(([k,x])=>`<div class="m2-row"><span class="m2-xtag ${k==='You give'?'give':'take'}" style="width:auto;padding:3px 9px">${k}</span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(m2_short(x.date))} · ${m2_esc(m2_range(x.s,x.e))}</span></div>`).join('');
+  const who=r.type==='pickup'?'':mine?String(r.colleagueName||'').split(' ')[0]:String(r.initiatorName||'').split(' ')[0];
+  m2_sheetOpen({key:'req:'+r.id,title:'',fixed:true,render:()=>`
+    ${m2_sheetHeader(r.type==='swap'?'Swap':r.type==='giveaway'?'Give-away':'Pick up',m2_groupColour(group),r.type==='pickup'?'Cover shift':mine?m2_requestTitle(r):(r.type==='swap'?`${who} wants to swap`:`${who} is offering you a shift`),'','')}
+    <div class="m2-box" style="gap:0;padding:2px 14px">${summary}</div>
+    ${dates.map((d,i)=>`<section><h2 class="m2-h2">${m2_esc(m2_long(d))}${dates.length===1&&give&&take?' · both shifts':''}</h2><div id="m2-rq-day-${i}">${ready?m2_dayPills(ready[i],group,me?.id,r.type==='pickup'?iS.id:null,marks):skel}</div></section>`).join('')}
+    ${progress}${reason}${foot}`,
+    after:async()=>{
+      if(ready) return;
+      try{ const res=await load; m2_sheetGrow(()=>{ dates.forEach((d,i)=>{ const box=m2_el('m2-rq-day-'+i); if(box) box.innerHTML=m2_dayPills(res[i],group,me?.id,r.type==='pickup'?iS.id:null,marks); }); }); }
+      catch(e){ dates.forEach((d,i)=>{ const box=m2_el('m2-rq-day-'+i); if(box) box.innerHTML=`<div class="m2-note">Couldn't load the day.</div>`; }); }
+    }});
 }
 function m2_openWithdraw(r){
   const me=m2_me(), real=r.colleagueId&&m2_emps.some(e=>e.id===r.colleagueId&&!e.is_placeholder)&&r.status==='pending_peer';
