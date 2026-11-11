@@ -2153,12 +2153,10 @@
   /* "What's changed" tiles (Joel 12 Nov) */
   .m2-upd-text { font-size:14px; font-weight:700; color:var(--charcoal); line-height:1.4; }
   .m2-upd.attn { background:rgba(230,126,34,0.10); }
-  .m2-upd-wrap { position:relative; margin-bottom:8px; }
-  .m2-upd-wrap .m2-upd { margin:0; }
-  .m2-upd-x { position:absolute; top:4px; right:34px; width:36px; height:36px; border:none; background:none; border-radius:18px; color:#8A7F82; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
-  .m2-upd-x svg { width:16px; height:16px; }
-  .m2-upd-wrap.nogo .m2-upd-x { right:6px; }
-  .m2-upd-x:active { background:rgba(0,0,0,0.06); }
+  .m2-upd-wrap { position:relative; margin-bottom:8px; touch-action:pan-y; }
+  .m2-upd-wrap .m2-upd { margin:0; position:relative; }
+  .m2-upd-bg { position:absolute; inset:0; border-radius:14px; background:#EDE3E5; display:flex; align-items:center; justify-content:space-between; padding:0 18px; opacity:0; font-size:14px; font-weight:800; color:var(--burgundy); }
+  .m2-upd-bg span:last-child { visibility:hidden; } .m2-upd-bg.left span:first-child { visibility:hidden; } .m2-upd-bg.left span:last-child { visibility:visible; }
   .m2-textbtn { border:none; background:none; padding:0 4px; min-height:40px; font-family:'Nunito',sans-serif; font-size:14px; font-weight:800; color:var(--burgundy); cursor:pointer; }
   .m2-open-card { min-height:60px; display:flex; align-items:center; gap:10px; padding:12px; background:rgba(230,126,34,0.10); border-radius:14px; color:#8A4310; border:none; width:100%; text-align:left; font-family:'Nunito',sans-serif; cursor:pointer; }
   .m2-seg { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); padding:3px; gap:3px; background:var(--blush); border-radius:12px; }
@@ -18566,6 +18564,45 @@ async function m2_loadShifts(){
   return {mine,leave:lv,open:openOk,notifs:notifs.map(normaliseNotif),notes:notes.map(normaliseNote),reqs};
 }
 /* The tag on a "What's changed" tile: what kind of update it is, in the app's chip colours. */
+/* Swipe a "What's changed" tile sideways to remove it — the SWIPE STANDARD (vault plan):
+   6 px axis lock (vertical = scroll), tile follows the finger 1:1 with "Remove" underneath,
+   m2_swipeCommits on release speed (35% of width or a real flick that way; a flick back
+   cancels), slide off with m2_slideDur, else the 200 ms overshoot spring; taps ignored
+   ~350 ms after a drag. Once off-screen the gap closes, then it's acknowledged (m2_ack). */
+let m2_updNoTap=0;
+function m2_bindUpdSwipes(panel,items){
+  panel.querySelectorAll('.m2-upd-wrap').forEach(wrap=>{
+    const item=items[+wrap.dataset.ix]; if(!item) return;
+    const tile=wrap.querySelector('.m2-upd'), bg=wrap.querySelector('.m2-upd-bg');
+    let x0=0,y0=0,cx=0,on=false,locked=false,horiz=false; const vt=m2_vt();
+    wrap.addEventListener('touchstart',e=>{ const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; on=true; locked=false; horiz=false; vt.reset(cx); },{passive:true});
+    wrap.addEventListener('touchmove',e=>{
+      if(!on) return; const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX; vt.add(cx);
+      if(!locked){ if(Math.abs(dx)<6&&Math.abs(dy)<6) return; locked=true; horiz=Math.abs(dx)>Math.abs(dy); if(!horiz){ on=false; return; } }
+      e.preventDefault();
+      bg.classList.toggle('left',dx<0); bg.style.opacity='1';
+      m2_swSet(tile,dx);
+    },{passive:false});
+    const finish=()=>{
+      if(!on) return; on=false; if(!horiz) return; m2_updNoTap=Date.now()+350;
+      const dx=cx-x0, v=vt.v(), W=wrap.offsetWidth;
+      if(m2_swipeCommits(dx,v,W)){
+        const dir=dx<0?-1:1, dur=m2_slideDur(tile,W,v);
+        m2_swSet(tile,dir*(W+24),`transform ${dur}ms cubic-bezier(.25,.8,.25,1)`);
+        setTimeout(()=>{
+          wrap.style.height=wrap.offsetHeight+'px'; wrap.style.overflow='hidden'; void wrap.offsetHeight;
+          wrap.style.transition='height 200ms ease, margin 200ms ease'; wrap.style.height='0px'; wrap.style.marginBottom='0px';
+          setTimeout(()=>m2_ack([item]),210);
+        },dur);
+      } else {
+        m2_swSet(tile,0,`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`);
+        setTimeout(()=>{ bg.style.opacity='0'; },M2_CANCEL_MS);
+      }
+    };
+    wrap.addEventListener('touchend',finish,{passive:true});
+    wrap.addEventListener('touchcancel',()=>{ if(on&&horiz) m2_swSet(tile,0,`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`); on=false; },{passive:true});
+  });
+}
 /* Where tapping a "What's changed" tile goes: the request it is about (its day charts and
    progress), Timesheets, or a flagged entry's details. null = nowhere (no chevron). */
 function m2_updateTarget(i,d){
@@ -18638,14 +18675,14 @@ function m2_renderShifts(panel,d){
     const clearable=banner.filter(i=>!i.flag);
     html+=`<section aria-label="What's changed"><div style="display:flex;align-items:center;margin-bottom:6px"><h2 class="m2-h2" style="flex:1;margin:0">What's changed</h2>
       ${clearable.length?`<button class="m2-textbtn" onclick="${m2_on(()=>m2_ack(clearable))}">Clear all</button>`:''}</div>
-      ${banner.map(i=>{ const tg=m2_updateTag(i.kind), go=m2_updateTarget(i,d);
-        /* Only the x removes an update; a tap opens what it is about (Joel 12 Nov). No target
-           -> no chevron and not tappable, so the chevron always means "somewhere to go". */
-        const inner=`<span style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0;padding-right:26px"><span class="m2-chip ${tg.cls}">${m2_esc(tg.label)}</span><span class="m2-upd-text">${m2_esc(i.text)}</span></span>`;
-        return `<div class="m2-upd-wrap${go?'':' nogo'}">${go
-          ?`<button class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" onclick="${m2_on(go)}">${inner}${M2_ICON.chev}</button>`
-          :`<div class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" style="cursor:default">${inner}</div>`}
-          <button class="m2-upd-x" aria-label="Remove this update" onclick="${m2_on(()=>m2_ack([i]))}">${M2_ICON.x}</button></div>`; }).join('')}
+      ${banner.map((i,ix)=>{ const tg=m2_updateTag(i.kind), go=m2_updateTarget(i,d);
+        /* Option B (Joel 12 Nov): swipe a tile sideways to remove it (swipe standard), "Clear
+           all" for the lot; a tap opens what it's about. The chevron shows only when there is
+           somewhere to go. The "Remove" layer underneath shows while dragging. */
+        const inner=`<span style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0"><span class="m2-chip ${tg.cls}">${m2_esc(tg.label)}</span><span class="m2-upd-text">${m2_esc(i.text)}</span></span>`;
+        return `<div class="m2-upd-wrap" data-ix="${ix}"><div class="m2-upd-bg" aria-hidden="true"><span>Remove</span><span>Remove</span></div>${go
+          ?`<button class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" onclick="${m2_on(()=>{ if(Date.now()<m2_updNoTap) return; go(); })}">${inner}${M2_ICON.chev}</button>`
+          :`<div class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" style="cursor:default">${inner}</div>`}</div>`; }).join('')}
     </section>`;
   }
   html+=`<section><h2 class="m2-h2">Coming up</h2>`;
@@ -18664,6 +18701,7 @@ function m2_renderShifts(panel,d){
   });
   html+=`</section>`;
   panel.innerHTML=html;
+  if(banner.length) m2_bindUpdSwipes(panel,banner);
 }
 
 /* ── Swaps ────────────────────────────────────────────────────────────── */
