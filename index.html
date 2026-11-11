@@ -18678,9 +18678,9 @@ function m2_renderShifts(panel,d){
       ${banner.map((i,ix)=>{ const tg=m2_updateTag(i.kind), go=m2_updateTarget(i,d);
         /* Option B (Joel 12 Nov): swipe a tile sideways to remove it (swipe standard), "Clear
            all" for the lot; a tap opens what it's about. The chevron shows only when there is
-           somewhere to go. The "Remove" layer underneath shows while dragging. */
+           somewhere to go. The "Clear" layer underneath shows while dragging (iOS's word; matches "Clear all"). */
         const inner=`<span style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0"><span class="m2-chip ${tg.cls}">${m2_esc(tg.label)}</span><span class="m2-upd-text">${m2_esc(i.text)}</span></span>`;
-        return `<div class="m2-upd-wrap" data-ix="${ix}"><div class="m2-upd-bg" aria-hidden="true"><span>Remove</span><span>Remove</span></div>${go
+        return `<div class="m2-upd-wrap" data-ix="${ix}"><div class="m2-upd-bg" aria-hidden="true"><span>Clear</span><span>Clear</span></div>${go
           ?`<button class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" onclick="${m2_on(()=>{ if(Date.now()<m2_updNoTap) return; go(); })}">${inner}${M2_ICON.chev}</button>`
           :`<div class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" style="cursor:default">${inner}</div>`}</div>`; }).join('')}
     </section>`;
