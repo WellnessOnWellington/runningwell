@@ -2201,9 +2201,9 @@
   .m2-datesub { font-size:13px; font-weight:600; color:#6E5F62; min-height:18px; }
   .m2-cal-d.pk { position:relative; }
   .m2-cal.pkcal { column-gap:0; }   /* so a picked range reads as one continuous band */
-  .m2-cal .m2-cal-d.pk.pend { background:repeating-linear-gradient(135deg,#FBF0CC 0 4px,#FFFFFF 4px 8px); }
+  .m2-cal .m2-cal-d.pk.pend { background:repeating-linear-gradient(135deg,#EEE5E7 0 3px,#FFFFFF 3px 8px); }
   .m2-cal .m2-cal-d.pk.past { color:#CBBFC2; background:none; box-shadow:none; }
-  .m2-cal .m2-cal-d.pk.blocked { color:#B3A7AA; background:repeating-linear-gradient(135deg,#EFE8E9 0 3px,#F8F4F5 3px 7px); text-decoration:line-through; }
+  .m2-cal .m2-cal-d.pk.blocked { color:#B3A7AA; background:#EDE6E8; text-decoration:line-through; }
   .m2-cal .m2-cal-d.pk.mine { box-shadow:inset 0 0 0 1.5px var(--burgundy); color:var(--burgundy); }
   .m2-cal .m2-cal-d.pk.rng { background:#F1D9DE; color:var(--charcoal); border-radius:0; box-shadow:none; }
   .m2-cal .m2-cal-d.pk.rs, .m2-cal .m2-cal-d.pk.re { background:var(--burgundy); color:#fff; }
@@ -19695,8 +19695,11 @@ function m2_pkGrid(d){
     const k=m2_add(g0,i);
     if(k<ms||k>me_){ html+=`<div class="m2-cal-d out" aria-hidden="true">${+k.slice(8)}</div>`; continue; }
     const st=m2_pkState(d,k), cls=['m2-cal-d','pk'];
-    if(k===t) cls.push('today'); if(d.ph.has(k)) cls.push('ph'); if(d.any[k]) cls.push('lv');
-    if(d.pending[k]&&!d.any[k]) cls.push('pend');
+    /* Option B (Joel 11 Nov): the picker shows only what matters for picking — available,
+       not available (grey), requested (stripes). No yellow here; yellow means "on leave" on
+       the Leave calendar only, so the two never disagree. */
+    if(k===t) cls.push('today'); if(d.ph.has(k)) cls.push('ph');
+    if(d.pending[k]&&!d.annual[k]) cls.push('pend');
     if(st) cls.push(st);
     if(a&&k>=a&&k<=b){ cls.push('rng'); if(k===a) cls.push('rs'); if(k===b) cls.push('re'); }
     const who=d.any[k]?[...d.any[k]].map(id=>m2_first(m2_emp(id)||{name:'Colleague'})).join(', '):'';
