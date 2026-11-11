@@ -3136,6 +3136,7 @@
               <option value="delete_roster_shift">Delete roster shift</option>
               <option value="restore">Restore</option>
               <option value="restore_roster_shift">Restore roster shift</option>
+              <option value="roster_request_applied">Roster change from request</option>
               <option value="lock">Lock</option>
             </select>
           </div>
@@ -9817,7 +9818,8 @@ async function renderTimesheetAudit(resetPage=false){
     // never had a label, so it rendered as its raw action string.
     const actionLabel={manual_entry:'Manual entry',adjustment:'Adjustment',delete:'Delete',
       delete_roster_shift:'Delete roster shift',restore:'Restore',
-      restore_roster_shift:'Restore roster shift',lock:'Lock',unlock:'Unlock'}[a.action]||a.action||'—';
+      restore_roster_shift:'Restore roster shift',lock:'Lock',unlock:'Unlock',
+      roster_request_applied:'Roster change from request'}[a.action]||a.action||'—';
     const rost=a.rostered_start&&a.rostered_end?`${a.rostered_start}–${a.rostered_end}`:'—';
     const clocked=a.clocked_start&&a.clocked_end?`${a.clocked_start}–${a.clocked_end}`:'—';
     const final=a.final_start&&a.final_end?`${a.final_start}–${a.final_end}`:'—';
@@ -11707,7 +11709,7 @@ async function anFillWorkloadAudit(){
   if(_anView!=='workload'||getPayPeriodStart(_anPPOffset)!==fnStart||!el()) return;
   const ids=new Set(P.inPeriod.map(e=>String(e.id)));
   const mine=rows.filter(a=>a.entry_id&&ids.has(String(a.entry_id)));
-  const labels={manual_entry:'Manual entry',adjustment:'Adjustment',delete:'Delete',delete_roster_shift:'Delete roster shift',restore:'Restore',restore_roster_shift:'Restore roster shift',lock:'Lock',unlock:'Unlock'};
+  const labels={manual_entry:'Manual entry',adjustment:'Adjustment',delete:'Delete',delete_roster_shift:'Delete roster shift',restore:'Restore',restore_roster_shift:'Restore roster shift',lock:'Lock',unlock:'Unlock',roster_request_applied:'Roster change from request'};
   const by={};
   mine.forEach(a=>{ const k=a.action||'other'; by[k]=by[k]||{n:0,mgrs:{}}; by[k].n++; const m=a.manager_name||'Not recorded'; by[k].mgrs[m]=(by[k].mgrs[m]||0)+1; });
   const tr=Object.entries(by).sort((a,b)=>b[1].n-a[1].n).map(([k,v])=>`<tr><td>${escHtml(labels[k]||k)}</td><td class="n">${v.n}</td><td>${escHtml(Object.entries(v.mgrs).sort((a,b)=>b[1]-a[1]).map(([m,c])=>`${m} (${c})`).join(', '))}</td></tr>`);
@@ -17007,12 +17009,15 @@ async function managerApproveRequest(id){
     // approval that skipped a worked block or found days with no roster.
     const _cv=(_wb?.coverCreated||[]).length;
     let _cvSuffix=_cv?` · ${_cv} cover shift${_cv===1?'':'s'} created`:'';
+    // The roster rows this approval replaced are otherwise only in the data journal: record each
+    // person's change in the timesheet audit too, so it shows in Timesheets → Audit (Joel 12 Nov).
+    if(r.type!=='leave'){ try{ await reqAuditRosterChange(r,mgr); }catch(e){ console.error('Request audit error:',e); } }
     // Fix 1 (vault stale_requests_scope.md): other open requests on the shifts this approval
     // just replaced can never happen now — close them and tell the people involved. After
     // the roster change has succeeded; a failure here never undoes the approval.
     if(r.type!=='leave'){
       try{
-        const _sup=await reqSupersedeOthers(r);
+        const _sup=await reqSupersedeOthers(r,mgr);
         if(_sup>0) _cvSuffix+=` · ${_sup} other request${_sup===1?'':'s'} for that shift cancelled`;
       }catch(e){ console.error('Supersede error:',e); _cvSuffix+=' · ⚠ could not tidy other requests for that shift — check the list'; }
     }
@@ -17029,17 +17034,47 @@ async function managerApproveRequest(id){
   }catch(e){ showToast('Error: '+(e?.message||String(e)).slice(0,120)); console.error('Approve error:',e); }
 }
 
+/* One timesheet_audit row per person whose roster an approved swap / give-away / pick-up
+   changed. Append-only table (select + insert), action 'roster_request_applied'. The table
+   has no date column, so the date lives in the reason; rostered_* = the shift they now hold. */
+async function reqAuditRosterChange(r,mgr){
+  const sl=(d,a,b)=>`${reqFmtDate(d)} ${String(a||'').slice(0,5)}–${String(b||'').slice(0,5)}`;
+  const first=n=>String(n||'').split(' ')[0];
+  const I=sl(r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd);
+  const rows=[];
+  if(r.type==='swap'){
+    const C=sl(r.colleagueShiftDate,r.colleagueShiftStart,r.colleagueShiftEnd);
+    rows.push({employee_id:r.initiatorId,employee_name:r.initiatorName,rostered_start:r.colleagueShiftStart,rostered_end:r.colleagueShiftEnd,
+      reason:`Swap approved (${r.id}): gave ${I}, took ${C} from ${first(r.colleagueName)}`});
+    rows.push({employee_id:r.colleagueId,employee_name:r.colleagueName,rostered_start:r.initiatorShiftStart,rostered_end:r.initiatorShiftEnd,
+      reason:`Swap approved (${r.id}): gave ${C}, took ${I} from ${first(r.initiatorName)}`});
+  } else if(r.type==='giveaway'){
+    rows.push({employee_id:r.initiatorId,employee_name:r.initiatorName,rostered_start:null,rostered_end:null,
+      reason:`Give-away approved (${r.id}): gave ${I} to ${first(r.colleagueName)}`});
+    rows.push({employee_id:r.colleagueId,employee_name:r.colleagueName,rostered_start:r.initiatorShiftStart,rostered_end:r.initiatorShiftEnd,
+      reason:`Give-away approved (${r.id}): took ${I} from ${first(r.initiatorName)}`});
+  } else if(r.type==='pickup'){
+    rows.push({employee_id:r.initiatorId,employee_name:r.initiatorName,rostered_start:r.initiatorShiftStart,rostered_end:r.initiatorShiftEnd,
+      reason:`Cover pick-up approved (${r.id}): took ${I}`});
+  }
+  for(const x of rows){
+    if(!x.employee_id) continue;
+    await tsSaveAudit({entry_id:null,clocked_start:null,clocked_end:null,final_start:null,final_end:null,action:'roster_request_applied',manager_name:mgr||null,...x});
+  }
+}
 /* Close every OTHER open request that names a shift the approved request replaced (swap:
    both shifts; give-away / pick-up: the one shift). Fresh read, so requests made on another
    device since this screen loaded are included. Uses existing columns only: status
    'declined' (already a closed status everywhere) + manager_decision 'superseded', which the
    screens show as "Cancelled · shift changed". Returns how many were closed. */
-async function reqSupersedeOthers(approved){
+async function reqSupersedeOthers(approved,mgr){
   const ids=new Set([approved.initiatorShiftId,approved.type==='swap'?approved.colleagueShiftId:null].filter(Boolean).map(String));
   if(!ids.size) return 0;
   const open=(await db.get('requests',{status:{in:'(pending_peer,pending_manager)'}})).map(normaliseRequest)
     .filter(x=>x.id!==approved.id&&x.type!=='leave'&&(ids.has(String(x.initiatorShiftId))||ids.has(String(x.colleagueShiftId))));
-  const now=new Date().toISOString(), reason='That shift changed when another request was approved';
+  // Name the cause, so the trail reads on its own (Joel 12 Nov): which request, whose, who approved.
+  const kind=approved.type==='swap'?'swap':approved.type==='pickup'?'pick-up':'give-away';
+  const now=new Date().toISOString(), reason=`That shift changed when ${String(approved.initiatorName||'another').split(' ')[0]}'s ${kind} (${approved.id}) was approved by ${mgr||'a manager'}`;
   let n=0;
   for(const x of open){
     const res=await db.update('requests',x.id,{status:'declined',manager_name:'Running Well',manager_decision:'superseded',manager_reason:reason,manager_decided_at:now});
