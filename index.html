@@ -3663,7 +3663,7 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.5 &middot; November 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.6 &middot; November 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
@@ -3671,6 +3671,13 @@
                  rule, never by hand: fading per row was forgotten at every bump from v2.2 to v3.3,
                  which left eleven old releases looking current. -->
             <div class="about-history" style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.6</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">November 2026 &mdash; Requests whose shift has changed</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>A swap, give-away or pick-up can no longer point at a shift that has moved on.</strong> If a shift in a request has since been swapped to someone else, edited or removed, the Staff Portal says &ldquo;No longer possible &mdash; the shift has changed&rdquo; (or &ldquo;Already done&rdquo; when the roster already shows the swap) and offers <em>Clear it</em> instead of Accept; managers see the same and cannot approve it. Approving a request now also cancels any other open request for the same shift and tells the people involved.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.5</div>
                 <div>
@@ -5142,7 +5149,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.5';
+const APP_VERSION='3.6';
 const APP_VERSION_DATE='November 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
@@ -11442,7 +11449,7 @@ function anReqWaits(reqs){
     const c=new Date(q.createdAt);
     const answered=q.peerResponseAt&&(q.peerResponse==='accepted'||q.peerResponse==='declined');
     if(answered) peer.push((new Date(q.peerResponseAt)-c)/3600000);
-    if(q.managerDecidedAt&&q.managerDecision!=='revoked'){ const from=q.peerResponseAt?new Date(q.peerResponseAt):c; mgr.push((new Date(q.managerDecidedAt)-from)/3600000); }
+    if(q.managerDecidedAt&&q.managerDecision!=='revoked'&&q.managerDecision!=='superseded'){ const from=q.peerResponseAt?new Date(q.peerResponseAt):c; mgr.push((new Date(q.managerDecidedAt)-from)/3600000); }
   });
   const med=a=>{ a=a.filter(v=>v>=0); if(!a.length) return null; const s=a.slice().sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
   return {peer:med(peer), mgr:med(mgr), nPeer:peer.length, nMgr:mgr.length};
@@ -11453,7 +11460,9 @@ function anRenderRequests(){
   const today=anToday(), byId=anEmpById();
   const P=anPeriod(getPayPeriodStart(_anPPOffset)), Pp=anPeriod(getPayPeriodStart(_anPPOffset-1));
   const all=anReqScoped(), reqs=anReqRaisedIn(all,P), prev=anReqRaisedIn(all,Pp);
-  const st=q=>reqDisplayStatus(q);
+  // A request cancelled because another approval took its shift (v3.6, manager_decision
+  // 'superseded') was never decided by anyone: count it with Expired, not as a decline.
+  const st=q=>q.managerDecision==='superseded'?'expired':reqDisplayStatus(q);
   const decided=reqs.filter(q=>['approved','declined','expired'].includes(st(q))), appr=decided.filter(q=>st(q)==='approved').length;
   const W=anReqWaits(reqs);
   // Waiting now — every open request, whenever it was raised.
@@ -15632,6 +15641,8 @@ async function reqShowList(){
     _notifications=notifs.map(normaliseNotif);
     _notes=notes.map(normaliseNote);
     if(finals){ _timesheetFinalizations=finals; _tsFinalLoaded=true; }
+    // Which of this person's open swaps point at a shift that has since changed (one read).
+    await reqFetchShiftProblems(_requests.filter(r=>r.initiatorId===_reqEmployee.id||r.colleagueId===_reqEmployee.id));
   }catch(e){}
   renderRequestsList();
   document.getElementById('req-panel-auth').style.display='none';
@@ -15655,6 +15666,7 @@ function _notifMeta(type){
     peer_declined:   {label:'Colleague declined',color:'orange'},
     request_expired: {label:'Request expired',color:'orange'},
     request_withdrawn:{label:'Request withdrawn',color:'neutral'},
+    request_superseded:{label:'Cancelled · shift changed',color:'orange'},
   };
   return m[type]||{label:'Update',color:'neutral'};
 }
@@ -15735,7 +15747,7 @@ function renderRequestsList(){
     const isInitiator=r.initiatorId===emp.id;
     const _ds=reqDisplayStatus(r);
     return`<div class="req-status-card${isHist?' req-status-card-hist':''}" onclick="reqShowDetail('${r.id}')">
-      <span class="req-status-pill ${_ds}">${reqStatusLabel(_ds)}</span>
+      <span class="req-status-pill ${_ds}">${reqStatusLabel(_ds,r)}</span>
       <div class="req-status-title">${escHtml(reqTitle(r,isInitiator))}</div>
       <div class="req-status-sub">${escHtml(reqStatusSub(r,isInitiator))}</div>
     </div>`;
@@ -15786,7 +15798,7 @@ function renderRequestsList(){
 }
 
 async function acknowledgePortalItem(type,id,subtype,cardEl){
-  const orangeSubs=['flagged','manager_declined','peer_declined','request_expired'];
+  const orangeSubs=['flagged','manager_declined','peer_declined','request_expired','request_superseded'];
   cardEl.classList.add(orangeSubs.includes(subtype)?'rpc-flash-orange':'rpc-flash-green');
   setTimeout(()=>cardEl.classList.add('rpc-collapse'),320);
   const ackAt=new Date().toISOString();
@@ -15841,7 +15853,9 @@ function reqTitle(r,isInitiator){
 const REQ_CLOSED_STATUSES=['approved','declined','expired','revoked','withdrawn'];
 function reqIsClosed(r){ return REQ_CLOSED_STATUSES.includes(r.status); }
 
-function reqStatusLabel(status){
+function reqStatusLabel(status,r){
+  if(r&&r.managerDecision==='superseded') return 'Cancelled · shift changed';
+  if(r&&!reqIsClosed(r)&&reqProblemOf(r)) return reqProblemOf(r)===REQ_ALREADY_DONE_MSG?'Already done':'No longer possible';
   if(status==='pending_peer') return 'Awaiting colleague';
   if(status==='pending_manager') return 'Awaiting manager';
   if(status==='approved') return 'Approved ✓';
@@ -15969,7 +15983,7 @@ function reqShowDetail(requestId){
   const canRespond=isPeer&&r.status==='pending_peer'&&!_lapsed;
   const _ds=reqDisplayStatus(r);
   let html=`<div style="margin-bottom:1rem;">
-    <span class="req-status-pill ${_ds}" style="display:inline-block;">${reqStatusLabel(_ds)}</span>
+    <span class="req-status-pill ${_ds}" style="display:inline-block;">${reqStatusLabel(_ds,r)}</span>
     <div style="font-family:'Lora',serif;font-size:1.05rem;font-weight:600;color:var(--charcoal);margin-top:0.5rem;">${escHtml(reqTitle(r,isInitiator))}</div>
     <div style="font-size:0.78rem;color:var(--muted);margin-top:0.2rem;">Submitted ${reqFmtDate(r.createdAt)}</div>
   </div>`;
@@ -16023,9 +16037,18 @@ function reqShowDetail(requestId){
     </div>`;
   }
   if(r.status==='declined'&&r.managerReason&&SHOW_DECLINE_REASON){
-    html+=`<div style="font-size:0.8rem;color:var(--burgundy);font-weight:600;margin-bottom:0.5rem;">Manager declined: ${escHtml(r.managerReason)}</div>`;
+    html+=`<div style="font-size:0.8rem;color:var(--burgundy);font-weight:600;margin-bottom:0.5rem;">${r.managerDecision==='superseded'?'Cancelled':'Manager declined'}: ${escHtml(r.managerReason)}</div>`;
   }
-  if(canRespond){
+  const _changed=!reqIsClosed(r)&&reqProblemOf(r);
+  if(_changed){
+    // The shift moved on (another approved request, or a roster edit): say so plainly.
+    html+=`<div class="req-admin-shifts" style="border-left:3px solid var(--burgundy);"><strong>${escHtml(reqProblemText(r))}.</strong> ${isPeer?escHtml(reqProblemNext(r,String(r.initiatorName||'them').split(' ')[0])):isInitiator?(reqProblemOf(r)===REQ_ALREADY_DONE_MSG?'Nothing more to do — you can withdraw it.':'It can\'t go ahead — withdraw it, or ask your manager.'):''}</div>`;
+  }
+  if(canRespond&&_changed){
+    html+=`<div id="req-respond-area-${r.id}"><div class="req-detail-actions">
+      <button class="req-decline-peer-btn" onclick="reqPeerRespond('${r.id}','declined',reqClearReason(_requests.find(x=>x.id==='${r.id}')))">Clear it</button>
+    </div></div>`;
+  } else if(canRespond){
     html+=`<div id="req-respond-area-${r.id}"><div class="req-detail-actions">
       <button class="req-accept-btn" onclick="reqPeerAcceptConfirm('${r.id}')">✓ Accept</button>
       <button class="req-decline-peer-btn" onclick="reqPeerDeclinePrompt('${r.id}')">✗ Decline</button>
@@ -16107,6 +16130,8 @@ async function reqPeerRespond(requestId,response,reason=''){
     await reqExpirySweep();
     await reqShowList(); return;
   }
+  // Re-check the shifts fresh before an Accept goes through (the screen may be old).
+  if(response==='accepted') await reqFetchShiftProblems([r]);
   const built=reqBuildPeerResponse(r,response,reason);
   if(!built.ok){ showToast(built.message); await reqShowList(); return; }
   try{
@@ -16350,11 +16375,81 @@ function reqBuildPickup(emp,shift,placeholder){
 /* A colleague answering a swap or give-away. Guards are the ones reqPeerRespond has always
    had; `code` lets each caller react (the portal re-reads its list, the phone app shows
    the message). */
+/* ── Stale requests (Joel 11 Nov 2026; vault stale_requests_scope.md) ─────────────
+   A swap / give-away / pick-up stores the shift ids it was made against. Another approved
+   request, or a manager editing the roster, can delete or reassign those rows; the request
+   then sat open pointing at nothing (Mayana -> Dominika, 12 Dec). This check compares each
+   OPEN request with a FRESH read of just its named shifts (one query) and records a problem
+   per request. Screens read the record; Accept and Approve re-check fresh first. A failed
+   read records nothing, so it can only ever fail OPEN (never wrongly blocks). Never uses the
+   in-memory roster: a kiosk loaded this morning would not know about rows made since. */
+const REQ_SHIFT_CHANGED_MSG='No longer possible — the shift has changed';
+const REQ_SHIFT_CHANGED_DECLINE='The shift has changed';
+/* A swap whose two shifts already show each other's hours on the roster was made by hand
+   (found 11 Nov: Josephine <-> Mayana, 16 Nov). Not "impossible" — already done. */
+const REQ_ALREADY_DONE_MSG='Already done — the roster already shows this swap';
+const REQ_ALREADY_DONE_DECLINE='Already done on the roster';
+function reqProblemText(r){ return reqProblemOf(r)||''; }
+function reqClearReason(r){ return reqProblemOf(r)===REQ_ALREADY_DONE_MSG?REQ_ALREADY_DONE_DECLINE:REQ_SHIFT_CHANGED_DECLINE; }
+function reqProblemNext(r,who){ return reqProblemOf(r)===REQ_ALREADY_DONE_MSG?`Nothing more to do — clear it${who?' to let '+who+' know':''}.`:`It can't go ahead — clear it${who?' to let '+who+' know':''}.`; }
+let _reqShiftProblems={};
+function reqProblemOf(r){ return (r&&_reqShiftProblems[r.id])||null; }
+function reqShiftProblem(r,byId,emps){
+  if(!r||r.type==='leave'||reqIsClosed(r)) return null;
+  const t=x=>String(x||'').slice(0,5);
+  const placeholder=id=>{ const e=(emps||[]).find(x=>String(x.id)===String(id)); return !!(e&&e.is_placeholder); };
+  const bad=(id,date,st,en,ok)=>{
+    if(!id) return false;
+    const row=byId.get(String(id));
+    if(!row||row.is_day_off) return true;
+    if(String(row.date).slice(0,10)!==String(date||'').slice(0,10)) return true;
+    if(t(row.start_time)!==t(st)||t(row.end_time)!==t(en)) return true;
+    return !ok(row);
+  };
+  const owns=who=>row=>String(row.employee_id)===String(who);
+  let changed=false;
+  if(r.type==='swap'){
+    changed=bad(r.initiatorShiftId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd,owns(r.initiatorId))
+      ||bad(r.colleagueShiftId,r.colleagueShiftDate,r.colleagueShiftStart,r.colleagueShiftEnd,owns(r.colleagueId));
+    // Already swapped by hand? Each person's row now holds the OTHER requested slot.
+    if(changed){
+      const hasSlot=(who,date,st,en)=>[...byId.values()].some(row=>String(row.employee_id)===String(who)&&!row.is_day_off&&String(row.date).slice(0,10)===String(date).slice(0,10)&&t(row.start_time)===t(st)&&t(row.end_time)===t(en));
+      if(hasSlot(r.initiatorId,r.colleagueShiftDate,r.colleagueShiftStart,r.colleagueShiftEnd)&&hasSlot(r.colleagueId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd)) return REQ_ALREADY_DONE_MSG;
+    }
+  }
+  else if(r.type==='giveaway') changed=bad(r.initiatorShiftId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd,owns(r.initiatorId));
+  // Pick-up: the cover shift must still belong to the placeholder the request named
+  // (stored as colleague_id) — no dependence on the in-memory staff list (review 11 Nov).
+  else if(r.type==='pickup') changed=bad(r.initiatorShiftId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd,row=>r.colleagueId?String(row.employee_id)===String(r.colleagueId):placeholder(row.employee_id));
+  return changed?REQ_SHIFT_CHANGED_MSG:null;
+}
+/* Fresh read of the shifts named by these open requests; records a problem (or clears it)
+   for each. Returns the map. Failure -> nothing recorded for them (fails open). */
+async function reqFetchShiftProblems(reqs){
+  const open=(reqs||[]).filter(r=>r&&r.type!=='leave'&&!reqIsClosed(r));
+  const ids=[...new Set(open.flatMap(r=>[r.initiatorShiftId,r.colleagueShiftId]).filter(Boolean).map(String))];
+  if(!ids.length) return _reqShiftProblems;
+  try{
+    const rows=await db.get('roster_shifts',{id:{in:'('+ids.join(',')+')'}});
+    const byId=new Map((rows||[]).map(x=>[String(x.id),x]));
+    const emps=(typeof _emps!=='undefined'&&_emps&&_emps.length)?_emps:[];
+    open.forEach(r=>{ const pr=reqShiftProblem(r,byId,emps); if(pr) _reqShiftProblems[r.id]=pr; else delete _reqShiftProblems[r.id]; });
+  }catch(e){
+    // Fail OPEN for real: forget any earlier finding for these requests, so a read failure
+    // can never keep something blocked after the roster was put right (review 11 Nov).
+    open.forEach(r=>{ delete _reqShiftProblems[r.id]; });
+    console.warn('Shift check for requests failed — not blocking anything',e);
+  }
+  return _reqShiftProblems;
+}
 function reqBuildPeerResponse(r,response,reason){
   if(!r) return {ok:false,code:'missing',message:'That request could not be found'};
   if(r.status!=='pending_peer') return {ok:false,code:'answered',message:'That request has already been answered'};
   if(!_tsFinalLoaded) return {ok:false,code:'unknown',message:REQ_FINALS_UNKNOWN_MSG};
   if(reqIsLapsed(r)) return {ok:false,code:'lapsed',message:`Too late to respond — ${reqLapseReason(r)}. Speak to your manager.`};
+  // Accepting a request whose shift has since changed would only park it at a manager whose
+  // Approve then fails — refuse here (callers refresh the check first). Declining is always fine.
+  if(response==='accepted'&&reqProblemOf(r)) return {ok:false,code:'changed',message:reqProblemText(r)+'. Use Clear it instead.'};
   const now=new Date().toISOString();
   const newStatus=response==='accepted'?'pending_manager':'declined';
   const typeLabel=r.type==='swap'?'swap':'shift offer';
@@ -16489,7 +16584,9 @@ setInterval(()=>{
 },5000);
 
 async function reqCreateNotification(employeeId,requestId,message,type){
-  const id='N'+Date.now();
+  // Random suffix as in reqNotifWrite: two notices written in the same millisecond (the
+  // superseded-request clean-up sends one to each person) would otherwise share a primary key.
+  const id='N'+Date.now()+String(Math.floor(Math.random()*1000)).padStart(3,'0');
   try{
     await db.insert('notifications',{id,employee_id:employeeId,request_id:requestId,message,type,created_at:new Date().toISOString()});
     _notifications.push(normaliseNotif({id,employee_id:employeeId,request_id:requestId,message,type,seen_at:null,created_at:new Date().toISOString()}));
@@ -16621,6 +16718,11 @@ function renderRequests(){
   // so they simply accumulated — a leave request for Christmas Day sat 55 days
   // unanswered. Newest-first buried exactly the ones that needed attention.
   const pending=_requests.filter(r=>r.status==='pending_manager'&&r.initiatorRole===reqRole).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
+  // Fresh shift check for the pending cards; redraw once it lands (at most once per 30 s).
+  if(pending.some(r=>r.type!=='leave')&&Date.now()-(window._reqProbAt||0)>30000){
+    const _before=pending.map(r=>reqProblemOf(r)||'').join('|');
+    window._reqProbAt=Date.now(); reqFetchShiftProblems(pending).then(()=>{ if(pending.map(r=>reqProblemOf(r)||'').join('|')!==_before) renderRequests(); });
+  }
   const sevenDays=7*86400000;
   const recentlyClosed=_requests.filter(r=>['approved','declined','revoked'].includes(r.status)&&r.initiatorRole===reqRole&&r.managerDecidedAt&&Date.now()-new Date(r.managerDecidedAt).getTime()<sevenDays).sort((a,b)=>new Date(b.managerDecidedAt)-new Date(a.managerDecidedAt));
   const totalPending=_requests.filter(r=>r.status==='pending_manager').length;
@@ -16677,6 +16779,7 @@ function reqAgeHtml(r){
 }
 
 function buildReqAdminCard(r,isPending){
+  const _changed=isPending&&!reqIsClosed(r)&&reqProblemOf(r);
   const typeLabel=r.type==='leave'?'Leave Request':r.type==='swap'?'Shift Swap':r.type==='pickup'?'Cover Pick Up':'Shift Give Away';
   let shiftsHtml='';
   if(r.type==='leave'){
@@ -16717,12 +16820,12 @@ function buildReqAdminCard(r,isPending){
     if(warn) coverageWarn=`<div class="req-coverage-warn">⚠ ${escHtml(warn)}</div>`;
   }
   const actions=isPending
-    ?`<div class="req-admin-actions">
-        <button class="req-approve-btn" onclick="managerApproveRequest('${r.id}')">✓ Approve</button>
+    ?`${_changed?`<div class="req-coverage-warn">⚠ ${escHtml(reqProblemText(r))} — nothing to approve. Decline it.</div>`:''}<div class="req-admin-actions">
+        <button class="req-approve-btn" onclick="managerApproveRequest('${r.id}')"${_changed?' disabled style="opacity:0.45;cursor:not-allowed" title="The shift has changed — decline instead"':''}>✓ Approve</button>
         <button class="req-decline-btn" onclick="managerDeclineRequest('${r.id}')">✗ Decline</button>
       </div>`
     :`<div style="font-size:0.8rem;color:${r.status==='approved'?'var(--success)':'var(--burgundy)'};font-weight:600;">
-        ${r.status==='approved'?'✓ Approved':'✗ Declined'} by ${escHtml(r.managerName||'manager')} · ${reqFmtDate(r.managerDecidedAt)}
+        ${r.status==='approved'?'✓ Approved':r.managerDecision==='superseded'?'Cancelled · shift changed':'✗ Declined'} by ${escHtml(r.managerName||'manager')} · ${reqFmtDate(r.managerDecidedAt)}
         ${r.managerReason?`<br>Reason: ${escHtml(r.managerReason)}`:''}
       </div>`;
   return `<div class="req-admin-card${r.id===_reqHighlightId?' req-highlight':''}" data-req-id="${r.id}">
@@ -16850,6 +16953,9 @@ async function managerApproveRequest(id){
     ? [r.leaveStartDate,r.leaveEndDate].filter(Boolean)
     : [reqShiftDateOf(r),r.colleagueShiftDate].filter(Boolean);
   if(!_tsFinalLoaded){ alert(REQ_FINALS_UNKNOWN_MSG); return; }
+  // The shift may have changed since this card was drawn (another approval, a roster edit):
+  // check fresh and stop with a plain message, before anything is written.
+  if(r.type!=='leave'){ await reqFetchShiftProblems([r]); if(reqProblemOf(r)){ showToast(reqProblemText(r)+' — decline this request instead.'); renderRequests(); return; } }
   const _blocked=_dates.find(d=>reqPeriodFinalised(d));
   if(_blocked){
     alert(`${srFortnightLabel(payPeriodStartFor(_blocked))} has already been finalised and exported to MYOB.\n\nApproving this now would change a pay period that has been paid. If it genuinely needs correcting, un-push that period in Timesheets first, then approve.`);
@@ -16897,7 +17003,16 @@ async function managerApproveRequest(id){
     // Cover is additive to whatever else happened — it can be created on the same
     // approval that skipped a worked block or found days with no roster.
     const _cv=(_wb?.coverCreated||[]).length;
-    const _cvSuffix=_cv?` · ${_cv} cover shift${_cv===1?'':'s'} created`:'';
+    let _cvSuffix=_cv?` · ${_cv} cover shift${_cv===1?'':'s'} created`:'';
+    // Fix 1 (vault stale_requests_scope.md): other open requests on the shifts this approval
+    // just replaced can never happen now — close them and tell the people involved. After
+    // the roster change has succeeded; a failure here never undoes the approval.
+    if(r.type!=='leave'){
+      try{
+        const _sup=await reqSupersedeOthers(r);
+        if(_sup>0) _cvSuffix+=` · ${_sup} other request${_sup===1?'':'s'} for that shift cancelled`;
+      }catch(e){ console.error('Supersede error:',e); _cvSuffix+=' · ⚠ could not tidy other requests for that shift — check the list'; }
+    }
     showToast(
       _unrostered.length
         ? `Approved — ${_unrostered.length} day${_unrostered.length===1?'':'s'} not yet rostered, leave will need applying when that roster is built${_cvSuffix}`
@@ -16909,6 +17024,35 @@ async function managerApproveRequest(id){
     // read them, and clear the pending-request markers this request was driving.
     renderTimesheets(); renderApprovals();
   }catch(e){ showToast('Error: '+(e?.message||String(e)).slice(0,120)); console.error('Approve error:',e); }
+}
+
+/* Close every OTHER open request that names a shift the approved request replaced (swap:
+   both shifts; give-away / pick-up: the one shift). Fresh read, so requests made on another
+   device since this screen loaded are included. Uses existing columns only: status
+   'declined' (already a closed status everywhere) + manager_decision 'superseded', which the
+   screens show as "Cancelled · shift changed". Returns how many were closed. */
+async function reqSupersedeOthers(approved){
+  const ids=new Set([approved.initiatorShiftId,approved.type==='swap'?approved.colleagueShiftId:null].filter(Boolean).map(String));
+  if(!ids.size) return 0;
+  const open=(await db.get('requests',{status:{in:'(pending_peer,pending_manager)'}})).map(normaliseRequest)
+    .filter(x=>x.id!==approved.id&&x.type!=='leave'&&(ids.has(String(x.initiatorShiftId))||ids.has(String(x.colleagueShiftId))));
+  const now=new Date().toISOString(), reason='That shift changed when another request was approved';
+  let n=0;
+  for(const x of open){
+    const res=await db.update('requests',x.id,{status:'declined',manager_name:'Running Well',manager_decision:'superseded',manager_reason:reason,manager_decided_at:now});
+    if(Array.isArray(res)&&!res.length) continue;   // RLS / already gone: nothing changed, say nothing
+    n++;
+    const local=_requests.find(q=>q.id===x.id);
+    if(local) Object.assign(local,{status:'declined',managerName:'Running Well',managerDecision:'superseded',managerReason:reason,managerDecidedAt:now});
+    const what=x.type==='swap'?'swap':x.type==='pickup'?'pick-up':'give-away';
+    const when=reqFmtDate(ids.has(String(x.initiatorShiftId))?x.initiatorShiftDate:(x.colleagueShiftDate||x.initiatorShiftDate));
+    try{
+      await reqCreateNotification(x.initiatorId,x.id,`Your ${what} request for ${when} was cancelled — that shift was changed by another approved request`,'request_superseded');
+      if(x.status==='pending_peer'&&x.colleagueId&&_emps.some(e=>e.id===x.colleagueId&&!e.is_placeholder))
+        await reqCreateNotification(x.colleagueId,x.id,`${x.initiatorName}'s ${what} request for ${when} was cancelled — that shift was changed by another approved request`,'request_superseded');
+    }catch(e){ console.warn('Superseded notice not sent',e); }
+  }
+  return n;
 }
 
 /* ── Withdrawing leave that was already approved ─────────────────────────────
@@ -17599,7 +17743,7 @@ function renderReqAudit(resetPage=false){
       <td>${reqFmtDate(r.createdAt)}</td>
       <td><span class="req-admin-type-pill">${typeLabel}</span></td>
       <td>${parties}</td><td>${detail}</td>
-      <td><span class="req-status-pill ${r.status}" style="display:inline-block;">${reqStatusLabel(r.status)}</span></td>
+      <td><span class="req-status-pill ${r.status}" style="display:inline-block;">${reqStatusLabel(r.status,r)}</span></td>
       <td style="font-size:0.78rem;color:var(--muted);">${escHtml(r.managerName||'—')}</td>
       <td style="font-size:0.78rem;color:var(--muted);">${r.managerDecidedAt?reqFmtDate(r.managerDecidedAt):'—'}</td>
       <td style="font-size:0.78rem;${rosterStyle}">${escHtml(rosterChange)}</td>
@@ -18443,6 +18587,7 @@ async function m2_loadSwaps(){
     db.get('entries',{employee_id:me.id,date:{gte:t,lte:to},leave_type:{'not.is':'null'}})
   ]);
   const openOk=m2_eligibleOpen(open,mine,m2_leaveRows(leave),reqs,me);
+  await reqFetchShiftProblems(reqs);   // one small read: are any of my requests' shifts gone/changed?
   return {reqs,open:openOk};
 }
 function m2_renderSwaps(panel,d){
@@ -18466,8 +18611,11 @@ function m2_renderSwaps(panel,d){
         <span style="font-size:15px;font-weight:800;color:var(--charcoal)">${head}</span>
         <span style="font-size:14px">${detail}</span>
         <span class="m2-note">${r.type==='swap'?'A swap: you each take the other\'s shift':'A give-away: you take it, nothing comes back'}</span></span>${M2_ICON.chev}</button>
-        <div style="display:flex;gap:8px"><button class="m2-btn plain" style="min-height:44px;font-size:15px" onclick="${m2_on(()=>m2_openDecline(r))}">Decline</button>
-        <button class="m2-btn" style="min-height:44px;font-size:15px" onclick="${m2_on(()=>m2_openAccept(r))}">Accept</button></div></div>`;
+        ${reqProblemOf(r)
+          ?`<div class="m2-warn">${M2_ICON.warn}<span><b>${m2_esc(reqProblemText(r))}.</b> ${m2_esc(reqProblemNext(r,String(r.initiatorName).split(' ')[0]))}</span></div>
+            <button class="m2-btn plain" style="min-height:44px;font-size:15px" onclick="${m2_on(()=>m2_clearChanged(r))}">Clear it</button></div>`
+          :`<div style="display:flex;gap:8px"><button class="m2-btn plain" style="min-height:44px;font-size:15px" onclick="${m2_on(()=>m2_openDecline(r))}">Decline</button>
+        <button class="m2-btn" style="min-height:44px;font-size:15px" onclick="${m2_on(()=>m2_openAccept(r))}">Accept</button></div></div>`}`;
     });
     html+=`</section>`;
   }
@@ -18486,6 +18634,9 @@ function m2_renderSwaps(panel,d){
   html+=`</section>`;
   panel.innerHTML=html;
 }
+/* "Clear it": the colleague declines a request whose shift has changed, with that reason;
+   the asker is told (Joel 11 Nov). Same decline path as any other. */
+function m2_clearChanged(r){ m2_commit(reqBuildPeerResponse(r,'declined',reqClearReason(r))); }
 function m2_requestTitle(r){
   if(r.type==='swap') return `Swap with ${String(r.colleagueName||'').split(' ')[0]}`;
   if(r.type==='giveaway') return `Give away to ${String(r.colleagueName||'').split(' ')[0]}`;
@@ -18498,6 +18649,8 @@ function m2_requestWhen(r){
   return `${m2_short(r.initiatorShiftDate)} · ${m2_range(r.initiatorShiftStart,r.initiatorShiftEnd)}`;
 }
 function m2_requestState(r){
+  if(r.managerDecision==='superseded') return {cls:'no',text:'Cancelled · shift changed'};
+  if(!reqIsClosed(r)&&reqProblemOf(r)) return {cls:'no',text:reqProblemOf(r)===REQ_ALREADY_DONE_MSG?'Already done':'No longer possible'};
   const ds=reqDisplayStatus(r);
   if(ds==='pending_peer') return {cls:'wait',text:`Waiting for ${String(r.colleagueName||'colleague').split(' ')[0]}`};
   if(ds==='pending_manager') return {cls:'wait',text:'Waiting for a manager'};
@@ -19889,7 +20042,7 @@ function m2_openAccept(r,push){
       if(!act) return;
       act.innerHTML=`${clashes.map(c=>`<div class="m2-warn" role="alert">${M2_ICON.warn}<span><b>${m2_esc(c)}</b> You can still accept; a manager will check it.</span></div>`).join('')}
         <div class="m2-note" style="margin:10px 0">Goes to a manager to approve. ${m2_esc(who)} will be told.</div><button class="m2-btn">${clashes.length?'Accept anyway':'Accept'}</button>`;
-      act.querySelector('button').onclick=()=>m2_commit(reqBuildPeerResponse(r,'accepted',''));
+      act.querySelector('button').onclick=async()=>{ await reqFetchShiftProblems([r]); m2_commit(reqBuildPeerResponse(r,'accepted','')); };   // fresh shift check first
     }});
 }
 function m2_openDecline(r,push){
@@ -19918,7 +20071,10 @@ async function m2_openRequest(r){
   const progress=reqIsClosed(r)?`<span class="m2-chip ${st.cls}">${m2_esc(st.text)}</span>`
     :`<section><h2 class="m2-h2">Progress</h2><div class="m2-progress">${steps.map(([t,cur],i)=>`<div><i style="${i===0?'background:#3A6B4F':cur?'border:2.5px solid #A07228;background:#fff':'border:2px solid #CDBFC2;background:#fff'}"></i><span style="${cur?'font-weight:800;color:var(--charcoal)':''}">${m2_esc(t)}</span></div>`).join('')}</div></section>`;
   const reason=r.reason?`<div class="m2-note">${mine?'Your reason':'Their reason'}: ${m2_esc(r.reason)}</div>`:'';
-  const foot=incoming?`<div class="m2-foot"><div style="display:flex;gap:8px"><button class="m2-btn plain" onclick="${m2_on(()=>m2_openDecline(r,true))}">Decline</button><button class="m2-btn" onclick="${m2_on(()=>m2_openAccept(r,true))}">Accept</button></div></div>`
+  const changed=!reqIsClosed(r)&&reqProblemOf(r);
+  const banner=changed?`<div class="m2-warn">${M2_ICON.warn}<span><b>${m2_esc(reqProblemText(r))}.</b> ${m2_esc(incoming?reqProblemNext(r,''):(reqProblemOf(r)===REQ_ALREADY_DONE_MSG?'Nothing more to do — you can withdraw it.':'It can\'t go ahead — withdraw it, or ask your manager.'))}</span></div>`:'';
+  const foot=incoming&&changed?`<div class="m2-foot"><button class="m2-btn plain" onclick="${m2_on(()=>m2_clearChanged(r))}">Clear it</button></div>`
+    :incoming?`<div class="m2-foot"><div style="display:flex;gap:8px"><button class="m2-btn plain" onclick="${m2_on(()=>m2_openDecline(r,true))}">Decline</button><button class="m2-btn" onclick="${m2_on(()=>m2_openAccept(r,true))}">Accept</button></div></div>`
     :canWithdraw?`<div class="m2-foot"><button class="m2-btn ghost" onclick="${m2_on(()=>m2_openWithdraw(r))}">Withdraw request</button></div>`:'';
   if(r.type==='leave'){
     const rows=[['Leave',formatLeaveType(r.leaveType)],['When',m2_requestWhen(r)]];
@@ -19942,7 +20098,7 @@ async function m2_openRequest(r){
   const who=r.type==='pickup'?'':mine?String(r.colleagueName||'').split(' ')[0]:String(r.initiatorName||'').split(' ')[0];
   m2_sheetOpen({key:'req:'+r.id,title:'',fixed:true,render:()=>`
     ${m2_sheetHeader(r.type==='swap'?'Swap':r.type==='giveaway'?'Give-away':'Pick up',m2_groupColour(group),r.type==='pickup'?'Cover shift':mine?m2_requestTitle(r):(r.type==='swap'?`${who} wants to swap`:`${who} is offering you a shift`),'','')}
-    <div class="m2-box" style="gap:0;padding:2px 14px">${summary}</div>
+    ${banner}<div class="m2-box" style="gap:0;padding:2px 14px">${summary}</div>
     ${dates.map((d,i)=>`<section><h2 class="m2-h2">${m2_esc(m2_long(d))}${dates.length===1&&give&&take?' · both shifts':''}</h2><div id="m2-rq-day-${i}">${ready?m2_dayPills(ready[i],group,me?.id,r.type==='pickup'?iS.id:null,marks):skel}</div></section>`).join('')}
     ${progress}${reason}${foot}`,
     after:async()=>{
