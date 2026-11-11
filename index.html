@@ -18665,9 +18665,22 @@ function m2_requestState(r){
 }
 function m2_requestCard(r){
   const st=m2_requestState(r);
-  return `<button class="m2-box" style="margin-bottom:8px;flex-direction:row;align-items:center;border:none;width:100%;text-align:left;font-family:'Nunito',sans-serif;cursor:pointer" onclick="${m2_on(()=>m2_openRequest(r))}">
-    <span style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">${m2_esc(m2_requestTitle(r))}</span>
-    <span style="font-size:13px">${m2_esc(m2_requestWhen(r))}</span><span class="m2-chip ${st.cls}">${m2_esc(st.text)}</span></span>${M2_ICON.chev}</button>`;
+  /* Same two-line give/take layout as the incoming tiles (Joel 11 Nov). From MY side: in my
+     own swap I give my shift and take theirs; a give-away is only "You give"; a pick-up only
+     "You take". Leave keeps its date line. */
+  let heading=m2_esc(m2_requestTitle(r)), body='';
+  if(r.type!=='leave'){
+    const mineS={d:r.initiatorShiftDate,s:r.initiatorShiftStart,e:r.initiatorShiftEnd};
+    const theirs=r.type==='swap'?{d:r.colleagueShiftDate,s:r.colleagueShiftStart,e:r.colleagueShiftEnd}:null;
+    const give=r.type==='pickup'?null:mineS, take=r.type==='pickup'?mineS:theirs;
+    const ds=[give&&give.d,take&&take.d].filter(Boolean), oneDay=ds.every(d=>d===ds[0]);
+    const line=(tag,cls,x)=>`<span class="m2-swline"><span class="m2-xtag ${cls}">${tag}</span>${oneDay?'':m2_esc(m2_short(x.d))+' · '}${m2_esc(m2_range(x.s,x.e))}</span>`;
+    if(oneDay&&ds.length) heading+=' · '+m2_esc(m2_short(ds[0]));
+    body=(give?line('You give','give',give):'')+(take?line('You take','take',take):'');
+  } else body=`<span style="font-size:13px">${m2_esc(m2_requestWhen(r))}</span>`;
+  return `<button class="m2-box m2-rq-tile" style="margin-bottom:8px" onclick="${m2_on(()=>m2_openRequest(r))}">
+    <span style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">${heading}</span>
+    ${body}<span class="m2-chip ${st.cls}">${m2_esc(st.text)}</span></span>${M2_ICON.chev}</button>`;
 }
 
 /* ── Leave ────────────────────────────────────────────────────────────── */
