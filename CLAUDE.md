@@ -121,7 +121,8 @@ else pushes normally.
   which is the right shape for an append-only log and keeps the fact that the
   delete happened. The audit actions in use are `manual_entry`, `adjustment`,
   `delete`, `delete_roster_shift`, `restore`, `restore_roster_shift`, `lock`,
-  `unlock` — add new ones to BOTH the `actionLabel` map and the
+  `unlock`, `roster_request_applied` (12 Nov 2026: one row per person whose roster an
+  approved swap / give-away / pick-up changed) — add new ones to BOTH the `actionLabel` map and the
   `tsa-filter-action` dropdown, or they render as a raw string and cannot be
   filtered.
 
