@@ -2256,6 +2256,10 @@
   .m2-foot { display:flex; flex-direction:column; gap:12px; }
   .m2-sheet.fixed { height:min(560px, calc(var(--vvh,100vh) * 0.72)); }
   .m2-sheet.fixed.full { height:calc(var(--vvh,100vh) * 0.9); }
+  /* 'grow': the standard height is a floor, not a ceiling — slightly longer content makes a
+     slightly taller panel; scrolling starts only at the 90% cap (max-height). */
+  .m2-sheet.fixed.grow { height:auto; min-height:min(560px, calc(var(--vvh,100vh) * 0.72)); }
+  .m2-sheet.fixed.grow.full { height:calc(var(--vvh,100vh) * 0.9); }
   .m2-sheet.fixed .m2-sheet-body { flex:1; min-height:0; }
   .m2-sheet.fixed .m2-step { flex:1 0 auto; }
   .m2-sheet.fixed .m2-foot { margin-top:auto; position:sticky; bottom:calc(-24px - env(safe-area-inset-bottom)); margin-bottom:calc(-24px - env(safe-area-inset-bottom)); padding:12px 0 calc(16px + env(safe-area-inset-bottom)); background:#FDFAF9; box-shadow:0 -10px 12px -10px rgba(45,36,38,0.10); z-index:1; }
@@ -18173,7 +18177,13 @@ window.addEventListener('load', ()=>{
 const M2_DOOR_KEY='rw_m2_door', M2_WHO_KEY='rw_m2_who', M2_LIVE_KEY='rw_m2_live', M2_FIXED_KEY='rw_m2_fixed';
 /* Fixed-height shift panels (Joel 9 Nov, on trial): ON unless switched off in Preview options.
    Remove the toggle once Joel picks; the pinned footers work either way. */
-function m2_fixedOn(){ return m2_load(M2_FIXED_KEY)!==false; }
+/* Panel height for the shift flow, on trial (Joel 12 Nov — choosing on his phone):
+   'grow'  = standard height as a MINIMUM, growing to fit before ever scrolling (default),
+   'fixed' = always the standard height (slightly-too-long content scrolls),
+   'auto'  = every panel sized to its content. */
+const M2_PANEL_KEY='rw_m2_panel';
+function m2_panelMode(){ const v=m2_load(M2_PANEL_KEY); if(v==='grow'||v==='fixed'||v==='auto') return v; return m2_load(M2_FIXED_KEY)===false?'auto':'grow'; }
+function m2_fixedOn(){ return m2_panelMode()!=='auto'; }
 const M2_LAST_KEY='rw_m2_last', M2_SEEN_KEY='rw_m2_seen_open', M2_HIDDEN_KEY='rw_m2_hidden';
 const M2_DOOR_DAYS=7, M2_WHO_DAYS=30, M2_DOOR_MAX_FAILS=5, M2_DOOR_LOCK_MS=60000;
 const M2_FRESH_MS=30000, M2_RESUME_MS=30*60000;
@@ -19593,6 +19603,7 @@ function m2_sheetRender(animate,dir){
   wrap.hidden=false;
   sheet.classList.remove('full'); sheet.style.transform='';
   sheet.classList.toggle('fixed',m2_fixedOn()&&!!m2_sheet[0].fixed);
+  sheet.classList.toggle('grow',m2_panelMode()==='grow'&&!!m2_sheet[0].fixed);
   m2_el('m2-sheet-title').textContent=step.title||'';
   const nav=m2_el('m2-sheet-nav'), first=m2_sheet.length===1;
   nav.innerHTML=first?M2_ICON.down:M2_ICON.back; nav.setAttribute('aria-label',first?'Close':'Back');
@@ -20265,8 +20276,8 @@ function m2_previewOptions(){
   return `<section><h2 class="m2-h2">Preview options</h2><div class="m2-box" style="gap:0;padding:0 14px">
     <label class="m2-row" style="cursor:pointer"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Live actions</span><span style="font-size:13px;color:#6E5F62">${live?'On — actions save for real':'Off — actions show what would be saved'}</span></span>
       <input type="checkbox" ${live?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_LIVE_KEY,this.checked);m2_markLive();m2_sheetRender(false)"></label>
-    <label class="m2-row" style="cursor:pointer"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Fixed-height panels</span><span style="font-size:13px;color:#6E5F62">${m2_fixedOn()?'On — shift panels and their steps share one height':'Off — each panel fits its content'}</span></span>
-      <input type="checkbox" ${m2_fixedOn()?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_FIXED_KEY,this.checked);m2_sheetRender(false)"></label>
+    <div class="m2-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:10px 0"><span style="display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Panel height</span><span style="font-size:13px;color:#6E5F62">${({grow:'Standard height, grows to fit before scrolling',fixed:'Always the standard height — long content scrolls',auto:'Each panel fits its content'})[m2_panelMode()]}</span></span>
+      <div class="m2-seg" role="tablist" aria-label="Panel height">${[['grow','Grow'],['fixed','Fixed'],['auto','Fit']].map(([v,l])=>`<button role="tab" aria-selected="${m2_panelMode()===v}" onclick="m2_store(M2_PANEL_KEY,'${v}');m2_sheetRender(false)">${l}</button>`).join('')}</div></div>
     <button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;cursor:pointer;padding:0" onclick="m2_exit()">Exit preview to the kiosk</button>
     <button class="m2-row" style="width:100%;border:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;color:var(--burgundy);cursor:pointer;padding:0" onclick="m2_lockDevice()">Lock the preview on this device</button>
   </div></section>`;
