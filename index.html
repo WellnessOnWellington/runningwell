@@ -19376,18 +19376,36 @@ function m2_sheetRestoreDraft(){
   document.querySelectorAll('#m2-sheet-body [data-d]').forEach(el=>{ if(vals[el.dataset.d]===undefined) return; if(el.type==='checkbox') el.checked=vals[el.dataset.d]; else el.value=vals[el.dataset.d]; });
 }
 function m2_clearDraft(key){ delete m2_drafts[key]; }
-/* Drag down from the handle or header (or anywhere once the content is scrolled to the top). */
+/* Drag DOWN to close — from the TOP of the panel only: the handle and the title row (Joel
+   11 Nov). It used to work from anywhere in the content once scrolled to the top, which
+   caught sideways swipes inside panels (the leave date picker's months) and pulled the panel
+   down. Now the content area never moves the panel, and the top only responds to a drag that
+   is clearly vertical (6 px axis lock, as every swipe). Short drags spring back; past 90 px
+   or a quick downward flick closes. */
 function m2_bindSheetDrag(){
-  const sheet=m2_el('m2-sheet'), body=m2_el('m2-sheet-body');
-  let y0=null, dy=0, ok=false;
-  const start=(y,fromBody)=>{ ok=!fromBody||body.scrollTop<=0; y0=y; dy=0; if(ok) sheet.style.transition='none'; };
-  const move=y=>{ if(y0==null||!ok) return; dy=Math.max(0,y-y0); sheet.style.transform=`translateY(${dy}px)`; };
-  const end=()=>{ if(y0==null) return; sheet.style.transition=''; if(ok&&dy>90) m2_sheetClose(); else sheet.style.transform=''; y0=null; };
-  [['m2-sheet-grab',false],['m2-sheet-head',false],['m2-sheet-body',true]].forEach(([id,fromBody])=>{
+  const sheet=m2_el('m2-sheet');
+  let y0=null, x0=0, dy=0, locked=false, vert=false; const vt=m2_vt();
+  const start=(x,y)=>{ y0=y; x0=x; dy=0; locked=false; vert=false; vt.reset(y); };
+  const move=(x,y,e)=>{
+    if(y0==null) return; vt.add(y);
+    if(!locked){ if(Math.abs(y-y0)<6&&Math.abs(x-x0)<6) return; locked=true; vert=Math.abs(y-y0)>Math.abs(x-x0); if(vert) sheet.style.transition='none'; }
+    if(!vert) return;
+    if(e.cancelable) e.preventDefault();
+    dy=Math.max(0,y-y0); sheet.style.transform=`translateY(${dy}px)`;
+  };
+  const end=()=>{
+    if(y0==null) return; y0=null;
+    if(!vert) return;
+    sheet.style.transition='';
+    const v=vt.v();
+    if(dy>90||(dy>24&&v>M2_FLICK_V)) m2_sheetClose(); else sheet.style.transform='';
+  };
+  ['m2-sheet-grab','m2-sheet-head'].forEach(id=>{
     const el=m2_el(id);
-    el.addEventListener('touchstart',e=>{ if(e.target.closest('input,select,textarea')) return; start(e.touches[0].clientY,fromBody); },{passive:true});
-    el.addEventListener('touchmove',e=>move(e.touches[0].clientY),{passive:true});
+    el.addEventListener('touchstart',e=>{ if(e.target.closest('input,select,textarea')) return; const t=e.touches[0]; start(t.clientX,t.clientY); },{passive:true});
+    el.addEventListener('touchmove',e=>{ const t=e.touches[0]; move(t.clientX,t.clientY,e); },{passive:false});
     el.addEventListener('touchend',end,{passive:true});
+    el.addEventListener('touchcancel',()=>{ if(y0!=null&&vert){ sheet.style.transition=''; sheet.style.transform=''; } y0=null; },{passive:true});
   });
 }
 function m2_sheetHeader(eyebrow,colour,title,big,sub){
