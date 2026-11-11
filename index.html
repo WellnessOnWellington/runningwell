@@ -2153,6 +2153,12 @@
   /* "What's changed" tiles (Joel 12 Nov) */
   .m2-upd-text { font-size:14px; font-weight:700; color:var(--charcoal); line-height:1.4; }
   .m2-upd.attn { background:rgba(230,126,34,0.10); }
+  .m2-upd-wrap { position:relative; margin-bottom:8px; }
+  .m2-upd-wrap .m2-upd { margin:0; }
+  .m2-upd-x { position:absolute; top:4px; right:34px; width:36px; height:36px; border:none; background:none; border-radius:18px; color:#8A7F82; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
+  .m2-upd-x svg { width:16px; height:16px; }
+  .m2-upd-wrap.nogo .m2-upd-x { right:6px; }
+  .m2-upd-x:active { background:rgba(0,0,0,0.06); }
   .m2-textbtn { border:none; background:none; padding:0 4px; min-height:40px; font-family:'Nunito',sans-serif; font-size:14px; font-weight:800; color:var(--burgundy); cursor:pointer; }
   .m2-open-card { min-height:60px; display:flex; align-items:center; gap:10px; padding:12px; background:rgba(230,126,34,0.10); border-radius:14px; color:#8A4310; border:none; width:100%; text-align:left; font-family:'Nunito',sans-serif; cursor:pointer; }
   .m2-seg { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); padding:3px; gap:3px; background:var(--blush); border-radius:12px; }
@@ -18560,6 +18566,22 @@ async function m2_loadShifts(){
   return {mine,leave:lv,open:openOk,notifs:notifs.map(normaliseNotif),notes:notes.map(normaliseNote),reqs};
 }
 /* The tag on a "What's changed" tile: what kind of update it is, in the app's chip colours. */
+/* Where tapping a "What's changed" tile goes: the request it is about (its day charts and
+   progress), Timesheets, or a flagged entry's details. null = nowhere (no chevron). */
+function m2_updateTarget(i,d){
+  if(i.open==='timesheets') return ()=>m2_openAccount('timesheets');
+  if(i.note) return ()=>m2_openFlagged(i.note);
+  if(i.reqId){ const r=(d.reqs||[]).find(x=>x.id===i.reqId); if(r) return ()=>m2_openRequest(r); }
+  return null;
+}
+/* A flagged timesheet entry's details: what is known about it, and what to do. */
+function m2_openFlagged(n){
+  const rows=[['Date',n.date?m2_long(n.date):''],['Time',n.time||''],['Your reason',n.reason||'']].filter(([,v])=>v);
+  m2_sheetOpen({title:'Needs a look',render:()=>`
+    <div class="m2-warn">${M2_ICON.warn}<span>${m2_esc(staffNoteMessage(n))}</span></div>
+    ${rows.length?`<div class="m2-box" style="gap:0;padding:4px 14px">${rows.map(([k,v])=>`<div class="m2-row"><span style="width:96px;font-size:13px;font-weight:800;color:#6E5F62">${m2_esc(k)}</span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(v)}</span></div>`).join('')}</div>`:''}
+    <div class="m2-note">Your manager has flagged this to talk through with you. Nothing changes on your timesheet until they resolve it. Remove it from your list with the × once you've seen it.</div>`});
+}
 function m2_updateTag(kind){
   return ({flagged:{label:'Needs a look',cls:'flag'},manager_approved:{label:'Approved',cls:'ok'},peer_accepted:{label:'Accepted',cls:'ok'},
     manager_declined:{label:'Declined',cls:'flag'},peer_declined:{label:'Declined',cls:'flag'},request_expired:{label:'Expired',cls:'no'},
@@ -18568,8 +18590,8 @@ function m2_updateTag(kind){
 function m2_bannerItems(d){
   const hidden=new Set(m2_load(M2_HIDDEN_KEY)||[]);
   const items=[];
-  d.notes.filter(n=>n.status==='flagged'&&staffNoteUnread(n)).forEach(n=>items.push({id:'note:'+n.id,flag:true,kind:'flagged',text:staffNoteMessage(n),ack:{table:'notes',id:n.id,patch:{staff_acknowledged:true,staff_acknowledged_at:new Date().toISOString()}}}));
-  d.notifs.filter(n=>staffNotifUnread(n)&&n.type!=='incoming_swap'&&n.type!=='incoming_giveaway').forEach(n=>items.push({id:'notif:'+n.id,kind:n.type,text:n.message,ack:{table:'notifications',id:n.id,patch:{seen_at:new Date().toISOString()}}}));
+  d.notes.filter(n=>n.status==='flagged'&&staffNoteUnread(n)).forEach(n=>items.push({id:'note:'+n.id,flag:true,kind:'flagged',note:n,text:staffNoteMessage(n),ack:{table:'notes',id:n.id,patch:{staff_acknowledged:true,staff_acknowledged_at:new Date().toISOString()}}}));
+  d.notifs.filter(n=>staffNotifUnread(n)&&n.type!=='incoming_swap'&&n.type!=='incoming_giveaway').forEach(n=>items.push({id:'notif:'+n.id,kind:n.type,reqId:n.requestId||null,text:n.message,ack:{table:'notifications',id:n.id,patch:{seen_at:new Date().toISOString()}}}));
   [-1,-2].forEach(off=>{
     const fn=getPayPeriodStart(off);
     const f=(_timesheetFinalizations||[]).find(x=>x.fn_start===fn);
@@ -18616,8 +18638,14 @@ function m2_renderShifts(panel,d){
     const clearable=banner.filter(i=>!i.flag);
     html+=`<section aria-label="What's changed"><div style="display:flex;align-items:center;margin-bottom:6px"><h2 class="m2-h2" style="flex:1;margin:0">What's changed</h2>
       ${clearable.length?`<button class="m2-textbtn" onclick="${m2_on(()=>m2_ack(clearable))}">Clear all</button>`:''}</div>
-      ${banner.map(i=>{ const tg=m2_updateTag(i.kind);
-        return `<button class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" style="margin-bottom:8px" onclick="${m2_on(()=>{ if(i.open==='timesheets'){ m2_ack([i]); m2_openAccount('timesheets'); } else m2_ack([i]); })}"><span style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0"><span class="m2-chip ${tg.cls}">${m2_esc(tg.label)}</span><span class="m2-upd-text">${m2_esc(i.text)}</span></span>${M2_ICON.chev}</button>`; }).join('')}
+      ${banner.map(i=>{ const tg=m2_updateTag(i.kind), go=m2_updateTarget(i,d);
+        /* Only the x removes an update; a tap opens what it is about (Joel 12 Nov). No target
+           -> no chevron and not tappable, so the chevron always means "somewhere to go". */
+        const inner=`<span style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0;padding-right:26px"><span class="m2-chip ${tg.cls}">${m2_esc(tg.label)}</span><span class="m2-upd-text">${m2_esc(i.text)}</span></span>`;
+        return `<div class="m2-upd-wrap${go?'':' nogo'}">${go
+          ?`<button class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" onclick="${m2_on(go)}">${inner}${M2_ICON.chev}</button>`
+          :`<div class="m2-box m2-rq-tile m2-upd${i.flag?' attn':''}" style="cursor:default">${inner}</div>`}
+          <button class="m2-upd-x" aria-label="Remove this update" onclick="${m2_on(()=>m2_ack([i]))}">${M2_ICON.x}</button></div>`; }).join('')}
     </section>`;
   }
   html+=`<section><h2 class="m2-h2">Coming up</h2>`;
