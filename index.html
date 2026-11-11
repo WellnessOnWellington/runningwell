@@ -2258,6 +2258,8 @@
   .m2-xtag { display:inline-block; width:100%; box-sizing:border-box; text-align:center; padding:2px 0; border-radius:999px; font-size:11px; font-weight:800; line-height:14px; }
   .m2-xtag.give { background:#8B2535; color:#fff; }
   .m2-xtag.take { background:#2E7D52; color:#fff; }
+  .m2-swline { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--charcoal); font-variant-numeric:tabular-nums; }
+  .m2-swline .m2-xtag { width:66px; flex-shrink:0; }
   .m2-rq-tile { flex-direction:row; align-items:center; gap:8px; border:none; width:100%; text-align:left; font-family:'Nunito',sans-serif; color:inherit; cursor:pointer; }
   .m2-rq-open { display:flex; align-items:center; gap:8px; width:100%; border:none; background:none; padding:0; text-align:left; font-family:'Nunito',sans-serif; color:inherit; cursor:pointer; }
   .m2-skel { height:30px; border-radius:6px; background:linear-gradient(90deg,#F1E9EB 0%,#F8F3F4 50%,#F1E9EB 100%); background-size:200% 100%; animation:m2skel 1.2s ease-in-out infinite; }
@@ -18604,15 +18606,20 @@ function m2_renderSwaps(panel,d){
     waiting.forEach(r=>{
       const who=m2_esc(String(r.initiatorName).split(' ')[0]);
       const head=r.type==='swap'?`${who} wants to swap`:`${who} is offering you a shift`;
-      const detail=r.type==='swap'
-        ?`Their ${m2_esc(m2_short(r.initiatorShiftDate))} ${m2_esc(m2_range(r.initiatorShiftStart,r.initiatorShiftEnd))} for your ${m2_esc(m2_short(r.colleagueShiftDate))} ${m2_esc(m2_range(r.colleagueShiftStart,r.colleagueShiftEnd))}`
-        :`${m2_esc(m2_short(r.initiatorShiftDate))} · ${m2_esc(m2_range(r.initiatorShiftStart,r.initiatorShiftEnd))}`;
+      /* Two lines, from MY side, with the panel's tags (Joel 11 Nov, options A + C): "You give"
+         is my shift, "You take" is theirs. Both on one day -> the date moves into the heading. */
+      const give=r.type==='swap'?{d:r.colleagueShiftDate,s:r.colleagueShiftStart,e:r.colleagueShiftEnd}:null;
+      const take={d:r.initiatorShiftDate,s:r.initiatorShiftStart,e:r.initiatorShiftEnd};
+      const oneDay=!give||give.d===take.d;
+      const line=(tag,cls,x)=>`<span class="m2-swline"><span class="m2-xtag ${cls}">${tag}</span>${oneDay?'':m2_esc(m2_short(x.d))+' · '}${m2_esc(m2_range(x.s,x.e))}</span>`;
+      const heading=`${head}${oneDay?' · '+m2_esc(m2_short(take.d)):''}`;
+      const detail=(give?line('You give','give',give):'')+line('You take','take',take);
       /* One tappable tile, no buttons (Joel 11 Nov): Accept / Decline (or Clear it) live in the
          details, under the day charts — you review the shifts before answering. */
       const pr=reqProblemOf(r);
       html+=`<button class="m2-box m2-rq-tile" style="margin-bottom:8px" onclick="${m2_on(()=>m2_openRequest(r))}"><span style="flex:1;display:flex;flex-direction:column;gap:3px">
-        <span style="font-size:15px;font-weight:800;color:var(--charcoal)">${head}</span>
-        <span style="font-size:14px">${detail}</span>
+        <span style="font-size:15px;font-weight:800;color:var(--charcoal)">${heading}</span>
+        ${detail}
         ${pr?`<span class="m2-chip no">${m2_esc(pr===REQ_ALREADY_DONE_MSG?'Already done':'No longer possible')}</span>`
             :`<span class="m2-chip wait">${r.type==='swap'?'Swap':'Give-away'} · tap to review and answer</span>`}</span>${M2_ICON.chev}</button>`;
     });
