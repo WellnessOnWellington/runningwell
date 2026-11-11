@@ -18301,6 +18301,7 @@ function m2_invalidate(){ m2_at={}; }
 function m2_render(tab){
   const panel=m2_el('m2-panel-'+tab); if(!panel) return;
   if(tab==='whoson'&&typeof m2_swGuardRender==='function'&&m2_swGuardRender()) return;
+  if(tab==='leave'&&m2_tab==='leave'&&typeof m2_calBusy==='function'&&m2_calBusy()){ m2_calDirty=true; return; }
   if(!m2_data[tab]){ panel.innerHTML=`<div class="m2-empty">Loading…</div>`; return; }
   ({shifts:m2_renderShifts,swaps:m2_renderSwaps,leave:m2_renderLeave,whoson:m2_renderWhoson})[tab](panel,m2_data[tab]);
 }
@@ -18670,14 +18671,30 @@ function m2_calCommit(dir,v){
   if(lab){ lab.style.transition='none'; lab.style.opacity='0'; lab.textContent=m2_monthLabel(k);
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ lab.style.transition='opacity 0.2s ease'; lab.style.opacity='1'; })); }
   m2_month=k; m2_renderBar();
-  setTimeout(()=>{
+  let t=0;
+  const done=()=>{
+    clearTimeout(t); if(m2_calPending!==done) return; m2_calPending=null;
     m2_calAnimating=false;
+    /* Promote the incoming month in place (swipe standard 11): the old one is hidden, not
+       removed, in case a finger that caught the slide is on it. The rest of the tab (the Away
+       list for the new month's day) is redrawn once no finger is down. */
+    const adj=m2_el('m2-cal-adj'), cur=m2_el('m2-cal-cur');
+    if(adj){ if(cur){ cur.removeAttribute('id'); cur.style.display='none'; cur.dataset.dead='1'; } adj.id='m2-cal-cur'; adj.removeAttribute('aria-hidden'); adj.style.cssText=''; }
     const c=m2_mCache[k];
-    m2_data.leave=c?{...c,mine}:null;
-    m2_render('leave');
+    m2_data.leave=c?{...c,mine}:m2_data.leave; m2_calDirty=true;
     if(!c||Date.now()-c.at>M2_FRESH_MS) m2_refresh('leave',true);   // reload only when needed
     else [-1,1].forEach(n=>{ const j=m2_addMonth(k,n), cc=m2_mCache[j]; if(!cc||Date.now()-cc.at>M2_FRESH_MS) m2_fetchMonth(j).catch(()=>{}); });
-  },dur);
+    m2_calFlush();
+  };
+  t=setTimeout(done,dur); m2_calPending=done;
+}
+let m2_calPending=null, m2_calTracking=false, m2_calDirty=false;
+function m2_calBusy(){ return m2_calTracking||m2_calAnimating; }
+function m2_calFlush(){
+  if(m2_calBusy()) return;
+  document.querySelectorAll('#m2-calwrap [data-dead]').forEach(e=>e.remove());
+  const w=m2_el('m2-calwrap'); if(w) w.style.minHeight='';
+  if(m2_calDirty){ m2_calDirty=false; m2_render('leave'); }
 }
 function m2_calCancel(){
   const adj=m2_el('m2-cal-adj'), spring=`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`;
@@ -18705,11 +18722,15 @@ async function m2_slideMonthTo(k){
 }
 function m2_bindCalSwipe(){
   const el=m2_el('m2-panel-leave'); if(!el||el._m2cal) return; el._m2cal=true;
-  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false; const cvt=m2_vt();
+  let x0=0,y0=0,cx=0,tracking=false,locked=false,horiz=false; const cvt=m2_vt();
+  const end=()=>{ tracking=false; m2_calTracking=false; };
   el.addEventListener('touchstart',e=>{
     tracking=false;
-    if(m2_tab!=='leave'||m2_calAnimating||!e.target.closest('#m2-calwrap')) return;
-    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now(); cvt.reset(cx);
+    if(m2_tab!=='leave'||!e.target.closest('#m2-calwrap')) return;
+    m2_calTracking=true;
+    if(m2_calPending) m2_calPending();          // catch a month mid-slide (swipe standard 11)
+    if(m2_calAnimating){ end(); return; }
+    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; cvt.reset(cx);
     tracking=true; locked=false; horiz=false;
   },{passive:true});
   el.addEventListener('touchmove',e=>{
@@ -18718,19 +18739,20 @@ function m2_bindCalSwipe(){
     if(!locked){
       if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
       horiz=Math.abs(dx)>Math.abs(dy); locked=true;
-      if(!horiz){ tracking=false; return; }
+      if(!horiz){ end(); m2_calFlush(); return; }
     }
     e.preventDefault();
     if(dx!==0) m2_calAdj(dx<0?1:-1);
     m2_swSet(m2_el('m2-cal-cur'),dx); m2_swSet(m2_el('m2-cal-adj'),dx);
   },{passive:false});
   el.addEventListener('touchend',()=>{
-    if(!tracking||!horiz){ tracking=false; return; } tracking=false;
-    m2_calNoTapUntil=Date.now()+400;
-    const dx=cx-x0;
-    const v=cvt.v(); if(m2_swipeCommits(dx,v,m2_el('m2-calwrap')?.offsetWidth)) m2_calCommit(dx<0?1:-1,v); else m2_calCancel();
+    if(!tracking||!horiz){ end(); m2_calFlush(); return; }
+    end(); m2_calNoTapUntil=Date.now()+400;
+    const dx=cx-x0, v=cvt.v();
+    if(m2_swipeCommits(dx,v,m2_el('m2-calwrap')?.offsetWidth)) m2_calCommit(dx<0?1:-1,v);
+    else { m2_calCancel(); setTimeout(m2_calFlush,M2_CANCEL_MS+20); }
   },{passive:true});
-  el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_calCancel(); tracking=false; },{passive:true});
+  el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_calCancel(); end(); setTimeout(m2_calFlush,M2_CANCEL_MS+20); },{passive:true});
 }
 function m2_renderLeave(panel,d){
   const me=m2_me(), t=m2_today();
@@ -18821,18 +18843,32 @@ async function m2_jumpDay(k){
   m2_jumpTo(k);
 }
 /* Any page in the CURRENT mode — a date in Day view, a fortnight offset in Person view. */
+/* A jump asked for while the pills are busy (mid-slide, or loading the last target) is
+   QUEUED, latest wins, and runs as soon as they land — rapid week-strip flicks used to drop
+   jumps (swipe standard 11). Cached targets slide at once (no async gap); others load first. */
+let m2_jumpQueue=null, m2_jumpLoading=null;
+/* The day the pills are heading to: queued > loading > current. The strip counts weeks from it. */
+function m2_dayAhead(){ return m2_jumpQueue||m2_jumpLoading||m2_day; }
 async function m2_jumpTo(k){
-  if(m2_swAnimating||k==null||k===m2_curKey()) return;
+  if(k==null) return;
+  if(m2_swAnimating){ m2_jumpQueue=k; return; }
+  if(k===m2_curKey()) return;
   if(!m2_el('m2-swipe')){ m2_setKey(k); m2_data.whoson=m2_cached(k); m2_render('whoson'); m2_refresh('whoson',true); return; }
   const mode=m2_wmode, person=m2_person;
-  m2_swAnimating=true;   // blocks a second tap / a swipe while the target page loads
-  try{ await (mode==='day'?m2_fetchDay(k):m2_fetchPerson(person,k)); }catch(e){}
-  m2_swAnimating=false;
-  if(m2_tab!=='whoson'||m2_wmode!==mode||m2_person!==person||!m2_el('m2-swipe')) return;
+  const c=m2_cached(k);
+  if(!c||Date.now()-c.at>M2_FRESH_MS){
+    m2_swAnimating=true; m2_jumpLoading=k;   // the target page loads first
+    try{ await (mode==='day'?m2_fetchDay(k):m2_fetchPerson(person,k)); }catch(e){}
+    m2_swAnimating=false; m2_jumpLoading=null;
+    if(m2_jumpQueue!=null){ k=m2_jumpQueue; m2_jumpQueue=null; return m2_jumpTo(k); }
+  }
+  if(m2_tab!=='whoson'||m2_wmode!==mode||m2_person!==person||!m2_el('m2-swipe')||k===m2_curKey()) return;
   const dir=k>m2_curKey()?1:-1;
   m2_swAdj(dir,k);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>m2_swCommit(dir)));
+  void m2_el('m2-swipe').offsetWidth;   // commit the start position, then slide (no frame gap)
+  m2_swCommit(dir);
 }
+function m2_runJumpQueue(){ if(m2_jumpQueue==null||m2_swAnimating) return; const q=m2_jumpQueue; m2_jumpQueue=null; if(q!==m2_curKey()) m2_jumpTo(q); }
 /* The swipe engine works on a page KEY: a date string in Day view, a fortnight offset in Person. */
 function m2_curKey(){ return m2_wmode==='day'?m2_day:m2_pOffset; }
 function m2_keyAt(dir){ return m2_wmode==='day'?m2_add(m2_day,dir):m2_pOffset+dir; }
@@ -18890,7 +18926,7 @@ function m2_renderBar(){
     if(m2_tab!=='leave') m2_toggleRolePop(false); else if(m2_el('m2-rolepop')) m2_el('m2-filter-btn')?.setAttribute('aria-expanded','true');
     return;
   }
-  const t=m2_today(), day=m2_day||t, me=m2_me();
+  const t=m2_today(), day=(m2_wmode==='day'&&(m2_jumpQueue||m2_jumpLoading))||m2_day||t, me=m2_me();
   let label, short, away;
   if(m2_wmode==='day'){
     const otherYear=day.slice(0,4)!==t.slice(0,4);
@@ -18922,7 +18958,11 @@ function m2_renderBar(){
   }
   sub.hidden=false; sub.classList.remove('person');
   if(m2_wmode==='day'){
-    sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous week" onclick="m2_jumpDay(m2_add(m2_day,-7))">${M2_ICON.left}</button><div class="m2-weekwrap" id="m2-weekwrap"><div class="m2-week" id="m2-week-cur">${m2_weekCells(day,day)}</div></div><button class="m2-icon-btn" aria-label="Next week" onclick="m2_jumpDay(m2_add(m2_day,7))">${M2_ICON.right}</button>`;
+    /* Same week already showing (incl. one just slid in): update the highlight in place rather
+       than rebuild, so a finger already on the strip keeps its touch (swipe standard rule 11). */
+    const mon=m2_mondayOf(day), wk=m2_el('m2-week-cur');
+    if(wk&&wk.dataset.mon===mon&&sub.contains(wk)) m2_weekMark(wk,day);
+    else sub.innerHTML=`<button class="m2-icon-btn" aria-label="Previous week" onclick="m2_jumpDay(m2_add(m2_day,-7))">${M2_ICON.left}</button><div class="m2-weekwrap" id="m2-weekwrap"><div class="m2-week" id="m2-week-cur" data-mon="${mon}">${m2_weekCells(day,day)}</div></div><button class="m2-icon-btn" aria-label="Next week" onclick="m2_jumpDay(m2_add(m2_day,7))">${M2_ICON.right}</button>`;
     m2_bindWeekSwipe();
   } else {
     const people=m2_emps.filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
@@ -18933,11 +18973,16 @@ function m2_renderBar(){
   }
 }
 /* The 7 day buttons of the week holding `ref`, with `sel` highlighted. */
+function m2_weekMark(wk,sel){
+  const t=m2_today();
+  wk.querySelectorAll('.m2-wd').forEach(b=>{ const k=b.dataset.k; b.classList.toggle('sel',k===sel); b.classList.toggle('today',k===t);
+    if(k===sel) b.setAttribute('aria-current','date'); else b.removeAttribute('aria-current'); });
+}
 function m2_weekCells(ref,sel){
   const mon=m2_mondayOf(ref), t=m2_today(); let cells='';
   for(let i=0;i<7;i++){
     const k=m2_add(mon,i), cls=['m2-wd',k===sel?'sel':'',k===t?'today':''].join(' ');
-    cells+=`<button class="${cls}" aria-label="${m2_esc(m2_long(k))}"${k===sel?' aria-current="date"':''} onclick="m2_weekTap('${k}')"><small>${m2_esc(m2_fmt(k,{weekday:'narrow'}))}</small><b>${+k.slice(8)}</b></button>`;
+    cells+=`<button class="${cls}" data-k="${k}" aria-label="${m2_esc(m2_long(k))}"${k===sel?' aria-current="date"':''} onclick="m2_weekTap('${k}')"><small>${m2_esc(m2_fmt(k,{weekday:'narrow'}))}</small><b>${+k.slice(8)}</b></button>`;
   }
   return cells;
 }
@@ -18947,23 +18992,30 @@ function m2_weekCells(ref,sel){
    on the strip never moves the day by itself. */
 let m2_wkNoTapUntil=0;
 function m2_weekTap(k){ if(Date.now()<m2_wkNoTapUntil) return; m2_jumpDay(k); }
+let m2_wkPending=null;
 function m2_bindWeekSwipe(){
   const el=m2_el('m2-subbar'); if(!el||el._m2wk) return; el._m2wk=true;
-  let x0=0,y0=0,t0=0,cx=0,tracking=false,locked=false,horiz=false,dir=0; const wvt=m2_vt();
+  let x0=0,y0=0,cx=0,tracking=false,locked=false,horiz=false,dir=0; const wvt=m2_vt();
   const cur=()=>m2_el('m2-week-cur'), adj=()=>m2_el('m2-week-adj');
   const ensureAdj=d=>{
     if(dir===d&&adj()) return; dir=d; adj()?.remove();
-    const g=document.createElement('div'); g.id='m2-week-adj'; g.className='m2-week'; g.setAttribute('aria-hidden','true');
+    const target=m2_add(m2_wmode==='day'?m2_dayAhead():m2_day,7*d);
+    const g=document.createElement('div'); g.id='m2-week-adj'; g.className='m2-week'; g.setAttribute('aria-hidden','true'); g.dataset.mon=m2_mondayOf(target);
     g.style.cssText=`position:absolute;top:0;left:${d>0?100:-100}%;width:100%;pointer-events:none;`;
-    const target=m2_add(m2_day,7*d);
-    g.innerHTML=m2_weekCells(target,target);
+    g.innerHTML=m2_weekCells(target,target); g.dataset.day=target;
     m2_el('m2-weekwrap').appendChild(g);
     m2_fetchDay(target).catch(()=>{});   // warm the day the pills will slide to
   };
   el.addEventListener('touchstart',e=>{
     tracking=false;
-    if(m2_tab!=='whoson'||m2_wmode!=='day'||m2_swAnimating||!e.target.closest('#m2-weekwrap')) return;
-    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; t0=Date.now(); wvt.reset(cx);
+    if(m2_tab!=='whoson'||m2_wmode!=='day'||!e.target.closest('#m2-weekwrap')) return;
+    /* Interruptible (swipe standard 11): a touch during a strip or pill slide finishes it now. */
+    m2_swTracking=true;
+    if(m2_wkPending) m2_wkPending();
+    if(m2_swPending) m2_swPending();
+    /* The strip is its own surface: it takes the touch even while the pills are still loading
+       or sliding (their jump is queued). */
+    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; wvt.reset(cx);
     tracking=true; locked=false; horiz=false; dir=0;
   },{passive:true});
   el.addEventListener('touchmove',e=>{
@@ -18972,32 +19024,40 @@ function m2_bindWeekSwipe(){
     if(!locked){
       if(Math.abs(dx)<6&&Math.abs(dy)<6) return;
       horiz=Math.abs(dx)>Math.abs(dy); locked=true;
-      if(!horiz){ tracking=false; return; }
+      if(!horiz){ tracking=false; m2_swTracking=false; m2_swFlush(); return; }
     }
     e.preventDefault();
     if(dx!==0) ensureAdj(dx<0?1:-1);
     m2_swSet(cur(),dx); m2_swSet(adj(),dx);
   },{passive:false});
-  const finish=commit=>{
-    tracking=false; m2_wkNoTapUntil=Date.now()+400;
+  const finish=(commit,v)=>{
+    tracking=false; m2_swTracking=false; m2_wkNoTapUntil=Date.now()+400;
     const W=m2_el('m2-weekwrap').offsetWidth;
     if(commit&&dir){
-      const d=dir, ease=`transform ${M2_COMMIT_MS}ms ease-out`;
-      m2_swAnimating=true;
-      m2_swSet(cur(),-d*W,ease); m2_swSet(adj(),-d*W,ease);
-      setTimeout(()=>{ m2_swAnimating=false; m2_jumpDay(m2_add(m2_day,7*d)); },M2_COMMIT_MS);
+      const d=dir, c=cur(), dur=m2_slideDur(c,W,v), ease=`transform ${dur}ms cubic-bezier(.25,.8,.25,1)`, target=adj()?.dataset.day;
+      m2_swSet(c,-d*W,ease); m2_swSet(adj(),-d*W,ease);
+      let t=0;
+      const done=()=>{ clearTimeout(t); if(m2_wkPending!==done) return; m2_wkPending=null;
+        /* Promote the incoming week in place (the old one hidden, not removed — a finger may be on it). */
+        const a=adj(), o=cur();
+        if(a){ if(o){ o.removeAttribute('id'); o.style.display='none'; o.dataset.dead='1'; } a.id='m2-week-cur'; a.removeAttribute('aria-hidden'); a.style.cssText=''; }
+        m2_jumpQueue=null; m2_jumpTo(target||m2_add(m2_day,7*d));
+      };
+      t=setTimeout(done,dur); m2_wkPending=done;
     } else {
       const spring=`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`, a=adj();
       m2_swSet(cur(),0,spring); if(a){ m2_swSet(a,0,spring); setTimeout(()=>a.remove(),M2_CANCEL_MS); }
+      m2_swFlush();
     }
   };
   el.addEventListener('touchend',()=>{
-    if(!tracking||!horiz) { tracking=false; return; }
-    const dx=cx-x0;
-    finish(m2_swipeCommits(dx,wvt.v(),m2_el('m2-weekwrap')?.offsetWidth));
+    if(!tracking||!horiz){ tracking=false; m2_swTracking=false; m2_wkGC(); m2_swFlush(); return; }
+    const dx=cx-x0, v=wvt.v();
+    finish(m2_swipeCommits(dx,v,m2_el('m2-weekwrap')?.offsetWidth),v);
   },{passive:true});
-  el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) finish(false); tracking=false; },{passive:true});
+  el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) finish(false); tracking=false; m2_swTracking=false; },{passive:true});
 }
+function m2_wkGC(){ if(!m2_swTracking) document.querySelectorAll('#m2-weekwrap [data-dead]').forEach(e=>e.remove()); }
 /* Person view's fortnight = the ROSTER's fortnight (Monday-anchored off roster_config.
    cycle_start_date, via the desktop's getFortnightStart), not "from this week's Monday" —
    that slid a week every Monday and straddled two roster fortnights half the time (found 9 Nov).
@@ -19117,6 +19177,7 @@ function m2_swCommit(dir,v){
    because a finger that caught the slide may have started on it (a removed touch target
    stops delivering moves); m2_swGC clears it when no finger is down. */
 function m2_swLand(k){
+  setTimeout(m2_runJumpQueue,0);
   const cur=m2_el('m2-swipe-cur'), adj=m2_el('m2-swipe-adj');
   if(adj){ if(cur){ cur.removeAttribute('id'); cur.style.display='none'; cur.dataset.dead='1'; }
     adj.id='m2-swipe-cur'; adj.removeAttribute('aria-hidden'); adj.style.cssText=''; }
@@ -19137,7 +19198,7 @@ function m2_swLanded(k,d,p){
   if(m2_tab!=='whoson'||m2_curKey()!==k||(p!=null&&p!==m2_person)) return;
   m2_data.whoson=d; m2_swDirty=true; m2_swFlush();
 }
-function m2_swGC(){ document.querySelectorAll('#m2-swipe [data-dead]').forEach(e=>e.remove()); }
+function m2_swGC(){ document.querySelectorAll('#m2-swipe [data-dead], #m2-weekwrap [data-dead]').forEach(e=>e.remove()); }
 function m2_swFlush(){
   if(m2_swBusy()) return;
   m2_swGC();
@@ -19683,13 +19744,25 @@ function m2_pkCommit(dir,v){
   if(lab){ lab.style.transition='none'; lab.style.opacity='0'; lab.textContent=m2_monthLabel(k);
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ lab.style.transition='opacity 0.2s ease'; lab.style.opacity='1'; })); }
   pk.ms=k; pk.note='';
-  setTimeout(()=>{
+  let t=0;
+  const done=()=>{
+    clearTimeout(t); if(m2_pkPending!==done) return; m2_pkPending=null;
     m2_pkAnimating=false;
+    /* Promote in place; old month hidden (not removed) in case a finger caught the slide. */
     const adj=m2_el('m2-pk-adj'), g=m2_el('m2-pk-grid');
-    if(adj&&g){ g.remove(); adj.id='m2-pk-grid'; adj.removeAttribute('aria-hidden'); adj.style.cssText=''; }
-    if(m2_pkCache[k]){ m2_el('m2-pk-grid').innerHTML=m2_pkGrid(m2_pkCache[k]); m2_pkFoot(); [-1,1].forEach(n=>m2_pkMonth(m2_addMonth(k,n)).catch(()=>{})); }
-    else m2_pkDraw();
-  },dur);
+    if(adj&&g){ g.removeAttribute('id'); g.style.display='none'; g.dataset.dead='1'; adj.id='m2-pk-grid'; adj.removeAttribute('aria-hidden'); adj.style.cssText=''; }
+    m2_pkFoot();
+    if(m2_pkCache[k]){ m2_pkDirty=true; [-1,1].forEach(n=>m2_pkMonth(m2_addMonth(k,n)).catch(()=>{})); }
+    else m2_pkMonth(k).then(()=>{ m2_pkDirty=true; m2_pkFlush(); }).catch(()=>{});
+    m2_pkFlush();
+  };
+  t=setTimeout(done,dur); m2_pkPending=done;
+}
+let m2_pkPending=null, m2_pkTracking=false, m2_pkDirty=false;
+function m2_pkFlush(){
+  if(m2_pkTracking||m2_pkAnimating) return;
+  document.querySelectorAll('#m2-pk-wrap [data-dead]').forEach(e=>e.remove());
+  if(m2_pkDirty&&m2_pk){ m2_pkDirty=false; const d=m2_pkCache[m2_pk.ms], g=m2_el('m2-pk-grid'); if(d&&g) g.innerHTML=m2_pkGrid(d); m2_pkFoot(); }
 }
 function m2_pkCancel(){
   const adj=m2_el('m2-pk-adj'), spring=`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`;
@@ -19706,10 +19779,13 @@ function m2_bindPkSwipe(){
   const el=m2_el('m2-pk-wrap'); if(!el) return;
   let x0=0,y0=0,cx=0,on=false,locked=false,horiz=false; const vt=m2_vt();
   const minMs=()=>m2_monthStart(m2_today());
-  el.addEventListener('touchstart',e=>{ on=false; if(m2_pkAnimating||!m2_pk) return; const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; on=true; locked=false; horiz=false; vt.reset(cx); },{passive:true});
+  el.addEventListener('touchstart',e=>{ on=false; if(!m2_pk) return;
+    m2_pkTracking=true; if(m2_pkPending) m2_pkPending();   // catch a month mid-slide (swipe standard 11)
+    if(m2_pkAnimating){ m2_pkTracking=false; return; }
+    const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; on=true; locked=false; horiz=false; vt.reset(cx); },{passive:true});
   el.addEventListener('touchmove',e=>{
     if(!on) return; const t=e.touches[0]; let dx=t.clientX-x0; const dy=t.clientY-y0; cx=t.clientX; vt.add(cx);
-    if(!locked){ if(Math.abs(dx)<6&&Math.abs(dy)<6) return; horiz=Math.abs(dx)>Math.abs(dy); locked=true; if(!horiz){ on=false; return; } }
+    if(!locked){ if(Math.abs(dx)<6&&Math.abs(dy)<6) return; horiz=Math.abs(dx)>Math.abs(dy); locked=true; if(!horiz){ on=false; m2_pkTracking=false; m2_pkFlush(); return; } }
     e.preventDefault();
     const dir=dx<0?1:-1, blockedEdge=dir<0&&m2_addMonth(m2_pk.ms,-1)<minMs();
     if(blockedEdge){ dx=dx/4; m2_el('m2-pk-adj')?.remove(); }   // nothing before this month: resist
@@ -19717,11 +19793,12 @@ function m2_bindPkSwipe(){
     m2_swSet(m2_el('m2-pk-grid'),dx); if(!blockedEdge) m2_swSet(m2_el('m2-pk-adj'),dx);
   },{passive:false});
   el.addEventListener('touchend',()=>{
-    if(!on) return; on=false; if(!horiz) return; m2_pkNoTap=Date.now()+350;
+    m2_pkTracking=false;
+    if(!on){ m2_pkFlush(); return; } on=false; if(!horiz){ m2_pkFlush(); return; } m2_pkNoTap=Date.now()+350;
     const dx=cx-x0, v=vt.v(), dir=dx<0?1:-1;
-    if(!(dir<0&&m2_addMonth(m2_pk.ms,-1)<minMs())&&m2_swipeCommits(dx,v,el.offsetWidth)) m2_pkCommit(dir,v); else m2_pkCancel();
+    if(!(dir<0&&m2_addMonth(m2_pk.ms,-1)<minMs())&&m2_swipeCommits(dx,v,el.offsetWidth)) m2_pkCommit(dir,v); else { m2_pkCancel(); setTimeout(m2_pkFlush,M2_CANCEL_MS+20); }
   },{passive:true});
-  el.addEventListener('touchcancel',()=>{ if(on&&horiz) m2_pkCancel(); on=false; },{passive:true});
+  el.addEventListener('touchcancel',()=>{ if(on&&horiz) m2_pkCancel(); on=false; m2_pkTracking=false; setTimeout(m2_pkFlush,M2_CANCEL_MS+20); },{passive:true});
 }
 
 /* ── pick up / accept / decline / your request ─────────────────────────── */
