@@ -18003,7 +18003,8 @@ function m2_on(fn){ const k='f'+(++m2_fnSeq); m2_fns[k]=fn; return `m2_call('${k
 function m2_call(k,ev){ try{ const f=m2_fns[k]; if(f) f(ev); }catch(e){ console.error('m2',e); m2_toast('Something went wrong — please try again'); } }
 function m2_today(){ return rbDateKey(new Date()); }
 function m2_add(key,n){ const d=new Date(key+'T12:00:00'); d.setDate(d.getDate()+n); return rbDateKey(d); }
-function m2_fmt(key,o){ return new Date(key+'T12:00:00').toLocaleDateString('en-AU',o); }
+/* en-AU writes "Mon, 16 Nov" for some option sets; the app never wants that comma (Joel 11 Nov). */
+function m2_fmt(key,o){ return new Date(key+'T12:00:00').toLocaleDateString('en-AU',o).replace(/,/g,''); }
 function m2_short(key){ return m2_fmt(key,{weekday:'short',day:'numeric',month:'short'}); }
 function m2_long(key){ return m2_fmt(key,{weekday:'long',day:'numeric',month:'long'}); }
 function m2_t(t){ return String(t||'').slice(0,5); }
@@ -18660,9 +18661,9 @@ function m2_calAdj(dir,target){
   m2_fetchMonth(k).catch(()=>{});
   return pane;
 }
-function m2_calCommit(dir){
+function m2_calCommit(dir,v){
   m2_calAnimating=true;
-  const W=m2_el('m2-calwrap').offsetWidth, ease=`transform ${M2_COMMIT_MS}ms ease-out`;
+  const W=m2_el('m2-calwrap').offsetWidth, dur=m2_slideDur(m2_el('m2-cal-cur'),W,v), ease=`transform ${dur}ms cubic-bezier(.25,.8,.25,1)`;
   const k=m2_el('m2-cal-adj')?.dataset.key||m2_addMonth(m2_month,dir), mine=m2_data.leave?.mine||[];
   m2_swSet(m2_el('m2-cal-cur'),-dir*W,ease); m2_swSet(m2_el('m2-cal-adj'),-dir*W,ease);
   const lab=m2_el('m2-monthlabel');
@@ -18673,8 +18674,10 @@ function m2_calCommit(dir){
     m2_calAnimating=false;
     const c=m2_mCache[k];
     m2_data.leave=c?{...c,mine}:null;
-    m2_render('leave'); m2_refresh('leave',true);
-  },M2_COMMIT_MS);
+    m2_render('leave');
+    if(!c||Date.now()-c.at>M2_FRESH_MS) m2_refresh('leave',true);   // reload only when needed
+    else [-1,1].forEach(n=>{ const j=m2_addMonth(k,n), cc=m2_mCache[j]; if(!cc||Date.now()-cc.at>M2_FRESH_MS) m2_fetchMonth(j).catch(()=>{}); });
+  },dur);
 }
 function m2_calCancel(){
   const adj=m2_el('m2-cal-adj'), spring=`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`;
@@ -18725,7 +18728,7 @@ function m2_bindCalSwipe(){
     if(!tracking||!horiz){ tracking=false; return; } tracking=false;
     m2_calNoTapUntil=Date.now()+400;
     const dx=cx-x0;
-    if(m2_swipeCommits(dx,cvt.v(),m2_el('m2-calwrap')?.offsetWidth)) m2_calCommit(dx<0?1:-1); else m2_calCancel();
+    const v=cvt.v(); if(m2_swipeCommits(dx,v,m2_el('m2-calwrap')?.offsetWidth)) m2_calCommit(dx<0?1:-1,v); else m2_calCancel();
   },{passive:true});
   el.addEventListener('touchcancel',()=>{ if(tracking&&horiz) m2_calCancel(); tracking=false; },{passive:true});
 }
@@ -19090,12 +19093,16 @@ function m2_swAdj(dir,target){
 let m2_swPending=null, m2_swTracking=false, m2_swDirty=false;
 function m2_swBusy(){ return m2_swTracking||m2_swAnimating; }
 function m2_swX(el){ const m=el&&getComputedStyle(el).transform; return !m||m==='none'?0:parseFloat(m.split(',')[4])||0; }
+/* One slide-through timing for every swipe (Who's On, Leave calendar, leave picker): the
+   duration follows the distance left and the release speed, decelerating; arrows (no v) 240 ms. */
+function m2_slideDur(el,W,v){
+  const left=Math.max(0,W-Math.abs(m2_swX(el))), sp=Math.abs(v||0);
+  return sp>0.05?Math.round(Math.min(320,Math.max(140,left/sp*1.8))):240;
+}
 function m2_swCommit(dir,v){
   m2_swAnimating=true;
   const W=m2_el('m2-swipe').offsetWidth, cur=m2_el('m2-swipe-cur');
-  const left=Math.max(0,W-Math.abs(m2_swX(cur)));
-  const sp=Math.abs(v||0);
-  const dur=sp>0.05?Math.round(Math.min(320,Math.max(140,left/sp*1.8))):240;
+  const dur=m2_slideDur(cur,W,v);
   const ease=`transform ${dur}ms cubic-bezier(.25,.8,.25,1)`;
   const adjKey=m2_el('m2-swipe-adj')?.dataset.key;
   const target=adjKey==null?m2_keyAt(dir):(m2_wmode==='day'?adjKey:+adjKey);
@@ -19650,35 +19657,71 @@ function m2_pkDone(){
   m2_sheetNav();
 }
 let m2_pkNoTap=0, m2_pkAnimating=false;
+/* The picker's months move exactly like the Leave calendar's (Joel 11 Nov: they felt
+   different): the month follows the finger with the next one drawn alongside, then slides
+   through or springs back; the arrows slide too. Same thresholds and timing helpers. */
+function m2_pkBlank(k){ return {month:k,annual:{},any:{},pending:{},mine:{},ph:new Set(),blank:true}; }
+function m2_pkAdj(dir){
+  const pk=m2_pk, wrap=m2_el('m2-pk-wrap'); if(!pk||!wrap) return null;
+  const k=m2_addMonth(pk.ms,dir); let pane=m2_el('m2-pk-adj');
+  if(pane&&pane.dataset.key===k) return pane;
+  pane?.remove();
+  pane=document.createElement('div'); pane.id='m2-pk-adj'; pane.className='m2-calpage'; pane.dataset.key=k; pane.setAttribute('aria-hidden','true');
+  pane.style.cssText=`position:absolute;top:0;left:${dir>0?100:-100}%;width:100%;pointer-events:none;`;
+  pane.innerHTML=m2_pkGrid(m2_pkCache[k]||m2_pkBlank(k));
+  wrap.appendChild(pane);
+  if(!m2_pkCache[k]) m2_pkMonth(k).then(d=>{ const p=m2_el('m2-pk-adj'); if(p&&p.dataset.key===k) p.innerHTML=m2_pkGrid(d); }).catch(()=>{});
+  return pane;
+}
+function m2_pkCommit(dir,v){
+  const pk=m2_pk, wrap=m2_el('m2-pk-wrap'), cur=m2_el('m2-pk-grid'); if(!pk||!wrap||!cur) return;
+  m2_pkAnimating=true;
+  const W=wrap.offsetWidth, dur=m2_slideDur(cur,W,v), ease=`transform ${dur}ms cubic-bezier(.25,.8,.25,1)`;
+  const k=m2_el('m2-pk-adj')?.dataset.key||m2_addMonth(pk.ms,dir);
+  m2_swSet(cur,-dir*W,ease); m2_swSet(m2_el('m2-pk-adj'),-dir*W,ease);
+  const lab=m2_el('m2-pk-label');
+  if(lab){ lab.style.transition='none'; lab.style.opacity='0'; lab.textContent=m2_monthLabel(k);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ lab.style.transition='opacity 0.2s ease'; lab.style.opacity='1'; })); }
+  pk.ms=k; pk.note='';
+  setTimeout(()=>{
+    m2_pkAnimating=false;
+    const adj=m2_el('m2-pk-adj'), g=m2_el('m2-pk-grid');
+    if(adj&&g){ g.remove(); adj.id='m2-pk-grid'; adj.removeAttribute('aria-hidden'); adj.style.cssText=''; }
+    if(m2_pkCache[k]){ m2_el('m2-pk-grid').innerHTML=m2_pkGrid(m2_pkCache[k]); m2_pkFoot(); [-1,1].forEach(n=>m2_pkMonth(m2_addMonth(k,n)).catch(()=>{})); }
+    else m2_pkDraw();
+  },dur);
+}
+function m2_pkCancel(){
+  const adj=m2_el('m2-pk-adj'), spring=`transform ${M2_CANCEL_MS}ms cubic-bezier(0.34,1.56,0.64,1)`;
+  m2_swSet(m2_el('m2-pk-grid'),0,spring);
+  if(adj){ m2_swSet(adj,0,spring); setTimeout(()=>adj.remove(),M2_CANCEL_MS); }
+}
 function m2_pkMove(dir){
   const pk=m2_pk; if(!pk||m2_pkAnimating) return;
-  const t=m2_monthStart(m2_today()), next=m2_addMonth(pk.ms,dir);
-  if(next<t) return;   // nothing to pick before this month
-  pk.ms=next; pk.note='';
-  const lab=m2_el('m2-pk-label'); if(lab) lab.textContent=m2_monthLabel(next);
-  const grid=m2_el('m2-pk-grid'); if(!grid){ return; }
-  /* Slide the month across, the Leave calendar's motion. */
-  m2_pkAnimating=true;
-  grid.style.transition='transform 160ms ease-in, opacity 160ms ease-in'; grid.style.transform=`translateX(${-dir*30}%)`; grid.style.opacity='0';
-  setTimeout(async()=>{
-    const cached=m2_pkCache[next];
-    grid.style.transition='none'; grid.style.transform=`translateX(${dir*30}%)`;
-    grid.innerHTML=cached?m2_pkGrid(cached):`<div class="m2-empty">Loading…</div>`;
-    void grid.offsetWidth;
-    grid.style.transition='transform 220ms cubic-bezier(.25,.8,.25,1), opacity 220ms ease-out'; grid.style.transform=''; grid.style.opacity='1';
-    setTimeout(()=>{ m2_pkAnimating=false; },230);
-    if(!cached) m2_pkDraw(); else { m2_pkFoot(); [-1,1].forEach(n=>m2_pkMonth(m2_addMonth(next,n)).catch(()=>{})); }
-  },160);
+  if(m2_addMonth(pk.ms,dir)<m2_monthStart(m2_today())) return;   // nothing to pick before this month
+  m2_pkAdj(dir);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>m2_pkCommit(dir)));
 }
 function m2_bindPkSwipe(){
   const el=m2_el('m2-pk-wrap'); if(!el) return;
   let x0=0,y0=0,cx=0,on=false,locked=false,horiz=false; const vt=m2_vt();
-  el.addEventListener('touchstart',e=>{ const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; on=true; locked=false; horiz=false; vt.reset(cx); },{passive:true});
-  el.addEventListener('touchmove',e=>{ if(!on) return; const t=e.touches[0], dx=t.clientX-x0, dy=t.clientY-y0; cx=t.clientX; vt.add(cx);
-    if(!locked){ if(Math.abs(dx)<6&&Math.abs(dy)<6) return; horiz=Math.abs(dx)>Math.abs(dy); locked=true; }
-    if(horiz) e.preventDefault(); },{passive:false});
-  el.addEventListener('touchend',()=>{ if(!on) return; on=false; if(!horiz) return; m2_pkNoTap=Date.now()+350;
-    const dx=cx-x0; if(m2_swipeCommits(dx,vt.v(),el.offsetWidth)) m2_pkMove(dx<0?1:-1); },{passive:true});
+  const minMs=()=>m2_monthStart(m2_today());
+  el.addEventListener('touchstart',e=>{ on=false; if(m2_pkAnimating||!m2_pk) return; const t=e.touches[0]; x0=cx=t.clientX; y0=t.clientY; on=true; locked=false; horiz=false; vt.reset(cx); },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    if(!on) return; const t=e.touches[0]; let dx=t.clientX-x0; const dy=t.clientY-y0; cx=t.clientX; vt.add(cx);
+    if(!locked){ if(Math.abs(dx)<6&&Math.abs(dy)<6) return; horiz=Math.abs(dx)>Math.abs(dy); locked=true; if(!horiz){ on=false; return; } }
+    e.preventDefault();
+    const dir=dx<0?1:-1, blockedEdge=dir<0&&m2_addMonth(m2_pk.ms,-1)<minMs();
+    if(blockedEdge){ dx=dx/4; m2_el('m2-pk-adj')?.remove(); }   // nothing before this month: resist
+    else if(dx!==0) m2_pkAdj(dir);
+    m2_swSet(m2_el('m2-pk-grid'),dx); if(!blockedEdge) m2_swSet(m2_el('m2-pk-adj'),dx);
+  },{passive:false});
+  el.addEventListener('touchend',()=>{
+    if(!on) return; on=false; if(!horiz) return; m2_pkNoTap=Date.now()+350;
+    const dx=cx-x0, v=vt.v(), dir=dx<0?1:-1;
+    if(!(dir<0&&m2_addMonth(m2_pk.ms,-1)<minMs())&&m2_swipeCommits(dx,v,el.offsetWidth)) m2_pkCommit(dir,v); else m2_pkCancel();
+  },{passive:true});
+  el.addEventListener('touchcancel',()=>{ if(on&&horiz) m2_pkCancel(); on=false; },{passive:true});
 }
 
 /* ── pick up / accept / decline / your request ─────────────────────────── */
