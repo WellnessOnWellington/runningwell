@@ -1988,6 +1988,13 @@
   .m2-textarea { padding:10px 12px; min-height:80px; resize:none; }
   .m2-input:focus, .m2-select:focus, .m2-textarea:focus { outline:none; border-color:var(--burgundy); box-shadow:0 0 0 3px rgba(139,37,53,0.12); }
   .m2-pin { letter-spacing:0.3em; text-align:center; font-size:18px; }
+  .m2-pinwrap { position:relative; display:flex; justify-content:center; padding:2px 0; }
+  .m2-pinboxes { display:flex; gap:10px; pointer-events:none; }
+  .m2-pinboxes span { width:52px; height:56px; border:1.5px solid var(--border); border-radius:12px; background:var(--warm-white); display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; color:var(--charcoal); transition:border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+  .m2-pinboxes span.filled { border-color:var(--dusty); background:var(--blush-lt); }
+  .m2-pinboxes span.cur { border-color:var(--burgundy); box-shadow:0 0 0 3px rgba(139,37,53,0.12); background:var(--white); }
+  /* The real input covers the boxes, invisible. 16px so iOS doesn't zoom on focus. */
+  .m2-pin-real { position:absolute; inset:0; width:100%; height:100%; opacity:0; font-size:16px; border:none; padding:0; margin:0; color:transparent; caret-color:transparent; background:transparent; cursor:pointer; }
   .m2-label { display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:800; color:var(--text); }
   .m2-err { min-height:1.2rem; font-size:0.84rem; color:var(--burgundy); font-weight:700; }
   .m2-btn { width:100%; min-height:50px; border:none; border-radius:11px; background:var(--burgundy); color:#fff; font-family:'Nunito',sans-serif; font-size:16px; font-weight:800; cursor:pointer; }
@@ -18883,7 +18890,7 @@ function m2_showStart(){
       <label class="m2-label">Name
         <select class="m2-select" id="m2-si-name"><option value="">Choose your name</option>${people.map(e=>`<option value="${m2_esc(e.id)}"${e.id===last?' selected':''}>${m2_esc(e.name)}</option>`).join('')}</select></label>
       <label class="m2-label">Your PIN
-        <input class="m2-input m2-pin" id="m2-si-pin" type="password" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter')m2_signInPerson()"></label>
+        ${m2_pinBoxes('m2-si-pin',4,'m2_signInPerson','Your PIN')}</label>
       <div class="m2-err" id="m2-si-err" role="alert"></div>
       <button class="m2-btn" id="m2-si-btn" onclick="m2_signInPerson()">Sign in</button>
     </div>
@@ -18891,28 +18898,56 @@ function m2_showStart(){
     <div class="m2-card" style="display:flex;flex-direction:column;gap:10px">
       <div><div style="font-size:16px;font-weight:800;color:var(--charcoal)">Just checking the roster</div>
         <div class="m2-sub">Who's on each day and who's on leave. Uses the shared roster PIN.</div></div>
-      <input class="m2-input m2-pin" id="m2-ro-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Roster PIN" aria-label="Roster PIN" onkeydown="if(event.key==='Enter')m2_signInRoster()">
+      ${m2_pinBoxes('m2-ro-pin',m2_rosterPinLen(),'m2_signInRoster','Roster PIN')}
       <div class="m2-err" id="m2-ro-err" role="alert"></div>
       <button class="m2-btn ghost" onclick="m2_signInRoster()">Open the roster</button>
-    </div>
-    <div style="text-align:center"><button class="m2-link" onclick="m2_openPreviewSheet()">Preview options</button></div>`;
+    </div>`;
 }
+/* PIN entry as boxes that sign in on the last digit (Joel, 12 Nov 2026 — like the desktop Who's On
+   roster PIN). ONE real input lies invisibly over the boxes, so the number pad, paste and
+   password-manager autofill all still work; the boxes only paint what is in it. Every staff PIN
+   is 4 digits; the roster PIN box count follows its configured length. The Sign in buttons stay
+   as a fallback. */
+function m2_rosterPinLen(){ const p=String(m2_cfg?.roster_view_pin||_rosterConfig?.roster_view_pin||ROSTER_VIEW_PIN||''); return p.length||4; }
+function m2_pinBoxes(id,n,submitFn,label){
+  return `<div class="m2-pinwrap">
+    <input id="${id}" class="m2-pin-real" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="${n}" autocomplete="off" aria-label="${label}"
+      oninput="m2_pinInput(this,${n},'${submitFn}')" onfocus="m2_pinPaint('${id}')" onblur="m2_pinPaint('${id}')" onkeydown="if(event.key==='Enter')${submitFn}()">
+    <div class="m2-pinboxes" aria-hidden="true">${'<span></span>'.repeat(n)}</div></div>`;
+}
+function m2_pinPaint(id){
+  const el=m2_el(id); if(!el) return;
+  const boxes=el.parentElement.querySelectorAll('.m2-pinboxes span'), v=el.value, f=document.activeElement===el;
+  boxes.forEach((b,i)=>{ b.textContent=i<v.length?'•':''; b.classList.toggle('filled',i<v.length); b.classList.toggle('cur',f&&i===Math.min(v.length,boxes.length-1)); });
+}
+function m2_pinInput(el,n,submitFn){
+  const clean=el.value.replace(/[^0-9]/g,'').slice(0,n);
+  if(clean!==el.value) el.value=clean;
+  m2_pinPaint(el.id);
+  if(clean.length===n) setTimeout(()=>window[submitFn](),60);   // let the last box paint first
+}
+// After a wrong PIN: clear, repaint and keep the number pad up for the retry.
+function m2_pinReset(id){ const el=m2_el(id); if(!el) return; el.value=''; m2_pinPaint(id); try{ el.focus(); }catch(e){} }
+
 function m2_signInPerson(){
   const err=m2_el('m2-si-err'), pinEl=m2_el('m2-si-pin');
   const id=m2_el('m2-si-name').value, pin=pinEl.value;
+  // An empty retry (Sign in / Enter straight after a wrong PIN auto-cleared the boxes) keeps
+  // the "Incorrect PIN — N attempts remaining" message rather than replacing it.
+  if(!pin&&err.textContent){ try{ pinEl.focus(); }catch(e){} return; }
   err.textContent='';
-  if(!id){ err.textContent='Please choose your name.'; return; }
+  if(!id){ err.textContent='Please choose your name, then tap Sign in.'; return; }
   if(!pin){ err.textContent='Please enter your PIN.'; return; }
   const emp=m2_emp(id);
   if(!emp){ err.textContent='Staff member not found.'; return; }
   const a=_staffLoginAttempts[id]||{count:0,lockedUntil:0};
-  if(Date.now()<a.lockedUntil){ err.textContent=`Too many attempts — try again in ${Math.ceil((a.lockedUntil-Date.now())/1000)}s.`; pinEl.value=''; return; }
-  if(!emp.pin){ err.textContent='No PIN set — ask your manager.'; pinEl.value=''; return; }
+  if(Date.now()<a.lockedUntil){ err.textContent=`Too many attempts — try again in ${Math.ceil((a.lockedUntil-Date.now())/1000)}s.`; m2_pinReset('m2-si-pin'); return; }
+  if(!emp.pin){ err.textContent='No PIN set — ask your manager.'; m2_pinReset('m2-si-pin'); return; }
   if(emp.pin!==pin){
     a.count=(a.count||0)+1;
     if(a.count>=5){ a.lockedUntil=Date.now()+60000; a.count=0; err.textContent='Too many incorrect attempts — locked for 60 seconds.'; }
     else err.textContent=`Incorrect PIN — ${5-a.count} attempt${5-a.count===1?'':'s'} remaining.`;
-    _staffLoginAttempts[id]=a; pinEl.value=''; return;
+    _staffLoginAttempts[id]=a; m2_pinReset('m2-si-pin'); return;
   }
   _staffLoginAttempts[id]={count:0,lockedUntil:0};
   try{ localStorage.setItem('rw_last_staff_id',emp.id); }catch(e){}
@@ -18922,8 +18957,9 @@ function m2_signInPerson(){
 }
 function m2_signInRoster(){
   const v=m2_el('m2-ro-pin').value, err=m2_el('m2-ro-err');
+  if(!v&&err.textContent){ try{ m2_el('m2-ro-pin').focus(); }catch(e){} return; }
   const pin=m2_cfg?.roster_view_pin||_rosterConfig?.roster_view_pin||ROSTER_VIEW_PIN;
-  if(v!==pin){ err.textContent='Incorrect PIN — please try again'; m2_el('m2-ro-pin').value=''; return; }
+  if(v!==pin){ err.textContent='Incorrect PIN — please try again'; m2_pinReset('m2-ro-pin'); return; }
   m2_store(M2_WHO_KEY,{kind:'team',until:Date.now()+M2_WHO_DAYS*86400000});
   m2_who={kind:'team'};
   m2_enterShell(true);
@@ -20792,7 +20828,6 @@ function m2_previewOptions(){
     <button class="m2-row" style="width:100%;border:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;color:var(--burgundy);cursor:pointer;padding:0" onclick="m2_lockDevice()">Lock the preview on this device</button>
   </div></section>`;
 }
-function m2_openPreviewSheet(){ m2_sheetOpen({title:'Preview options',render:()=>m2_previewOptions().replace('<h2 class="m2-h2">Preview options</h2>','')}); }
 function m2_openAccount(goTo){
   const me=m2_me(); if(!me) return;
   const row=(label,sub,fn,colour)=>`<button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;cursor:pointer;padding:0;min-height:54px" onclick="${m2_on(fn)}"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:16px;font-weight:${sub?800:700};color:${colour||'var(--charcoal)'}">${m2_esc(label)}</span>${sub?`<span style="font-size:13px;color:#6E5F62">${m2_esc(sub)}</span>`:''}</span>${sub?M2_ICON.chev:''}</button>`;
