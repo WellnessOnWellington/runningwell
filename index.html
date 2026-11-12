@@ -20797,7 +20797,7 @@ function m2_openAccount(goTo){
   const me=m2_me(); if(!me) return;
   const row=(label,sub,fn,colour)=>`<button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;cursor:pointer;padding:0;min-height:54px" onclick="${m2_on(fn)}"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:16px;font-weight:${sub?800:700};color:${colour||'var(--charcoal)'}">${m2_esc(label)}</span>${sub?`<span style="font-size:13px;color:#6E5F62">${m2_esc(sub)}</span>`:''}</span>${sub?M2_ICON.chev:''}</button>`;
   m2_sheetOpen({title:'',render:()=>`
-    <div style="display:flex;align-items:center;gap:12px;margin-top:-6px"><span style="width:48px;height:48px;border-radius:24px;background:var(--blush);color:var(--burgundy);font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center">${m2_esc(m2_initials(me))}</span>
+    <div style="display:flex;align-items:center;gap:12px;padding-top:4px"><span style="width:48px;height:48px;flex-shrink:0;border-radius:24px;background:var(--blush);color:var(--burgundy);font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center">${m2_esc(m2_initials(me))}</span>
       <div style="display:flex;flex-direction:column"><span style="font-family:'Lora',serif;font-size:19px;font-weight:600;color:var(--charcoal)">${m2_esc(me.name)}</span><span style="font-size:14px;color:#6E5F62">${m2_esc(m2_groupLabel(m2_groupOf(me)).replace(/s$/,''))} · signed in on this device</span></div></div>
     <div class="m2-box" style="gap:0;padding:0 14px">
       ${row('Timesheets','Your two most recent pay periods',()=>m2_openTimesheets())}
