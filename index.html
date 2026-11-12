@@ -2135,9 +2135,9 @@
   .m2-pill-row.home .m2-fill { opacity:1; filter:brightness(0.72); }
   .m2-pill-row.home { background:rgba(62,92,118,0.11); }
   .m2-home-ico { display:inline-flex; margin-left:4px; color:#3E5C76; font-size:13px; vertical-align:-1px; }
-  /* 'slot' mode: the status spot is 14px wide on every today row (dot centred), so a house
-     there doesn't nudge its name; on other days the house is pinned to the name column's end. */
-  .m2-wfh-slot .m2-indot { margin:0 3px; }
+  /* The status spot is 14px wide on every today row (8px dot + 3px each side), the same as the
+     house that replaces it for someone working from home — so names line up either way. */
+  .m2-indot { margin:0 3px; }
   .m2-indot-slot { width:14px; display:inline-flex; justify-content:center; flex-shrink:0; }
   .m2-indot-slot .m2-home-ico { margin-left:0; }
   .m2-pill-name.m2-name-end { display:inline-flex; align-items:center; justify-content:space-between; gap:2px; }
@@ -18589,14 +18589,6 @@ const M2_DOOR_KEY='rw_m2_door', M2_WHO_KEY='rw_m2_who', M2_LIVE_KEY='rw_m2_live'
    'fixed' = always the standard height (slightly-too-long content scrolls),
    'auto'  = every panel sized to its content. */
 const M2_PANEL_KEY='rw_m2_panel';
-/* Where the work-from-home house sits on a tile (Joel, 12 Nov 2026 — a comparison toggle in
-   Preview options). 'slot' (new): on today's view the house takes the status dot's place (a
-   manager at home never taps in, so the dot only ever said "not in yet"); on other days it is
-   pinned to the right end of the fixed name column, so it lines up row to row. 'name' (the
-   first version): the house straight after the name text. */
-const M2_WFH_ICON_KEY='rw_m2_wfh_icon';
-function m2_wfhIconMode(){ return m2_load(M2_WFH_ICON_KEY)==='name'?'name':'slot'; }
-function m2_applyWfhMode(){ document.documentElement.classList.toggle('m2-wfh-slot',m2_wfhIconMode()==='slot'); }
 function m2_panelMode(){ const v=m2_load(M2_PANEL_KEY); if(v==='grow'||v==='fixed'||v==='auto') return v; return m2_load(M2_FIXED_KEY)===false?'auto':'grow'; }
 function m2_fixedOn(){ return m2_panelMode()!=='auto'; }
 const M2_LAST_KEY='rw_m2_last', M2_SEEN_KEY='rw_m2_seen_open', M2_HIDDEN_KEY='rw_m2_hidden';
@@ -18685,17 +18677,18 @@ function m2_leaveKind(lv){ return !lv?'':lv.leaveType==='annual_leave'?'annual':
 function m2_pill(o){
   const cls=['m2-pill-row',o.size||'md',o.kind||'',o.me?'me':'',o.home?'home':''].join(' ');
   const style=`--ink:${o.ink||'#8B2535'}`;
-  // Work from home: a house (aria label says it in words) + a darker bar. Placement: m2_wfhIconMode.
+  /* Work from home: a house (aria label says it in words) + a darker bar (Joel, 12 Nov 2026).
+     Today's view: the house takes the status dot's place — a manager at home never taps in, so
+     the dot only ever said "not in yet". Other days: pinned to the right end of the fixed name
+     column so it lines up row to row. Large tiles: a line under the time (see _lgHome). */
   const _ico=`<span class="m2-home-ico" role="img" aria-label="${WFH_LABEL}" title="${WFH_LABEL}">${WFH_ICON}</span>`;
-  const _slot=m2_wfhIconMode()==='slot';
   const _status=o.dot===undefined?''
-    :(o.home&&_slot)?`<span class="m2-indot-slot">${_ico}</span>`
+    :o.home?`<span class="m2-indot-slot">${_ico}</span>`
     :`<span class="m2-indot${o.dot?' in':''}" title="${o.dot?'In now':'Not in yet'}"></span>`;
   // Large tiles (My Shifts — only ever your own shifts, so nothing to line up with): the house
   // goes on a second line under the time instead; a 62px date column can't also hold it.
-  const _lgHome=o.home&&_slot&&o.size==='lg';
+  const _lgHome=o.home&&o.size==='lg';
   const _name=(!o.home||_lgHome)?`<span class="m2-pill-name">${m2_esc(o.name)}</span>`
-    :!_slot?`<span class="m2-pill-name">${m2_esc(o.name)}${_ico}</span>`
     :o.dot!==undefined?`<span class="m2-pill-name">${m2_esc(o.name)}</span>`
     :`<span class="m2-pill-name m2-name-end"><span class="m2-name-txt">${m2_esc(o.name)}</span>${_ico}</span>`;
   const inner=`${_status}${_name}`
@@ -18709,7 +18702,6 @@ function m2_pill(o){
 
 /* ── door + routing (unchanged rules from step 1) ────────────────────── */
 function m2_route(){
-  m2_applyWfhMode();
   try{
     const want=location.hash==='#m2';
     const on=m2_el('view-m2')?.classList.contains('active');
@@ -20740,8 +20732,6 @@ function m2_previewOptions(){
       <input type="checkbox" ${live?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_LIVE_KEY,this.checked);m2_markLive();m2_sheetRender(false)"></label>
     <div class="m2-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:10px 0"><span style="display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Panel height</span><span style="font-size:13px;color:#6E5F62">${({grow:'Standard height, grows to fit before scrolling',fixed:'Always the standard height — long content scrolls',auto:'Each panel fits its content'})[m2_panelMode()]}</span></span>
       <div class="m2-seg" role="tablist" aria-label="Panel height">${[['grow','Grow'],['fixed','Fixed'],['auto','Fit']].map(([v,l])=>`<button role="tab" aria-selected="${m2_panelMode()===v}" onclick="m2_store(M2_PANEL_KEY,'${v}');m2_sheetRender(false)">${l}</button>`).join('')}</div></div>
-    <div class="m2-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:10px 0"><span style="display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Work from home icon</span><span style="font-size:13px;color:#6E5F62">${m2_wfhIconMode()==='slot'?'In the status spot today, lined up after the name other days':'Straight after the name (first version)'}</span></span>
-      <div class="m2-seg" role="tablist" aria-label="Work from home icon">${[['slot','Status spot'],['name','After name']].map(([v,l])=>`<button role="tab" aria-selected="${m2_wfhIconMode()===v}" onclick="m2_store(M2_WFH_ICON_KEY,'${v}');m2_applyWfhMode();m2_sheetRender(false);m2_render(m2_tab)">${l}</button>`).join('')}</div></div>
     <button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;cursor:pointer;padding:0" onclick="m2_exit()">Exit preview to the kiosk</button>
     <button class="m2-row" style="width:100%;border:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;color:var(--burgundy);cursor:pointer;padding:0" onclick="m2_lockDevice()">Lock the preview on this device</button>
   </div></section>`;
