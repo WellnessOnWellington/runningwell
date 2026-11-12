@@ -3154,6 +3154,7 @@
               <option value="restore_roster_shift">Restore roster shift</option>
               <option value="roster_request_applied">Roster change from request</option>
               <option value="lock">Lock</option>
+              <option value="unlock">Unlock</option>
             </select>
           </div>
           <div class="table-wrap">
@@ -3683,7 +3684,7 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.6 &middot; November 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.7 &middot; November 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
@@ -3691,6 +3692,13 @@
                  rule, never by hand: fading per row was forgotten at every bump from v2.2 to v3.3,
                  which left eleven old releases looking current. -->
             <div class="about-history" style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.7</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">November 2026 &mdash; Leave and swap safeguards</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Approved leave can no longer be lost to a swap, and a swap can no longer double-book anyone.</strong> Approving leave now marks the roster shift as leave, the Staff Portal won&rsquo;t offer a shift you&rsquo;re on leave for, and approval refuses a swap, give-away or pick-up that would remove someone&rsquo;s leave or give them two overlapping shifts (the request card warns beforehand). Staff can now withdraw their own pending request in the Staff Portal. Unlocking a timesheet row asks first and is recorded in the audit. Clocking in on a leave day keeps the reason you type. Approving an Arrival or Departure note now settles only the end of the day the note is about &mdash; the other end follows the normal roster and grace-period rule, as everywhere else.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.6</div>
                 <div>
@@ -5169,7 +5177,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.6';
+const APP_VERSION='3.7';
 const APP_VERSION_DATE='November 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
@@ -5644,8 +5652,8 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
       const leaveEntry=_entries.find(e=>e.employeeId===emp.id&&e.date===todayKey&&e.leaveType);
       if(leaveEntry){
         const leaveName=formatLeaveType(leaveEntry.leaveType);
-        await db.update('entries',leaveEntry.id,{leave_type:null,clock_in:sheetTimeStr,clock_in_iso:isoNow,clock_out:null,clock_out_iso:null,hours:null,status:'pending',reason_in:`Clocked in — was marked as ${leaveName}`});
-        Object.assign(leaveEntry,{leaveType:null,clockIn:sheetTimeStr,clockInISO:isoNow,clockOut:null,hours:null,status:'pending',reasonIn:`Clocked in — was marked as ${leaveName}`});
+        await db.update('entries',leaveEntry.id,{leave_type:null,clock_in:sheetTimeStr,clock_in_iso:isoNow,clock_out:null,clock_out_iso:null,hours:null,status:'pending',reason_in:`Clocked in — was marked as ${leaveName}`+(reason?` · ${reason}`:'')});
+        Object.assign(leaveEntry,{leaveType:null,clockIn:sheetTimeStr,clockInISO:isoNow,clockOut:null,hours:null,status:'pending',reasonIn:`Clocked in — was marked as ${leaveName}`+(reason?` · ${reason}`:'')});
         /* The person marked as leave has turned up, so the leave is gone and any cover
            offered for it must go with it. Missing this is the double-payment path: the
            cover shift would stay on the roster and stay pickable, and whoever took it
@@ -5654,7 +5662,10 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
            is what makes it safe here — the kiosk refresh never re-fetches entries and
            _rosterShifts is only refreshed while the Who's On view is on screen. */
         if(leaveEntry.shiftId) await rbRemoveCoverForShift(leaveEntry.shiftId);
-        await addNote(emp,'Leave conflict',timeStr,`Clocked in but was marked as ${leaveName} for today — please review`,leaveEntry.id,todayKey);
+        // The leave is gone, so the roster shift is no longer "on leave" either (Who's On read it).
+        if(leaveEntry.shiftId){ try{ await db.update('roster_shifts',leaveEntry.shiftId,{on_leave:false}); const _rs=(_rosterShifts||[]).find(x=>x.id===leaveEntry.shiftId); if(_rs) _rs.on_leave=false; }catch(_){} }
+        // Keep what they typed: it used to be thrown away on this path (sandbox test 12 Nov).
+        await addNote(emp,'Leave conflict',timeStr,`Clocked in but was marked as ${leaveName} for today — please review`+(reason?`. Their reason: "${reason}"`:''),leaveEntry.id,todayKey);
         showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,_kioskFlashMsg(emp),emp);
         return;
       }
@@ -7937,9 +7948,17 @@ async function tsMgrAutoLock(empId, empName, role, date, rostStart, rostEnd, ent
 async function tsUnlockRow(entryId, e){
   e.stopPropagation();
   if(!entryId) return;
+  if(!rwDbGuard()) return;
+  // Unlocking takes a payroll-ready entry out of the export — confirm, and leave a trail
+  // ('unlock' was a documented audit action that nothing ever wrote; sandbox test 12 Nov).
+  if(!confirm('Unlock this entry? It will not be exported to MYOB until it is locked again.')) return;
   try{
     await db.update('entries',entryId,{locked:false,locked_by:null,locked_at:null});
     const entry=_entries.find(en=>en.id===entryId);
+    const mgr=currentManager?.name||'Manager';
+    await tsSaveAudit({entry_id:entryId,employee_id:entry?.employeeId||null,employee_name:entry?.employeeName||'',date:entry?.date||null,
+      rostered_start:null,rostered_end:null,clocked_start:entry?.clockIn||null,clocked_end:entry?.clockOut||null,
+      final_start:entry?.finalStart||null,final_end:entry?.finalEnd||null,action:'unlock',reason:'Unlocked by manager',manager_name:mgr});
     if(entry){entry.locked=false;entry.lockedBy=null;}
     // Always mark as overridden so row is fully editable after unlock
     _tsAutoOverride.add(String(entryId));
@@ -8023,6 +8042,7 @@ async function tsDeleteRow(entryId, shiftId, empId, empName, date, e){
          filters on `deleted` — so the cover offered for it goes too. Keyed on the
          entry's own shiftId, which for a leave row is the block it was marked on. */
       if(entry?.leaveType&&entry.shiftId) await rbRemoveCoverForShift(entry.shiftId);
+      if(entry?.leaveType&&entry.shiftId) await rbClearOnLeave(entry.shiftId);   // leave gone -> shift no longer "on leave"
     }
 
     if(hasShift){
@@ -9103,6 +9123,7 @@ async function setLeaveType(entryId, leaveType){
     await db.update('entries', entryId, {leave_type: leaveType||null});
     const e=_entries.find(e=>e.id===entryId);
     if(e) e.leaveType=leaveType||null;
+    if(!leaveType&&e&&e.shiftId) await rbClearOnLeave(e.shiftId);   // no longer leave -> clear the roster flag
     renderTimesheets();
   }catch(err){showToast('Could not update leave type');console.error(err);}
 }
@@ -9891,7 +9912,8 @@ async function resolveNote(id,status){
       entryPatch.break_gap_decision=(gapSel==='reported'||gapSel==='standard')?gapSel:null;
     } else if(status==='approved'&&entry){
       const now=new Date().toISOString();
-      const shift=_rosterShifts.find(s=>s.employee_id===note.employeeId&&s.date===note.date)||null;
+      // The block this entry belongs to — on a split day the day's first block is the wrong one.
+      const shift=tsShiftForEntry(entry,_rosterShifts||[]);
       const rostStart=shift?.start_time||null;
       const rostEnd=shift?.end_time||null;
       _auditRostStart=rostStart; _auditRostEnd=rostEnd;
@@ -9901,8 +9923,22 @@ async function resolveNote(id,status){
       if(isDepartureNote&&rostEnd&&entry.clockOut){const g=timeToMin(rostEnd)-timeToMin(entry.clockOut);if(g>_grace)gapAutoMins=g;}
       if(isArrivalNote&&rostStart&&entry.clockIn){const g=timeToMin(entry.clockIn)-timeToMin(rostStart);if(g>_grace)gapAutoMins=g;}
       const gapAutoHours=gapAutoMins>0?(gapAutoMins/60):null;
-      entryPatch.final_start=entry.clockIn||null;
-      entryPatch.final_end=entry.clockOut||null;
+      // The note settles ONE side of the day (Departure → the finish, Arrival → the start).
+      // The other side follows the normal rule — snap to roster when early or within grace,
+      // a manager's earlier correction kept — exactly as the timesheet row and MYOB export
+      // compute it. Writing the raw clock time there instead paid unapproved early starts
+      // and docked in-grace lateness (sandbox test, 12 Nov 2026; Joel: normal rule, going
+      // forward only — past entries left as they are).
+      const _noteEmp=_emps.find(e=>String(e.id)===String(note.employeeId))||{role:note.role};
+      const _normal=resolveFinalTimes({...entry,finalStart:entry.finalStart||null,finalEnd:entry.finalEnd||null},shift,_noteEmp);
+      // Except a clock-in more than EARLY_REVIEW_MINS early: tsIsAutoApproved treats that as a
+      // possible wrong-day / wrong-person event, never to be snapped away silently — approving a
+      // note about the other end of the day is not a decision about it, so it keeps its clock time
+      // (as the old code did). Note this still locks the row, so that early start IS paid — the
+      // separate early-arrival note from the kiosk is where a manager reviews it.
+      const _bigEarly=!!(entry.clockIn&&rostStart&&!entry.finalStart&&timeToMin(rostStart)-timeToMin(entry.clockIn)>EARLY_REVIEW_MINS);
+      entryPatch.final_start=(isArrivalNote||_bigEarly)?(entry.clockIn||null):(_normal.finalStart||entry.clockIn||null);
+      entryPatch.final_end=isDepartureNote?(entry.clockOut||null):(_normal.finalEnd||entry.clockOut||null);
       entryPatch.locked=true;
       entryPatch.locked_by=resolvedBy;
       entryPatch.locked_at=now;
@@ -9976,7 +10012,7 @@ async function resolveNote(id,status){
         action:'adjustment', manager_name:resolvedBy,
         reason:`Note acknowledged: ${note.type}`
               +(isBreakNote?` · break ${entryPatch.break_gap_decision||'cleared'}`
-                           :` · final times set from clock, entry locked`)
+                           :` · ${isArrivalNote?'start from clock, finish by roster rule':isDepartureNote?'finish from clock, start by roster rule':'final times by roster rule'}, entry locked`)
               +(gapSel?` · gap: ${gapSel}`:'')
               +((!isBreakNote&&(_priorFinalStart||_priorFinalEnd)
                  &&(entryPatch.final_start!==_priorFinalStart||entryPatch.final_end!==_priorFinalEnd))
@@ -16074,6 +16110,10 @@ function reqShowDetail(requestId){
       <button class="req-accept-btn" onclick="reqPeerAcceptConfirm('${r.id}')">✓ Accept</button>
       <button class="req-decline-peer-btn" onclick="reqPeerDeclinePrompt('${r.id}')">✗ Decline</button>
     </div></div>`;
+  } else if(isInitiator&&(r.status==='pending_peer'||r.status==='pending_manager')){
+    // The person who asked can take it back before anyone decides (the phone app had this;
+    // the desktop portal did not, though v3.6 tells people to withdraw stale requests).
+    html+=`<div class="req-detail-actions"><button class="req-decline-peer-btn" onclick="reqWithdrawDesktop('${r.id}')">Withdraw request</button></div>`;
   } else if(_lapsed&&isPeer){
     // Say why the buttons are gone, rather than just not drawing them.
     html+=`<div class="req-admin-shifts" style="border-left:3px solid var(--muted);">
@@ -16130,6 +16170,15 @@ function reqPeerAcceptConfirm(requestId){
   document.getElementById('req-respond-area-'+requestId).innerHTML=html;
 }
 
+async function reqWithdrawDesktop(requestId){
+  const r=_requests.find(x=>x.id===requestId); if(!r||!_reqEmployee) return;
+  if(!confirm('Withdraw this request? It will be cancelled'+(r.status==='pending_peer'&&r.colleagueName?` and ${String(r.colleagueName).split(' ')[0]} will be told`:'')+'. Nothing on the roster changes.')) return;
+  const built=reqBuildWithdraw(r,_reqEmployee);
+  if(!built.ok){ showToast(built.message); await reqShowList(); return; }
+  try{ await reqApplyWrites(built.writes); showToast(built.done); }
+  catch(e){ console.error(e); showToast('Could not withdraw — check your connection and try again'); }
+  await reqShowList();
+}
 async function reqPeerRespond(requestId,response,reason=''){
   const r=_requests.find(x=>x.id===requestId);
   if(!r) return;
@@ -16193,6 +16242,9 @@ async function renderRequestForm(){
   try{
     const allShifts=await db.get('roster_shifts');
     _reqMyShifts=allShifts.filter(s=>s.employee_id===emp.id&&s.date>today).sort((a,b)=>a.date.localeCompare(b.date));
+    // A shift with leave on it is not offerable, whether or not its on_leave flag got set.
+    try{ const lv=(await db.get('entries',{employee_id:emp.id,date:{gt:today},leave_type:{'not.is':'null'}})).filter(e=>!e.deleted&&e.leave_type!=='public_holiday');
+      _reqMyShifts.forEach(s=>{ if(lv.some(e=>String(e.shift_id||'')===String(s.id)||(!e.shift_id&&e.date===String(s.date).slice(0,10)))) s.on_leave=true; }); }catch(e){}
     const sixMonthsStr=rbDateKey(new Date(Date.now()+6*30.5*86400000));
     // `active` matters: an archived placeholder kept offering its shifts to staff, because
     // this was the one placeholder lookup in the file that did not check it.
@@ -16286,6 +16338,8 @@ async function reqLoadColleagueShifts(colleagueId){
   try{
     const allShifts=await db.get('roster_shifts');
     _reqColleagueShifts=allShifts.filter(s=>s.employee_id===colleagueId&&s.date>today).sort((a,b)=>a.date.localeCompare(b.date));
+    try{ const lv=(await db.get('entries',{employee_id:colleagueId,date:{gt:today},leave_type:{'not.is':'null'}})).filter(e=>!e.deleted&&e.leave_type!=='public_holiday');
+      _reqColleagueShifts.forEach(s=>{ if(lv.some(e=>String(e.shift_id||'')===String(s.id)||(!e.shift_id&&e.date===String(s.date).slice(0,10)))) s.on_leave=true; }); }catch(e){}
   }catch(e){ _reqColleagueShifts=[]; }
   const opts=_reqColleagueShifts.length
     ?_reqColleagueShifts.map(s=>s.on_leave?`<option value="${s.id}" disabled>${reqFmtDate(s.date)} ${s.start_time}–${s.end_time} (Not in)</option>`:`<option value="${s.id}">${reqFmtDate(s.date)} ${s.start_time}–${s.end_time}</option>`).join('')
@@ -16799,7 +16853,29 @@ function reqAgeHtml(r){
   return ` · <span style="color:${colour};font-weight:800;">waiting ${days} days</span>`;
 }
 
+/* What would make approval refuse, from the manager screen's loaded roster/entries (approval
+   re-checks against a fresh read). Shown on the pending card with Approve disabled. */
+function reqApprovalWarnings(r){
+  if(!r||r.type==='leave') return [];
+  const w=[], sh=_rosterShifts||[], ents=_entries||[];
+  const lv=(empId,date,shiftId)=>{ const e=leaveEntryFor(empId,date,shiftId,ents); return e&&e.leaveType!=='public_holiday'?e:null; };
+  const clash=(empId,date,s,e,ex)=>reqClashFor(sh,empId,date,s,e,ex);
+  const nm=x=>String(x||'').split(' ')[0];
+  if(r.type==='swap'||r.type==='giveaway'){ const l=lv(r.initiatorId,r.initiatorShiftDate,r.initiatorShiftId); if(l) w.push(`${nm(r.initiatorName)} has ${formatLeaveType(l.leaveType)} on this shift — revoke it first`); }
+  if(r.type==='swap'){
+    const l=lv(r.colleagueId,r.colleagueShiftDate,r.colleagueShiftId); if(l) w.push(`${nm(r.colleagueName)} has ${formatLeaveType(l.leaveType)} on their shift — revoke it first`);
+    const c1=clash(r.initiatorId,r.colleagueShiftDate,r.colleagueShiftStart,r.colleagueShiftEnd,r.initiatorShiftId); if(c1) w.push(`${nm(r.initiatorName)} already works ${reqHm(c1.start_time)}–${reqHm(c1.end_time)} that day — would double-book`);
+    const c2=clash(r.colleagueId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd,r.colleagueShiftId); if(c2) w.push(`${nm(r.colleagueName)} already works ${reqHm(c2.start_time)}–${reqHm(c2.end_time)} that day — would double-book`);
+  }
+  if(r.type==='giveaway'){ const c=clash(r.colleagueId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd,null); if(c) w.push(`${nm(r.colleagueName)} already works ${reqHm(c.start_time)}–${reqHm(c.end_time)} that day — would double-book`); }
+  if(r.type==='pickup'){ const c=clash(r.initiatorId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd,null); if(c) w.push(`${nm(r.initiatorName)} already works ${reqHm(c.start_time)}–${reqHm(c.end_time)} that day — would double-book`); }
+  return w;
+}
 function buildReqAdminCard(r,isPending){
+  const _warn=isPending?reqApprovalWarnings(r):[];
+  // Only a stale request disables Approve; the leave/clash warnings come from this screen's
+  // copy of the roster, which can be old — approval re-checks against fresh data and refuses
+  // there if they still apply (review 12 Nov).
   const _changed=isPending&&!reqIsClosed(r)&&reqProblemOf(r);
   const typeLabel=r.type==='leave'?'Leave Request':r.type==='swap'?'Shift Swap':r.type==='pickup'?'Cover Pick Up':'Shift Give Away';
   let shiftsHtml='';
@@ -16841,8 +16917,8 @@ function buildReqAdminCard(r,isPending){
     if(warn) coverageWarn=`<div class="req-coverage-warn">⚠ ${escHtml(warn)}</div>`;
   }
   const actions=isPending
-    ?`${_changed?`<div class="req-coverage-warn">⚠ ${escHtml(reqProblemText(r))} — nothing to approve. Decline it.</div>`:''}<div class="req-admin-actions">
-        <button class="req-approve-btn" onclick="managerApproveRequest('${r.id}')"${_changed?' disabled style="opacity:0.45;cursor:not-allowed" title="The shift has changed — decline instead"':''}>✓ Approve</button>
+    ?`${reqProblemOf(r)?`<div class="req-coverage-warn">⚠ ${escHtml(reqProblemText(r))} — nothing to approve. Decline it.</div>`:''}${_warn.map(x=>`<div class="req-coverage-warn">⚠ ${escHtml(x)}. Approval will be refused unless this has changed.</div>`).join('')}<div class="req-admin-actions">
+        <button class="req-approve-btn" onclick="managerApproveRequest('${r.id}')"${_changed?' disabled style="opacity:0.45;cursor:not-allowed" title="Cannot be approved as it stands — see the warning"':''}>✓ Approve</button>
         <button class="req-decline-btn" onclick="managerDeclineRequest('${r.id}')">✗ Decline</button>
       </div>`
     :`<div style="font-size:0.8rem;color:${r.status==='approved'?'var(--success)':'var(--burgundy)'};font-weight:600;">
@@ -17181,8 +17257,7 @@ async function reqRevokeLeave(id){
       _entries=_entries.filter(x=>x.id!==e.id);
       // rbMarkLeave sets on_leave when marking; clear it so the roster views agree.
       if(e.shiftId){
-        const sh=_rosterShifts.find(x=>String(x.id)===String(e.shiftId));
-        if(sh&&sh.on_leave){ try{ await db.update('roster_shifts',sh.id,{on_leave:false}); sh.on_leave=false; }catch(_){} }
+        await rbClearOnLeave(e.shiftId);   // unconditional: this screen may predate the approval that set it
         // Withdrawn leave means the person is back on, so any cover offered goes.
         await rbRemoveCoverForShift(e.shiftId);
       }
@@ -17272,6 +17347,31 @@ function reqLeaveWorkedClashes(req){
   return out;
 }
 
+/* Leave that is really on a shift: a leave entry tied to that shift (or to the person's day
+   with no shift id), excluding public_holiday (not leave). FRESH read — the in-memory
+   _entries can be hours old on a kiosk. Bug found 12 Nov (sandbox test): a swap/give-away
+   approved over request-approved leave deleted the leave silently. */
+/* Leave has gone from a shift: clear its on_leave flag in the DB unconditionally (the screen's
+   copy may be older than the approval that set it — review 12 Nov) and in memory. */
+async function rbClearOnLeave(shiftId){
+  if(!shiftId) return;
+  try{ await db.update('roster_shifts',shiftId,{on_leave:false}); }catch(e){ console.warn('on_leave not cleared',e); }
+  const sh=(_rosterShifts||[]).find(x=>String(x.id)===String(shiftId)); if(sh) sh.on_leave=false;
+}
+async function reqLeaveOnShift(sh){
+  if(!sh||!sh.employee_id||!sh.date) return null;
+  const rows=await db.get('entries',{employee_id:sh.employee_id,date:String(sh.date).slice(0,10),leave_type:{'not.is':'null'}});
+  return rows.find(e=>!e.deleted&&e.leave_type!=='public_holiday'&&(String(e.shift_id||'')===String(sh.id)||!e.shift_id))||null;
+}
+/* Would this person end up with two overlapping shifts on that day? (Bug 3, 12 Nov: swaps
+   and give-aways could double-book, which then spawned a second claimable cover shift.)
+   excludeId = the shift they are handing over in the same request. */
+function reqClashFor(shifts,empId,date,start,end,excludeId){
+  const t=x=>timeStrToMin(String(x||'').slice(0,5));
+  return (shifts||[]).find(x=>String(x.employee_id)===String(empId)&&String(x.date).slice(0,10)===String(date).slice(0,10)
+    &&String(x.id)!==String(excludeId||'')&&!x.is_day_off&&x.start_time&&x.end_time&&t(x.start_time)<t(end)&&t(start)<t(x.end_time))||null;
+}
+const reqHm=x=>String(x||'').slice(0,5);
 async function applyRosterWriteback(req){
   const skippedLeaveBlocks=[];
   // Cover shifts created by this approval, counted so the toast can say so. Approving a
@@ -17326,6 +17426,9 @@ async function applyRosterWriteback(req){
           _entries.push(normaliseEntry({...row,id:saved?.id||row.id}));
         }
         appliedDates.add(date);
+        // Flag the shift as on leave, as rbMarkLeave does (and revoke clears). Without it the
+        // desktop portal kept offering request-approved leave days for swap / give-away.
+        if(!rShift.on_leave){ try{ await db.update('roster_shifts',rShift.id,{on_leave:true}); rShift.on_leave=true; }catch(e){ console.warn('on_leave flag not set',e); } }
         // Offer the block for cover. Silently does nothing unless the leave is annual,
         // the role has auto-cover on, the date is future and a placeholder exists.
         // Same rule as rbMarkLeaveApply: approving non-annual leave over a block that was
@@ -17350,6 +17453,15 @@ async function applyRosterWriteback(req){
     // never leave the other side's entry already deleted while the swap still aborts.
     if(rbShiftHasLockedLeaveEntry(initShift.id)) throw new Error(`${req.initiatorName}'s shift has a locked leave entry — remove it from Timesheets before approving this swap.`);
     if(rbShiftHasLockedLeaveEntry(colShift.id)) throw new Error(`${req.colleagueName||'The colleague'}'s shift has a locked leave entry — remove it from Timesheets before approving this swap.`);
+    // Leave on either shift (locked or not) — never swap it away silently. Then clashes.
+    for(const [sh,who] of [[initShift,req.initiatorName],[colShift,req.colleagueName||'The colleague']]){
+      const lv=await reqLeaveOnShift(sh);
+      if(lv) throw new Error(`${String(who).split(' ')[0]} has ${formatLeaveType(lv.leave_type)} on ${reqFmtDate(String(sh.date).slice(0,10))} — revoke that leave first, or decline this request.`);
+    }
+    const _c1=reqClashFor(freshShifts,req.initiatorId,req.colleagueShiftDate,req.colleagueShiftStart,req.colleagueShiftEnd,initShift.id);
+    if(_c1) throw new Error(`${String(req.initiatorName).split(' ')[0]} already works ${reqHm(_c1.start_time)}–${reqHm(_c1.end_time)} on ${reqFmtDate(req.colleagueShiftDate)} — approving would double-book them.`);
+    const _c2=reqClashFor(freshShifts,req.colleagueId,req.initiatorShiftDate,req.initiatorShiftStart,req.initiatorShiftEnd,colShift.id);
+    if(_c2) throw new Error(`${String(req.colleagueName||'The colleague').split(' ')[0]} already works ${reqHm(_c2.start_time)}–${reqHm(_c2.end_time)} on ${reqFmtDate(req.initiatorShiftDate)} — approving would double-book them.`);
     await rbCleanupLinkedEntryOnShiftDelete(initShift.id);
     await rbCleanupLinkedEntryOnShiftDelete(colShift.id);
     // Insert new cross-swapped shifts before deleting originals
@@ -17368,6 +17480,10 @@ async function applyRosterWriteback(req){
     const freshShifts=await db.get('roster_shifts');
     const initShift=freshShifts.find(s=>s.id===req.initiatorShiftId);
     if(!initShift) throw new Error('Shift no longer exists in the roster — it may have been modified. Please check the roster and update manually.');
+    const _gl=await reqLeaveOnShift(initShift);
+    if(_gl) throw new Error(`${String(req.initiatorName).split(' ')[0]} has ${formatLeaveType(_gl.leave_type)} on ${reqFmtDate(req.initiatorShiftDate)} — revoke that leave first, or decline this request.`);
+    const _gc=reqClashFor(freshShifts,req.colleagueId,req.initiatorShiftDate,req.initiatorShiftStart,req.initiatorShiftEnd,null);
+    if(_gc) throw new Error(`${String(req.colleagueName||'The colleague').split(' ')[0]} already works ${reqHm(_gc.start_time)}–${reqHm(_gc.end_time)} on ${reqFmtDate(req.initiatorShiftDate)} — approving would double-book them.`);
     const giveawayCleanup=await rbCleanupLinkedEntryOnShiftDelete(initShift.id);
     if(!giveawayCleanup.ok) throw new Error(`${req.initiatorName}'s shift has a locked leave entry — remove it from Timesheets before approving this give-away.`);
     const newRow={id:'SH'+Date.now(),employee_id:req.colleagueId,date:req.initiatorShiftDate,start_time:req.initiatorShiftStart,end_time:req.initiatorShiftEnd,is_day_off:false,lane:initShift.lane||null};
@@ -17379,6 +17495,8 @@ async function applyRosterWriteback(req){
     const freshShifts=await db.get('roster_shifts');
     const coverShift=freshShifts.find(s=>s.id===req.initiatorShiftId);
     if(!coverShift) throw new Error('Cover shift no longer exists — it may have already been filled or removed. Please check the roster.');
+    const _pc=reqClashFor(freshShifts,req.initiatorId,req.initiatorShiftDate,req.initiatorShiftStart,req.initiatorShiftEnd,null);
+    if(_pc) throw new Error(`${String(req.initiatorName).split(' ')[0]} already works ${reqHm(_pc.start_time)}–${reqHm(_pc.end_time)} on ${reqFmtDate(req.initiatorShiftDate)} — approving would double-book them.`);
     const pickupCleanup=await rbCleanupLinkedEntryOnShiftDelete(coverShift.id);
     if(!pickupCleanup.ok) throw new Error('This cover shift has a locked leave entry — remove it from Timesheets before approving this pickup.');
     const newRow={id:'SH'+Date.now(),employee_id:req.initiatorId,date:req.initiatorShiftDate,start_time:req.initiatorShiftStart,end_time:req.initiatorShiftEnd,is_day_off:false,lane:coverShift.lane||null};
