@@ -18874,6 +18874,8 @@ function m2_showStart(){
   m2_who=null; m2_el('m2-shell').hidden=true;
   const st=m2_el('m2-start'); st.hidden=false;
   let last=null; try{ last=localStorage.getItem('rw_last_staff_id'); }catch(e){}
+  // Preselect whatever this device used last: the roster-only choice, or the last person.
+  const pre=m2_load(M2_LAST_MODE_KEY)==='roster'?M2_ROSTER_ONLY:last;
   const people=m2_emps.filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
   st.innerHTML=`
     <div class="m2-brand">
@@ -18885,29 +18887,38 @@ function m2_showStart(){
     </div>
     <h1 class="m2-q">Who's using this device?</h1>
     <div class="m2-card" style="display:flex;flex-direction:column;gap:12px">
-      <div><div style="font-size:17px;font-weight:800;color:var(--charcoal)">Sign in as me</div>
-        <div class="m2-sub">Your shifts, leave and requests. Swap or give away a shift, pick one up, answer a colleague.</div></div>
       <label class="m2-label">Name
-        <select class="m2-select" id="m2-si-name"><option value="">Choose your name</option>${people.map(e=>`<option value="${m2_esc(e.id)}"${e.id===last?' selected':''}>${m2_esc(e.name)}</option>`).join('')}</select></label>
-      <label class="m2-label">Your PIN
-        ${m2_pinBoxes('m2-si-pin',4,'m2_signInPerson','Your PIN')}</label>
+        <select class="m2-select" id="m2-si-name" onchange="m2_signInMode()"><option value="">Choose your name</option><option value="${M2_ROSTER_ONLY}"${pre===M2_ROSTER_ONLY?' selected':''}>Just checking the roster</option><optgroup label="Staff">${people.map(e=>`<option value="${m2_esc(e.id)}"${e.id===pre?' selected':''}>${m2_esc(e.name)}</option>`).join('')}</optgroup></select></label>
+      <div class="m2-sub" id="m2-si-desc" style="margin-top:-4px"></div>
+      <div class="m2-label"><span id="m2-si-pinlabel">Your PIN</span>
+        <div id="m2-si-pinbox"></div></div>
       <div class="m2-err" id="m2-si-err" role="alert"></div>
-      <button class="m2-btn" id="m2-si-btn" onclick="m2_signInPerson()">Sign in</button>
-    </div>
-    <div class="m2-or">or</div>
-    <div class="m2-card" style="display:flex;flex-direction:column;gap:10px">
-      <div><div style="font-size:16px;font-weight:800;color:var(--charcoal)">Just checking the roster</div>
-        <div class="m2-sub">Who's on each day and who's on leave. Uses the shared roster PIN.</div></div>
-      ${m2_pinBoxes('m2-ro-pin',m2_rosterPinLen(),'m2_signInRoster','Roster PIN')}
-      <div class="m2-err" id="m2-ro-err" role="alert"></div>
-      <button class="m2-btn ghost" onclick="m2_signInRoster()">Open the roster</button>
+      <button class="m2-btn" id="m2-si-btn" onclick="m2_signIn()">Sign in</button>
     </div>`;
+  m2_signInMode();
 }
 /* PIN entry as boxes that sign in on the last digit (Joel, 12 Nov 2026 — like the desktop Who's On
    roster PIN). ONE real input lies invisibly over the boxes, so the number pad, paste and
    password-manager autofill all still work; the boxes only paint what is in it. Every staff PIN
    is 4 digits; the roster PIN box count follows its configured length. The Sign in buttons stay
    as a fallback. */
+/* ONE sign-in card (Joel, 12 Nov 2026, option A): the name list starts with "Just checking the
+   roster", which switches the same boxes to the shared roster PIN. Both PINs stay; only the
+   screen is merged. The label, description, box count and button follow the choice. */
+const M2_ROSTER_ONLY='__roster__', M2_LAST_MODE_KEY='rw_m2_last_mode';
+function m2_signInMode(){
+  const ro=m2_el('m2-si-name')?.value===M2_ROSTER_ONLY;
+  m2_el('m2-si-desc').textContent=ro?'Who\u2019s on each day and who\u2019s on leave. Uses the shared roster PIN.'
+    :'Your shifts, leave and requests. Swap or give away a shift, pick one up, answer a colleague.';
+  m2_el('m2-si-pinlabel').textContent=ro?'Roster PIN':'Your PIN';
+  // Digits already typed survive a change of name (no auto-submit — they tap Sign in).
+  const n=ro?m2_rosterPinLen():4, prev=(m2_el('m2-si-pin')?.value||'').slice(0,n);
+  m2_el('m2-si-pinbox').innerHTML=m2_pinBoxes('m2-si-pin',n,'m2_signIn',ro?'Roster PIN':'Your PIN');
+  if(prev){ m2_el('m2-si-pin').value=prev; m2_pinPaint('m2-si-pin'); }
+  m2_el('m2-si-btn').textContent=ro?'Open the roster':'Sign in';
+  m2_el('m2-si-err').textContent='';
+}
+function m2_signIn(){ return m2_el('m2-si-name')?.value===M2_ROSTER_ONLY?m2_signInRoster():m2_signInPerson(); }
 function m2_rosterPinLen(){ const p=String(m2_cfg?.roster_view_pin||_rosterConfig?.roster_view_pin||ROSTER_VIEW_PIN||''); return p.length||4; }
 function m2_pinBoxes(id,n,submitFn,label){
   return `<div class="m2-pinwrap">
@@ -18936,7 +18947,7 @@ function m2_signInPerson(){
   // the "Incorrect PIN — N attempts remaining" message rather than replacing it.
   if(!pin&&err.textContent){ try{ pinEl.focus(); }catch(e){} return; }
   err.textContent='';
-  if(!id){ err.textContent='Please choose your name, then tap Sign in.'; return; }
+  if(!id){ err.textContent='Choose your name (or \u201cJust checking the roster\u201d), then tap Sign in.'; return; }
   if(!pin){ err.textContent='Please enter your PIN.'; return; }
   const emp=m2_emp(id);
   if(!emp){ err.textContent='Staff member not found.'; return; }
@@ -18951,15 +18962,28 @@ function m2_signInPerson(){
   }
   _staffLoginAttempts[id]={count:0,lockedUntil:0};
   try{ localStorage.setItem('rw_last_staff_id',emp.id); }catch(e){}
+  m2_store(M2_LAST_MODE_KEY,'person');
   m2_store(M2_WHO_KEY,{kind:'person',empId:emp.id,until:Date.now()+M2_WHO_DAYS*86400000});
   m2_who={kind:'person',emp};
   m2_enterShell(true);
 }
 function m2_signInRoster(){
-  const v=m2_el('m2-ro-pin').value, err=m2_el('m2-ro-err');
-  if(!v&&err.textContent){ try{ m2_el('m2-ro-pin').focus(); }catch(e){} return; }
+  const pinEl=m2_el('m2-si-pin'), err=m2_el('m2-si-err'), v=pinEl.value;
+  if(!v&&err.textContent){ try{ pinEl.focus(); }catch(e){} return; }
+  err.textContent='';
+  if(!v){ err.textContent='Please enter the roster PIN.'; return; }
+  // Same 5-tries / 60-second lockout as a personal PIN — the roster PIN had none.
+  const a=_staffLoginAttempts[M2_ROSTER_ONLY]||{count:0,lockedUntil:0};
+  if(Date.now()<a.lockedUntil){ err.textContent=`Too many attempts — try again in ${Math.ceil((a.lockedUntil-Date.now())/1000)}s.`; m2_pinReset('m2-si-pin'); return; }
   const pin=m2_cfg?.roster_view_pin||_rosterConfig?.roster_view_pin||ROSTER_VIEW_PIN;
-  if(v!==pin){ err.textContent='Incorrect PIN — please try again'; m2_pinReset('m2-ro-pin'); return; }
+  if(v!==pin){
+    a.count=(a.count||0)+1;
+    if(a.count>=5){ a.lockedUntil=Date.now()+60000; a.count=0; err.textContent='Too many incorrect attempts — locked for 60 seconds.'; }
+    else err.textContent=`Incorrect PIN — ${5-a.count} attempt${5-a.count===1?'':'s'} remaining.`;
+    _staffLoginAttempts[M2_ROSTER_ONLY]=a; m2_pinReset('m2-si-pin'); return;
+  }
+  _staffLoginAttempts[M2_ROSTER_ONLY]={count:0,lockedUntil:0};
+  m2_store(M2_LAST_MODE_KEY,'roster');
   m2_store(M2_WHO_KEY,{kind:'team',until:Date.now()+M2_WHO_DAYS*86400000});
   m2_who={kind:'team'};
   m2_enterShell(true);
