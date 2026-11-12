@@ -3696,7 +3696,7 @@
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.7</div>
                 <div>
                   <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">November 2026 &mdash; Leave and swap safeguards</div>
-                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Approved leave can no longer be lost to a swap, and a swap can no longer double-book anyone.</strong> Approving leave now marks the roster shift as leave, the Staff Portal won&rsquo;t offer a shift you&rsquo;re on leave for, and approval refuses a swap, give-away or pick-up that would remove someone&rsquo;s leave or give them two overlapping shifts (the request card warns beforehand). Staff can now withdraw their own pending request in the Staff Portal. Unlocking a timesheet row asks first and is recorded in the audit. Clocking in on a leave day keeps the reason you type. Approving an Arrival or Departure note now settles only the end of the day the note is about &mdash; the other end follows the normal roster and grace-period rule, as everywhere else. On a split-shift day the kiosk now checks each tap against the nearest rostered block, so the second block no longer asks for a late-arrival reason.</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Approved leave can no longer be lost to a swap, and a swap can no longer double-book anyone.</strong> Approving leave now marks the roster shift as leave, the Staff Portal won&rsquo;t offer a shift you&rsquo;re on leave for, and approval refuses a swap, give-away or pick-up that would remove someone&rsquo;s leave or give them two overlapping shifts (the request card warns beforehand). Staff can now withdraw their own pending request in the Staff Portal. Unlocking a timesheet row asks first and is recorded in the audit. Clocking in on a leave day keeps the reason you type. Approving an Arrival or Departure note now settles only the end of the day the note is about &mdash; the other end follows the normal roster and grace-period rule, as everywhere else. On a split-shift day the kiosk now checks each tap against the nearest rostered block, so the second block no longer asks for a late-arrival reason; clocking in for one block no longer cancels leave booked on the other, and the clinic travel prompt follows the block actually worked.</div>
                 </div>
               </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
@@ -5603,7 +5603,16 @@ async function processRFID(card){
   await Promise.all([
     db.get('notes').then(r=>{ _notes=r.map(normaliseNote); }).catch(()=>{}),
     db.get('requests').then(r=>{ _requests=r.map(normaliseRequest); }).catch(()=>{}),
-    _loadFlashExtras(emp)
+    _loadFlashExtras(emp),
+    /* This person's roster for today, fresh. The kiosk otherwise holds whatever roster it
+       loaded at start-up, so a block added or a morning put on leave that same day (Michelle,
+       29 Oct 2026) was invisible to the early/late check, the leave conversion and the clinic
+       prompt. One person, one day: a few rows, not a table poll. Merged in place — that
+       person's rows for today replaced, everything else kept. Fails soft to the cache. */
+    db.get('roster_shifts',{employee_id:emp.id,date:rbDateKey(new Date())}).then(r=>{
+      const d=rbDateKey(new Date());
+      _rosterShifts=(_rosterShifts||[]).filter(x=>!(x.employee_id===emp.id&&x.date===d)).concat(r||[]);
+    }).catch(()=>{})
   ]);
   const now=new Date();
   const todayKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -5645,11 +5654,51 @@ async function processRFID(card){
    many of ~600 monthly 30-minute deductions anyone actually agreed to. Written on the
    clock-OUT branch only; a clock-in has no break decision to record.
    See Runningwell-Vault/break_decision_source_column.sql. */
+/* Split-shift helpers for the kiosk. Both replace a "first roster row of the day" lookup.
+   kioskLeaveBlockAt (below) — which block a clock-in is for when some blocks are leave.
+   kioskClinicLane — whether the stint just worked [inMin,outMin] touched a 75+ clinic block
+   that the person was not on leave for. */
+function kioskDayBlocks(empId,date){
+  return (_rosterShifts||[]).filter(s=>s.employee_id===empId&&s.date===date&&!s.is_day_off&&s.start_time&&s.end_time)
+    .sort((x,y)=>timeToMin(x.start_time)-timeToMin(y.start_time));
+}
+/* Which block a clock-in is for, when some of the day's blocks are leave (on_leave, or a leave
+   row points at them — leave approved before v3.7 has no on_leave flag). A tap is for the next
+   WORKED block if that starts within EARLY_REVIEW_MINS (the kiosk doesn't question an arrival that
+   early) or before the next leave block; only otherwise is it for the leave block. Matches
+   getScheduledTimes(...,tap), which skips leave blocks — Michelle tapping at 10:20 for her 10:30
+   block, morning on leave, must not convert the morning (Opus review, 12 Nov 2026). */
+function kioskLeaveBlockAt(blocks,dayLeave,atMin){
+  const lvIds=new Set(dayLeave.map(e=>String(e.shiftId)));
+  const isLv=b=>b.on_leave||lvIds.has(String(b.id));
+  const w=blocks.find(b=>!isLv(b)&&timeToMin(b.end_time)>atMin);
+  const l=blocks.find(b=>isLv(b)&&timeToMin(b.end_time)>atMin);
+  if(w&&(timeToMin(w.start_time)-atMin<=EARLY_REVIEW_MINS||!l||timeToMin(l.start_time)>timeToMin(w.start_time))) return w;
+  return l||w||blocks[blocks.length-1]||null;
+}
+function kioskClinicLane(empId,date,inMin,outMin){
+  const hit=kioskDayBlocks(empId,date).filter(x=>!x.on_leave&&Math.min(outMin,timeToMin(x.end_time))-Math.max(inMin,timeToMin(x.start_time))>0);
+  if(!hit.length){ const r=srShiftForEmp(empId,date); return !!(r&&r!=='off'&&r.lane==='75plus'); }
+  return hit.some(x=>x.lane==='75plus');
+}
 async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,unpaidBreakMins=null,paidBreakMins=null,breakNote=null,travelKm=null,decisionSource=null,deferFlash=false){
   try {
     if(action==='in'){
-      // If a leave entry exists for today, convert it to a clock-in and alert manager
-      const leaveEntry=_entries.find(e=>e.employeeId===emp.id&&e.date===todayKey&&e.leaveType);
+      // If a leave entry exists for today, convert it to a clock-in and alert manager.
+      // On a split day only the leave for the block being clocked INTO is converted: Michelle,
+      // 29 Oct 2026 — morning on annual leave, clocked in 10:30 for the afternoon block, and the
+      // morning's leave row was turned into her worked entry, so 2 h of leave vanished.
+      const _dayLeave=_entries.filter(e=>e.employeeId===emp.id&&e.date===todayKey&&e.leaveType);
+      let leaveEntry=_dayLeave[0]||null;
+      const _blocks=kioskDayBlocks(emp.id,todayKey);
+      if(_dayLeave.length&&_blocks.length>1){
+        const _ids=new Set(_blocks.map(b=>String(b.id)));
+        // A leave row we can't tie to one of today's blocks (no shiftId, or a stale one after the
+        // shift was deleted/recreated) can't be ruled out — convert it as before, with the note.
+        const _loose=_dayLeave.find(e=>!e.shiftId||!_ids.has(String(e.shiftId)));
+        const _blk=_loose?null:kioskLeaveBlockAt(_blocks,_dayLeave,timeToMin(timeStr));
+        leaveEntry=_loose||(_blk&&_dayLeave.find(e=>String(e.shiftId)===String(_blk.id)))||null;
+      }
       if(leaveEntry){
         const leaveName=formatLeaveType(leaveEntry.leaveType);
         await db.update('entries',leaveEntry.id,{leave_type:null,clock_in:sheetTimeStr,clock_in_iso:isoNow,clock_out:null,clock_out_iso:null,hours:null,status:'pending',reason_in:`Clocked in — was marked as ${leaveName}`+(reason?` · ${reason}`:'')});
@@ -5669,7 +5718,7 @@ async function commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reaso
         showFlash('arrive','👋',greet(new Date()),emp.name.split(' ')[0],'Checked in · '+timeStr,_kioskFlashMsg(emp),emp);
         return;
       }
-      const stub=_entries.find(en=>en.employeeId===emp.id&&en.date===todayKey&&!en.clockIn&&!en.clockOut);
+      const stub=_entries.find(en=>en.employeeId===emp.id&&en.date===todayKey&&!en.clockIn&&!en.clockOut&&!en.leaveType);
       let entryId;
       if(stub){
         await db.update('entries',stub.id,{clock_in:sheetTimeStr,clock_in_iso:isoNow,reason_in:reason||null,status:reason?'pending':'normal'});
@@ -5921,8 +5970,9 @@ async function maybeBreakConfirm(emp,action,timeStr,sheetTimeStr,isoNow,open,tod
   const unpaidExpected=expectedUnpaidBreakMins(shiftHours,emp.id,todayKey);
   const paidExpected=expectedPaidBreakMins(shiftHours);
   // Clinic override: replace standard break overlay with combined clinic overlay for can_travel staff on clinic lane
-  const rShift=srShiftForEmp(emp.id,todayKey);
-  const isClinic=emp.can_travel&&rShift&&rShift!=='off'&&rShift.lane==='75plus';
+  // Decided from the block(s) this stint actually covered, not the day's first roster row —
+  // on a split day the first row can be a different lane (or a day-off row).
+  const isClinic=!!emp.can_travel&&kioskClinicLane(emp.id,todayKey,ih*60+im,oh*60+om);
   if(isClinic){
     const saved=await commit(emp,action,timeStr,sheetTimeStr,isoNow,open,todayKey,reason,noteType,
                              null,null,null,null,'unresolved',true);
