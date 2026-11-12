@@ -20066,7 +20066,7 @@ function m2_pkTap(k){
   if(!pk.note&&!st&&d.pending[k]){
     const names=[...d.pending[k]].map(id=>m2_first(m2_emp(id)||{name:'A colleague'}));
     const who=names.length>2?`${names.slice(0,-1).join(', ')} and ${names[names.length-1]}`:names.join(' and ');
-    pk.note=`${who} ${names.length>1?'have':'has'} asked for leave on this day — not yet approved. You can still request it.`; pk.noteInfo=true;
+    pk.note=`${who} ${names.length>1?'have':'has'} requested this day — not approved yet.`; pk.noteInfo=true;   // one line (Joel 12 Nov)
   }
   const grid=m2_el('m2-pk-grid'); if(grid) grid.innerHTML=m2_pkGrid(d);
   m2_pkFoot();
