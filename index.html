@@ -1300,6 +1300,12 @@
   .rb-shift-bar:hover .rb-shift-split { display:flex; }
   .rb-shift-lane-btn { position:absolute; top:-6px; left:4px; height:13px; border-radius:4px; background:rgba(36,113,163,0.88); color:#fff; border:none; cursor:pointer; font-size:6.5px; font-weight:800; display:none; align-items:center; justify-content:center; z-index:5; padding:0 4px; white-space:nowrap; letter-spacing:0.03em; font-family:'Nunito',sans-serif; }
   .rb-shift-bar:hover .rb-shift-lane-btn { display:flex; }
+  .rb-shift-home-btn { position:absolute; bottom:-6px; left:4px; height:13px; border-radius:4px; background:rgba(62,92,118,0.95); color:#fff; border:none; cursor:pointer; font-size:6.5px; font-weight:800; display:none; align-items:center; justify-content:center; gap:2px; z-index:5; padding:0 4px; white-space:nowrap; letter-spacing:0.03em; font-family:'Nunito',sans-serif; }
+  .rb-shift-bar:hover .rb-shift-home-btn { display:flex; }
+  .rb-shift-bar.wfh { filter:brightness(0.78); }
+  .rb-shift-bar.wfh .rb-shift-label { display:inline-flex; align-items:center; gap:4px; }
+  .rb-tl-row.wfh .rb-tl-name { background:rgba(62,92,118,0.09); border-right:1px solid rgba(62,92,118,0.25); }
+  .rb-tl-row.wfh .rb-tl-track { background-image:repeating-linear-gradient(to right,rgba(62,92,118,0.15) 0px,rgba(62,92,118,0.15) 1px,transparent 1px,transparent calc(100% / 55)); background-color:rgba(62,92,118,0.04); }
   .rb-lane-badge { flex-shrink:0; font-size:0.58rem; font-weight:700; color:var(--muted); background:rgba(0,0,0,0.05); border:1px solid rgba(0,0,0,0.1); border-radius:4px; padding:2px 5px; cursor:pointer; white-space:nowrap; transition:background 0.15s,color 0.15s; line-height:1.3; }
   .rb-lane-badge:hover { background:rgba(0,0,0,0.1); color:var(--charcoal); }
   .rb-shift-bar.on-leave { cursor:move; }
@@ -2121,6 +2127,9 @@
   .m2-pill-row.me.annual .m2-pill-name, .m2-pill-row.me.other .m2-pill-name, .m2-pill-row.me.ph .m2-pill-name { color:#5E5659; }
   .m2-track { flex:1; position:relative; height:7px; border-radius:4px; background:rgba(0,0,0,0.08); overflow:hidden; min-width:40px; }
   .m2-fill { position:absolute; top:0; height:100%; border-radius:4px; background:currentColor; opacity:0.8; }
+  .m2-pill-row.home .m2-fill { opacity:1; filter:brightness(0.72); }
+  .m2-pill-row.home { background:rgba(62,92,118,0.11); }
+  .m2-home-ico { display:inline-flex; margin-left:4px; color:#3E5C76; font-size:13px; vertical-align:-1px; }
   .m2-pill-time { text-align:right; font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--charcoal); display:flex; flex-direction:column; align-items:flex-end; }
   .lg .m2-pill-time { font-size:14px; }
   /* Fixed time column: every bar has the same length, so one time scale down the list. */
@@ -3684,7 +3693,7 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.7 &middot; November 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.8 &middot; November 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
@@ -3692,6 +3701,13 @@
                  rule, never by hand: fading per row was forgotten at every bump from v2.2 to v3.3,
                  which left eleven old releases looking current. -->
             <div class="about-history" style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.8</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">November 2026 &mdash; Work from home</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Managers can be rostered to work from home.</strong> In the roster builder, a manager&rsquo;s shift has a Home button (bottom left) that moves it to a Work from home lane. Who&rsquo;s On, the fortnight and person views, the printed roster and the phone app show those shifts darker with a house icon and the words &ldquo;Work from home&rdquo;, so staff can see a manager is working but not in the building. The timesheet marks that day WFH. Pay is unchanged.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.7</div>
                 <div>
@@ -4429,6 +4445,24 @@ const RB_ROLE_LABELS={Receptionist:'Receptionists',Nurse:'Nurses',Manager:'Manag
 const NURSING_CLASSES=['Registered Nurse','Enrolled Nurse'];
 function inNursingPool(emp){
   return !!emp&&(emp.role==='Nurse'||NURSING_CLASSES.includes(emp.classification));
+}
+/* Work from home (managers only, Joel 12 Nov 2026). Stored as roster_shifts.lane='wfh' — the
+   lane field already travels through split, copy-fortnight, swaps and cover. Pay is unchanged
+   (managers are noClockExpected; same rates), so it is a DISPLAY lane: the roster builder gets
+   a Home row, and every Who's On surface, the phone app and the timesheet row say so with a
+   house icon + words (not colour alone). Never a clinic: the travel checks stay '75plus' only. */
+const WFH_LANE='wfh';
+const WFH_LABEL='Work from home';
+const isWfh=s=>!!s&&s!=='off'&&s.lane===WFH_LANE;
+const WFH_ICON='<svg class="wfh-ico" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.15em;flex-shrink:0"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9v12h13V9"/><path d="M10 21v-6h4v6"/></svg>';
+/* The lane a shift should carry when it is handed to `ownerId` (swap, give-away, pick-up, auto
+   cover). Work from home belongs to managers only: Sue is in the nursing pool, so she can swap
+   or give a WFH shift to a nurse, and her leave can spawn a nurse cover placeholder — none of
+   those may arrive "at home". They land on the floor lane instead (Opus review, 12 Nov 2026). */
+function laneForOwner(lane, ownerId){
+  if(lane!==WFH_LANE) return lane||null;
+  const o=(_emps||[]).find(e=>String(e.id)===String(ownerId));
+  return o&&o.role==='Manager'&&!o.is_placeholder?WFH_LANE:'floor';
 }
 function staffGroupFor(emp){
   if(!emp) return null;
@@ -5177,7 +5211,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.7';
+const APP_VERSION='3.8';
 const APP_VERSION_DATE='November 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
@@ -6968,12 +7002,13 @@ function tsGetFlag(locked, noEntry, finalStart, finalEnd, autoApproved, entrySta
 
 function tsBuildRow(emp, date, shift, entry, splitSegment=false){
   const d=new Date(date+'T12:00:00');
+  const _wfhBadge=isWfh(shift)?`<div style="font-size:0.55rem;font-weight:800;background:#3E5C76;color:#fff;border-radius:3px;padding:1px 4px;margin-top:2px;display:inline-flex;align-items:center;gap:3px;" title="Rostered to ${WFH_LABEL.toLowerCase()}">${WFH_ICON}WFH</div>`:'';
   const _phBadge=_publicHolidays?.has(date)?'<div style="font-size:0.55rem;font-weight:800;background:var(--burgundy);color:#fff;border-radius:3px;padding:1px 4px;margin-top:2px;display:inline-block;">Public Holiday</div>':'';
   // Rendered at the far right of the primary row (see compactRow), not in the date cell —
   // the date column is too narrow for it. Only on the first segment of a split day: the
   // request covers the whole day, not one block.
   const _reqBadge=splitSegment?'':reqRowMarkerHtml(emp.id,date);
-  const dateLabel=`<div>${d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'})}</div>${_phBadge}`;
+  const dateLabel=`<div>${d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'})}</div>${_phBadge}${_wfhBadge}`;
   const rostStart=shift?.start_time||null;
   const rostEnd=shift?.end_time||null;
   const clockStart=entry?.clockIn||null;
@@ -9241,7 +9276,7 @@ async function rbSpawnCoverForLeave(shift, leaveType){
   // lane travels with the shift, not the person — dropping it silently moves a clinic
   // (75plus) or admin shift onto the floor lane. Same rule as the swap/giveaway rows.
   const row={id:'CV'+Date.now(),employee_id:ph.id,date:shift.date,start_time:shift.start_time,
-    end_time:shift.end_time,is_day_off:false,lane:shift.lane||null,cover_for_shift_id:shift.id};
+    end_time:shift.end_time,is_day_off:false,lane:laneForOwner(shift.lane,ph.id),cover_for_shift_id:shift.id};
   try{
     await db.insert('roster_shifts',row);
     _rosterShifts.push(row);
@@ -13163,8 +13198,11 @@ function srByDayGantt(dateStr, today){
       const left=gnowPct(startMin);
       const width=gnowPct(endMin)-left;
       const name=_srDnMap[emp.id]||empFirstName(emp);
-      const isSecondaryLane=!onLeave&&(shift.lane==='75plus'||shift.lane==='admin');
-      const laneTag=onLeave?'':(shift.lane==='75plus'?' · clinic':shift.lane==='admin'?' · admin':'');
+      const _home=!onLeave&&isWfh(shift);
+      const isSecondaryLane=!onLeave&&(shift.lane==='75plus'||shift.lane==='admin'||_home);
+      const laneTag=onLeave?'':(shift.lane==='75plus'?' · clinic':shift.lane==='admin'?' · admin':_home?' · '+WFH_LABEL.toLowerCase():'');
+      // Home says so with an icon on the bar too — a bigger difference than clinic/admin.
+      const laneTagHtml=_home?'':laneTag;   // said on the bar's label instead, in bold
       const isPlaceholder=!!emp.is_placeholder;
       const barBg=isPlaceholder?'#e67e22':onLeave?look.bar:roleBar.bg;
       const barText=isPlaceholder?'#fff':onLeave?look.barText:roleBar.text;
@@ -13178,8 +13216,8 @@ function srByDayGantt(dateStr, today){
         <div class="sr-gnow-row-name" style="${nameStyle}">${name}</div>
         <div class="sr-gnow-track">
           <div class="sr-gnow-bar${clash?' leave-clash':''}" style="left:${left.toFixed(2)}%;width:${Math.max(0,width).toFixed(2)}%;background:${barBg};color:${barText};${barFilter}" data-tooltip="${tooltip}">
-            <span class="sr-gnow-bar-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}${laneTag}</span>
-            <span class="sr-gnow-bar-name${onLeave||clash?' leave-tag':''}">${onLeave?look.tag.toUpperCase():clash?'LEAVE APPROVED':name}</span>
+            <span class="sr-gnow-bar-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}${laneTagHtml}</span>
+            <span class="sr-gnow-bar-name${onLeave||clash||_home?' leave-tag':''}"${_home?' style="color:#fff;display:inline-flex;align-items:center;gap:5px;"':''}>${onLeave?look.tag.toUpperCase():clash?'LEAVE APPROVED':_home?WFH_ICON+WFH_LABEL.toUpperCase():name}</span>
           </div>
         </div>
       </div>`;
@@ -13220,10 +13258,12 @@ function srByDayGantt(dateStr, today){
       const finished=!onLeave&&!clash&&isToday&&nowMin>=endMin;
       const isMobPlaceholder=!!emp.is_placeholder;
       const statusClass=onLeave?'on-leave':clash?'leave-clash':onNow?'on-now':finished?'finished':'coming-up';
+      const _home=!onLeave&&!clash&&isWfh(shift);
       const badge=isMobPlaceholder
         ?`<span class="sr-gnow-mobile-badge" style="background:#fdebd0;color:#e67e22;">Cover needed</span>`
         :onLeave?`<span class="sr-gnow-mobile-badge" style="background:${look.tagBg};color:${look.tagText};">${look.tag}</span>`
         :clash?`<span class="sr-gnow-mobile-badge" style="background:var(--burgundy);color:#fff;">Leave approved</span>`
+        :_home?`<span class="sr-gnow-mobile-badge" style="background:#3E5C76;color:#fff;display:inline-flex;align-items:center;gap:4px;">${WFH_ICON}${WFH_LABEL}</span>`
         :onNow?`<span class="sr-gnow-mobile-badge" style="background:${roleBar.bg};color:${roleBar.text};">On now</span>`:'';
       const rowStyle=isMobPlaceholder
         ?`style="border-left:3px solid #e67e22;border-color:#e67e2266;"`
@@ -13231,6 +13271,7 @@ function srByDayGantt(dateStr, today){
         :clash?`style="background:rgba(139,37,53,0.06);border-color:rgba(139,37,53,0.45);"`
         :onNow?`style="background:${roleBar.bg}33;border-color:${roleBar.bg}88;"`:'';
       const barFill=isMobPlaceholder?'#e67e22':onLeave?look.bar:roleBar.bg;
+      const barFilt=_home?'filter:brightness(0.78);':'';
       const barLeft=gnowPct(startMin).toFixed(1);
       const barWidth=(gnowPct(endMin)-gnowPct(startMin)).toFixed(1);
       return`<div class="sr-gnow-mobile-row ${statusClass}" ${rowStyle}>
@@ -13239,7 +13280,7 @@ function srByDayGantt(dateStr, today){
           <span class="sr-gnow-mobile-time">${shift.start.slice(0,5)}–${shift.end.slice(0,5)}</span>
           ${badge}
         </div>
-        <div class="sr-gnow-mobile-bar-track"><div class="sr-gnow-mobile-bar-fill" style="left:${barLeft}%;width:${barWidth}%;background:${barFill};"></div></div>
+        <div class="sr-gnow-mobile-bar-track"><div class="sr-gnow-mobile-bar-fill" style="left:${barLeft}%;width:${barWidth}%;background:${barFill};${barFilt}"></div></div>
       </div>`;
     }).filter(Boolean);
     if(!rows.length) return null;
@@ -13288,8 +13329,9 @@ function srByDay(days,emps,today){
         const eMin=timeStrToMin(shift.end)||TL_END;
         const lPct=((sMin-TL_START)/TL_RANGE*100).toFixed(1);
         const wPct=((eMin-sMin)/TL_RANGE*100).toFixed(1);
-        const tooltip=`${shift.start}–${shift.end}${look?' · '+look.tag:''}${clash?' · Approved leave — the roster has not been updated':''}`;
-        return`<div class="sr-shift-pill${clash?' leave-clash-pill':''}" style="background:${p.bg};color:${p.color}" data-tooltip="${tooltip}"><span class="sr-shift-pill-name">${_srDnMap[emp.id]||empFirstName(emp)}</span><div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div></div>`;
+        const _home=!look&&isWfh(shift);
+        const tooltip=`${shift.start}–${shift.end}${_home?' · '+WFH_LABEL:''}${look?' · '+look.tag:''}${clash?' · Approved leave — the roster has not been updated':''}`;
+        return`<div class="sr-shift-pill${clash?' leave-clash-pill':''}" style="background:${p.bg};color:${p.color}" data-tooltip="${tooltip}"><span class="sr-shift-pill-name">${_srDnMap[emp.id]||empFirstName(emp)}${_home?' '+WFH_ICON:''}</span><div class="sr-shift-bar-track"><div class="sr-shift-bar-fill" style="left:${lPct}%;width:${wPct}%"></div></div></div>`;
       }).join('')
       :`<div class="sr-no-staff">No staff scheduled</div>`;
     const isPast=date<today;
@@ -13314,7 +13356,7 @@ function srByPerson(days,emps,today){
       const shift=srShiftForEmp(emp.id,date);
       const look=(shift&&shift!=='off')?srLeaveLook(emp.id,date,shift.id):null;
       const clash=(shift&&shift!=='off'&&!look)?srLeaveClash(emp.id,date):null;
-      const laneLabel=shift&&shift!=='off'?(shift.lane==='75plus'?' (clinic)':shift.lane==='admin'?' (admin)':''):'';
+      const laneLabel=shift&&shift!=='off'?(shift.lane==='75plus'?' (clinic)':shift.lane==='admin'?' (admin)':isWfh(shift)?` · ${WFH_ICON} ${WFH_LABEL}`:''):'';
       // "Not in" said nothing about why. The leave tag replaces it: named for
       // annual leave, deliberately unnamed for every other type.
       const timeCell=!shift?`<span class="sr-person-day-off">—</span>`:shift==='off'?`<span class="sr-person-day-off">Day off</span>`:look?`<span class="sr-person-day-time" style="color:${look.pillText};">${shift.start} – ${shift.end} · ${look.tag}</span>`:clash?`<span class="sr-person-day-time" title="Approved leave — the roster has not been updated">${shift.start} – ${shift.end} · <span style="color:var(--burgundy);font-weight:800;">Leave approved</span></span>`:`<span class="sr-person-day-time">${shift.start} – ${shift.end}${laneLabel}</span>`;
@@ -14296,14 +14338,18 @@ function renderDayTimelineForRole(role){
     const lHandle=!readOnly?`<div class="rb-shift-handle left" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','left')"></div>`:'';
     const rHandle=!readOnly?`<div class="rb-shift-handle right" onmousedown="event.stopPropagation();rbStartDrag(event,'${s.id}','right')"></div>`:'';
     const laneLabel=isNurse?(s.lane==='75plus'?'← Floor':'→ Clinic'):(s.lane==='admin'?'← Floor':'→ Admin');
-    const laneBtn=!readOnly&&(isNurse||isReceptionist)?`<button class="rb-shift-lane-btn" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbToggleLane('${s.id}','${role}')" title="${laneLabel}">${laneLabel}</button>`:'';
+    const _wfh=isWfh(s);
+    const laneBtn=!readOnly&&!_wfh&&(isNurse||isReceptionist)?`<button class="rb-shift-lane-btn" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbToggleLane('${s.id}','${role}')" title="${laneLabel}">${laneLabel}</button>`:'';
+    // Bottom-left (clinic/admin is top-left, split bottom-right): managers only.
+    const homeBtn=!readOnly&&((emp.role==='Manager'&&!emp.is_placeholder)||_wfh)
+      ?`<button class="rb-shift-home-btn" onmousedown="event.stopPropagation()" onclick="event.stopPropagation();rbToggleHome('${s.id}','${role}')" title="${_wfh?'Back on site':WFH_LABEL}">${_wfh?'← On site':WFH_ICON+' Home'}</button>`:'';
     const leaveOpts=`<option value="">Worked Shift</option>`+Object.entries(LEAVE_TYPES).map(([v,l])=>`<option value="${v}"${currentLeave===v?' selected':''}>${l}</option>`).join('');
     const leaveBtn=_isSlot?'':`<select class="rb-leave-select" onmousedown="event.stopPropagation()" onchange="event.stopPropagation();rbMarkLeave('${emp.id}','${selectedDay}','${s.id}',this.value)">${leaveOpts}</select>`;
     const leaveClass=currentLeave?' on-leave '+currentLeave.replace(/_/g,'-'):'';
     const lockedClass=readOnly?' locked':'';
     const coverClass=emp.is_placeholder?' cover-required':'';
-    return`<div class="rb-shift-bar${leaveClass}${lockedClass}${coverClass}" data-shift-id="${s.id}" style="left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%"${drag} title="${emp.name}: ${lbl}${currentLeave?' ('+formatLeaveType(currentLeave)+')':''}">
-      ${lHandle}${laneBtn}<span class="rb-shift-label">${lbl}</span>${rHandle}${leaveBtn}${splitBtn}${delBtn}
+    return`<div class="rb-shift-bar${leaveClass}${lockedClass}${coverClass}${_wfh?' wfh':''}" data-shift-id="${s.id}" style="left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%"${drag} title="${emp.name}: ${lbl}${_wfh?' · '+WFH_LABEL:''}${currentLeave?' ('+formatLeaveType(currentLeave)+')':''}">
+      ${lHandle}${laneBtn}${homeBtn}<span class="rb-shift-label">${_wfh?WFH_ICON:''}${lbl}</span>${rHandle}${leaveBtn}${splitBtn}${delBtn}
     </div>`;
   }
   /* Approved leave this day that the roster does not reflect. Two shapes, two
@@ -14326,6 +14372,21 @@ function renderDayTimelineForRole(role){
     const gap=rbLeaveGapFor(emp.id,selectedDay);
     if(!gap||gap.kind!=='rostered') return '';
     return `<span class="rb-tl-leave-warn" title="${escHtml(rbLeaveGapText(gap))} — rostered to work on approved leave. Click to open the Leave Log." onclick="event.stopPropagation();rbOpenLeaveLogFor('${escHtml(emp.name)}')">⚠</span>`;
+  }
+
+  /* The Home lane: one row per manager with a WFH block today, under a divider and pill —
+     built like the Clinic/Admin lanes. Used by the Managers section and the Nurses section
+     (Sue is a nursing-pool manager). Empty string when nobody is at home. */
+  function homeRowsHtml(){
+    const getHome=id=>_rosterShifts.filter(s=>s.date===selectedDay&&String(s.employee_id)===String(id)&&!s.is_day_off&&s.lane===WFH_LANE);
+    return emps.filter(emp=>getHome(emp.id).length>0).map((emp,i)=>{
+      const allEmpShifts=_rosterShifts.filter(s=>s.date===selectedDay&&String(s.employee_id)===String(emp.id)&&!s.is_day_off);
+      const overlapSegs=rbOverlapSegHtml(rbOverlapSegments(allEmpShifts));
+      const bars=getHome(emp.id).map(s=>makeBar(s,emp)).join('');
+      const pill=i===0?`<span style="position:absolute;top:0;left:0.6rem;transform:translateY(-50%);background:var(--white);border:1.5px solid rgba(62,92,118,0.5);border-radius:999px;padding:1px 9px;font-size:0.58rem;font-weight:700;color:#3E5C76;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;z-index:2;display:inline-flex;align-items:center;gap:4px;">${WFH_ICON}${WFH_LABEL}</span>`:'';
+      const borderTop=i===0?'position:relative;border-top:2px solid rgba(62,92,118,0.35);':'';
+      return`<div class="rb-tl-row wfh" style="${borderTop}">${pill}<div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span></div><div class="rb-tl-track" data-emp-id="${emp.id}-wfh">${bars}${overlapSegs}</div></div>`;
+    }).join('');
   }
 
   // Staff rows
@@ -14353,7 +14414,7 @@ function renderDayTimelineForRole(role){
     }).join('');
     rows.innerHTML=
       `${floorRows}`+
-      (has75?`${clinicRows}`:'');
+      (has75?`${clinicRows}`:'')+homeRowsHtml();
   } else if(isReceptionist){
     const getFloor=id=>_rosterShifts.filter(s=>s.date===selectedDay&&s.employee_id===id&&!s.is_day_off&&(s.lane==='floor'||!s.lane));
     const getAdmin=id=>_rosterShifts.filter(s=>s.date===selectedDay&&s.employee_id===id&&!s.is_day_off&&s.lane==='admin');
@@ -14376,21 +14437,21 @@ function renderDayTimelineForRole(role){
       const borderTop=i===0?'position:relative;border-top:2px solid rgba(125,60,152,0.35);':'';
       return`<div class="rb-tl-row admin" style="${borderTop}">${pill}<div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span></div><div class="rb-tl-track" data-emp-id="${emp.id}-admin">${bars}${overlapSegs}</div></div>`;
     }).join('');
-    rows.innerHTML=`${floorRows}`+(hasAdmin?`${adminRows}`:'');
+    rows.innerHTML=`${floorRows}`+(hasAdmin?`${adminRows}`:'')+homeRowsHtml();
   } else {
     rows.innerHTML=emps.map(emp=>{
-      const shifts=_rosterShifts.filter(s=>s.date===selectedDay&&String(s.employee_id)===String(emp.id)&&!s.is_day_off);
+      const shifts=_rosterShifts.filter(s=>s.date===selectedDay&&String(s.employee_id)===String(emp.id)&&!s.is_day_off&&s.lane!==WFH_LANE);
       const overlapSegs=rbOverlapSegHtml(rbOverlapSegments(shifts));
       const bars=shifts.map(s=>makeBar(s,emp)).join('');
       const addBtn=!readOnly&&!shifts.length?`<button class="rb-add-shift-btn" onclick="rbAddShift('${emp.id}','${selectedDay}','${role}')" title="Add shift">+</button>`:'';
       return`<div class="rb-tl-row${emp.is_placeholder?' open-shift':''}${leaveClashAttrs(emp)}"><div class="rb-tl-name"><span class="rb-tl-name-text">${emp.name}</span>${leaveClashWarn(emp)}${addBtn}</div><div class="rb-tl-track" data-emp-id="${emp.id}">${leaveGapBar(emp)}${bars}${overlapSegs}</div></div>`;
-    }).join('');
+    }).join('')+homeRowsHtml();
   }
   // Coverage segments — floor-only for Nurses
   let slots='';
   for(let m=TL_START;m<TL_END;m+=TL_SNAP){
     const cnt=_rosterShifts.filter(s=>s.date===selectedDay&&!s.is_day_off&&emps.some(e=>e.id===s.employee_id&&!e.is_placeholder)
-      &&(!isNurse||s.lane==='floor'||!s.lane)&&(!isReceptionist||s.lane==='floor'||!s.lane)
+      &&(!isNurse||s.lane==='floor'||!s.lane)&&(!isReceptionist||s.lane==='floor'||!s.lane)&&s.lane!==WFH_LANE
       &&(timeStrToMin(s.start_time)||TL_START)<=m&&(timeStrToMin(s.end_time)||TL_END)>m).length;
     const col=cnt>=3?'#4CAF7D':cnt>=2?'#f5a623':'#c0392b';
     const lPct=((m-TL_START)/TL_RANGE)*100, wPct=(TL_SNAP/TL_RANGE)*100;
@@ -14694,6 +14755,25 @@ async function rbDeleteShift(shiftId,role){
       showToast(cleanup.deletedEntry?'Shift and linked leave entry removed':'Shift removed');
       if(cleanup.deletedEntry) renderTimesheets();
     }catch(e){showToast('Could not remove');console.error(e);}
+  });
+}
+
+// Work from home ↔ on site. Back on site returns to the floor lane (the default lane).
+async function rbToggleHome(shiftId, role){
+  const shift=_rosterShifts.find(s=>s.id==shiftId);
+  if(!shift) return;
+  rbPastFortGuard(shift.date, async()=>{
+    const prevLane=shift.lane;
+    const newLane=prevLane===WFH_LANE?'floor':WFH_LANE;
+    shift.lane=newLane;
+    renderDayTimelineForRole(role);
+    try{
+      await db.update('roster_shifts',shiftId,{lane:newLane});
+    }catch(e){
+      shift.lane=prevLane;
+      renderDayTimelineForRole(role);
+      showToast('Could not change work from home');console.error(e);
+    }
   });
 }
 
@@ -15540,7 +15620,7 @@ async function printRoster(){
           const t=(s.start_time||'').slice(0,5);
           const b=(s.end_time||'').slice(0,5);
           if(match?.leaveType) return`<span class="rp-leave" style="text-decoration:line-through;">${t}<br/>${b}</span>`;
-          return`<span class="rp-shift">${t}<br/>${b}</span>`;
+          return`<span class="rp-shift">${t}<br/>${b}${s.lane===WFH_LANE?'<br/>'+WFH_ICON+' home':''}</span>`;
         }).join('<br/>')}</td>`;
       }).join('');
       return`<tr><td class="rp-name-cell">${emp.name}</td>${cells}</tr>`;
@@ -17546,9 +17626,9 @@ async function applyRosterWriteback(req){
     // Insert new cross-swapped shifts before deleting originals
     // lane travels with the shift, not the person — dropping it silently moves a clinic
     // (75plus) or admin shift onto the floor lane and breaks the dual-lane view.
-    const rowA={id:'SH'+Date.now(),employee_id:req.initiatorId,date:req.colleagueShiftDate,start_time:req.colleagueShiftStart,end_time:req.colleagueShiftEnd,is_day_off:false,lane:colShift.lane||null};
+    const rowA={id:'SH'+Date.now(),employee_id:req.initiatorId,date:req.colleagueShiftDate,start_time:req.colleagueShiftStart,end_time:req.colleagueShiftEnd,is_day_off:false,lane:laneForOwner(colShift.lane,req.initiatorId)};
     await db.insert('roster_shifts',rowA);
-    const rowB={id:'SH'+(Date.now()+1),employee_id:req.colleagueId,date:req.initiatorShiftDate,start_time:req.initiatorShiftStart,end_time:req.initiatorShiftEnd,is_day_off:false,lane:initShift.lane||null};
+    const rowB={id:'SH'+(Date.now()+1),employee_id:req.colleagueId,date:req.initiatorShiftDate,start_time:req.initiatorShiftStart,end_time:req.initiatorShiftEnd,is_day_off:false,lane:laneForOwner(initShift.lane,req.colleagueId)};
     await db.insert('roster_shifts',rowB);
     await db.delete('roster_shifts',initShift.id);
     await db.delete('roster_shifts',colShift.id);
@@ -17565,7 +17645,7 @@ async function applyRosterWriteback(req){
     if(_gc) throw new Error(`${String(req.colleagueName||'The colleague').split(' ')[0]} already works ${reqHm(_gc.start_time)}–${reqHm(_gc.end_time)} on ${reqFmtDate(req.initiatorShiftDate)} — approving would double-book them.`);
     const giveawayCleanup=await rbCleanupLinkedEntryOnShiftDelete(initShift.id);
     if(!giveawayCleanup.ok) throw new Error(`${req.initiatorName}'s shift has a locked leave entry — remove it from Timesheets before approving this give-away.`);
-    const newRow={id:'SH'+Date.now(),employee_id:req.colleagueId,date:req.initiatorShiftDate,start_time:req.initiatorShiftStart,end_time:req.initiatorShiftEnd,is_day_off:false,lane:initShift.lane||null};
+    const newRow={id:'SH'+Date.now(),employee_id:req.colleagueId,date:req.initiatorShiftDate,start_time:req.initiatorShiftStart,end_time:req.initiatorShiftEnd,is_day_off:false,lane:laneForOwner(initShift.lane,req.colleagueId)};
     await db.insert('roster_shifts',newRow);
     await db.delete('roster_shifts',initShift.id);
     _rosterShifts=freshShifts.filter(s=>s.id!==initShift.id);
@@ -17578,7 +17658,7 @@ async function applyRosterWriteback(req){
     if(_pc) throw new Error(`${String(req.initiatorName).split(' ')[0]} already works ${reqHm(_pc.start_time)}–${reqHm(_pc.end_time)} on ${reqFmtDate(req.initiatorShiftDate)} — approving would double-book them.`);
     const pickupCleanup=await rbCleanupLinkedEntryOnShiftDelete(coverShift.id);
     if(!pickupCleanup.ok) throw new Error('This cover shift has a locked leave entry — remove it from Timesheets before approving this pickup.');
-    const newRow={id:'SH'+Date.now(),employee_id:req.initiatorId,date:req.initiatorShiftDate,start_time:req.initiatorShiftStart,end_time:req.initiatorShiftEnd,is_day_off:false,lane:coverShift.lane||null};
+    const newRow={id:'SH'+Date.now(),employee_id:req.initiatorId,date:req.initiatorShiftDate,start_time:req.initiatorShiftStart,end_time:req.initiatorShiftEnd,is_day_off:false,lane:laneForOwner(coverShift.lane,req.initiatorId)};
     await db.insert('roster_shifts',newRow);
     await db.delete('roster_shifts',coverShift.id);
     _rosterShifts=freshShifts.filter(s=>s.id!==coverShift.id);
@@ -18468,9 +18548,10 @@ function m2_leaveTag(kind){ return `<span class="m2-lpill">${kind==='annual'?'An
    the person is not working. Found 8 Nov: Easter Monday 2027 showed 5 people "Other leave". */
 function m2_leaveKind(lv){ return !lv?'':lv.leaveType==='annual_leave'?'annual':lv.leaveType==='public_holiday'?'ph':'other'; }
 function m2_pill(o){
-  const cls=['m2-pill-row',o.size||'md',o.kind||'',o.me?'me':''].join(' ');
+  const cls=['m2-pill-row',o.size||'md',o.kind||'',o.me?'me':'',o.home?'home':''].join(' ');
   const style=`--ink:${o.ink||'#8B2535'}`;
-  const inner=`${o.dot!==undefined?`<span class="m2-indot${o.dot?' in':''}" title="${o.dot?'In now':'Not in yet'}"></span>`:''}<span class="m2-pill-name">${m2_esc(o.name)}</span>`
+  // Work from home: house icon beside the name + a darker bar (aria label says it in words).
+  const inner=`${o.dot!==undefined?`<span class="m2-indot${o.dot?' in':''}" title="${o.dot?'In now':'Not in yet'}"></span>`:''}<span class="m2-pill-name">${m2_esc(o.name)}${o.home?`<span class="m2-home-ico" role="img" aria-label="${WFH_LABEL}" title="${WFH_LABEL}">${WFH_ICON}</span>`:''}</span>`
     +(o.s&&o.e?`<span class="m2-track"><span class="m2-fill" style="${m2_bar(o.s,o.e)}"></span></span>`:`<span style="flex:1;font-size:12px;font-weight:700;color:#6E5F62">${m2_esc(o.blank||'')}</span>`)
     +(o.time!==undefined?`<span class="m2-pill-time">${o.time}</span>`:'')
     +(o.onclick?M2_ICON.chev:'');
@@ -18904,7 +18985,7 @@ function m2_renderShifts(panel,d){
         time:`${m2_esc(m2_range(s.start_time,s.end_time))}<span class="m2-tag">${pend?'Requested':'Open'}</span>`,
         onclick:m2_on(()=>pend?m2_openRequest(pend):m2_openPickup(s))});
     } else {
-      html+=m2_pill({size:'lg',kind,me:true,name:m2_short(s.date).replace(/ \w+$/,''),s:s.start_time,e:s.end_time,ink:'#8B2535',
+      html+=m2_pill({size:'lg',kind,me:true,name:m2_short(s.date).replace(/ \w+$/,''),s:s.start_time,e:s.end_time,ink:'#8B2535',home:!kind&&isWfh(s),
         time:kind?m2_leaveTag(kind):m2_esc(m2_range(s.start_time,s.end_time)),
         onclick:m2_on(()=>m2_openShift(s,me))});
     }
@@ -19420,7 +19501,7 @@ function m2_dayPage(d){
       const kind=m2_leaveKind(lv);
       let dot;
       if(isToday&&!lv){ const ent=d.entries.find(x=>String(x.employeeId)===String(e.id)&&x.clockIn&&!x.leaveType); dot=!!(ent&&!ent.clockOut); }
-      html+=m2_pill({size:'md',kind,me:me&&e.id===me.id,dot,name:m2_first(e),s:s.start_time,e:s.end_time,ink:colour,
+      html+=m2_pill({size:'md',kind,me:me&&e.id===me.id,dot,name:m2_first(e),s:s.start_time,e:s.end_time,ink:colour,home:!kind&&isWfh(s),
         time:kind?m2_leaveTag(kind):m2_esc(m2_range(s.start_time,s.end_time)),
         onclick:m2_on(()=>m2_openShift(s,e))});
     });
@@ -19607,7 +19688,7 @@ function m2_personPage(d){
     if(!s){ html+=m2_pill({size:'md',kind:'off',name:label,blank:'Off'}); continue; }
     const lv=leaveEntryFor(p.id,k,s.id,d.leave);
     const kind=m2_leaveKind(lv);
-    html+=m2_pill({size:'md',kind,name:label,s:s.start_time,e:s.end_time,ink:colour,
+    html+=m2_pill({size:'md',kind,name:label,s:s.start_time,e:s.end_time,ink:colour,home:!kind&&isWfh(s),
       time:kind?m2_leaveTag(kind):m2_esc(m2_range(s.start_time,s.end_time)),
       onclick:m2_on(()=>m2_openShift(s,p))});
   }
@@ -19963,7 +20044,7 @@ function m2_dayPills(day,group,meId,openShiftId,marks){
     if(isOpen&&String(s.id)!==String(openShiftId)) return m2_pill({size:'sm',kind:'open',name:'Cover',s:s.start_time,e:s.end_time,ink:'#8A4310',...col});
     if(isOpen) return m2_pill({size:'sm',kind:'open',name:'This shift',s:s.start_time,e:s.end_time,ink:'#8A4310',...col});
     const lv=leaveEntryFor(e.id,s.date,s.id,day.leave);
-    return m2_pill({size:'sm',me:mine,kind:m2_leaveKind(lv),name:mine?'You':m2_first(e),s:s.start_time,e:s.end_time,ink:mine?'#8B2535':m2_groupColour(group),...col});
+    return m2_pill({size:'sm',me:mine,kind:m2_leaveKind(lv),name:mine?'You':m2_first(e),s:s.start_time,e:s.end_time,ink:mine?'#8B2535':m2_groupColour(group),home:!lv&&isWfh(s),...col});
   }).join('')+`</div>`;
 }
 /* Why a shift can't be changed — the sheet still opens and says so. */
@@ -19994,7 +20075,7 @@ async function m2_openShift(s,owner){
     return why?`<div class="m2-note">${m2_esc(why)}</div>`:`<button class="m2-btn ghost" onclick="${m2_on(()=>m2_openCantWork(s))}">I can't work this shift</button>`; };
   const skel=`<div style="display:flex;flex-direction:column;gap:4px" aria-label="Loading">${'<div class="m2-skel"></div>'.repeat(4)}</div>`;
   m2_sheetOpen({key:'shift:'+s.id,title:'',fixed:true,render:()=>`
-    ${m2_sheetHeader(own?'Your shift':`${m2_first(owner)}'s shift`,own?'#8B2535':m2_groupColour(group),m2_long(s.date),m2_range(s.start_time,s.end_time),m2_groupLabel(group).replace(/s$/,'')+(s.lane==='75plus'?' · 75+ clinic':''))}
+    ${m2_sheetHeader(own?'Your shift':`${m2_first(owner)}'s shift`,own?'#8B2535':m2_groupColour(group),m2_long(s.date),m2_range(s.start_time,s.end_time),m2_groupLabel(group).replace(/s$/,'')+(s.lane==='75plus'?' · 75+ clinic':isWfh(s)?' · '+WFH_LABEL:''))}
     <section><h2 class="m2-h2">${m2_esc(m2_groupLabel(group))} on that day</h2><div id="m2-sh-day">${ready?dayHTML(ready):skel}</div></section>
     ${own?`<div class="m2-foot" id="m2-sh-act">${ready?actHTML(ready):'<div class="m2-skel btn"></div>'}</div>`:''}`,
     after:async()=>{

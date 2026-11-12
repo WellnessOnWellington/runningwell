@@ -76,6 +76,8 @@ else pushes normally.
 
 ## Things that will bite you
 
+- **`roster_shifts.lane` values: `floor`/null, `75plus` (nurse clinic), `admin` (reception), `wfh` (work from home, MANAGERS ONLY, v3.8).** Any code that hands a shift to a different employee (swap, give-away, pick-up, auto-cover) must set the lane through `laneForOwner(lane, newOwnerId)`, or a WFH shift lands on a nurse "at home". The clinic travel checks must stay `=== '75plus'`, never "not floor".
+
 - **The Supabase anon key is published** in this file and grants full read and
   delete on almost every table. All PIN checks are client-side and bypassable.
   See the Database Lockdown plan. Remediation is planned, not built.
