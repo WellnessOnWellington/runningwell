@@ -3696,7 +3696,7 @@
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.7</div>
                 <div>
                   <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">November 2026 &mdash; Leave and swap safeguards</div>
-                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Approved leave can no longer be lost to a swap, and a swap can no longer double-book anyone.</strong> Approving leave now marks the roster shift as leave, the Staff Portal won&rsquo;t offer a shift you&rsquo;re on leave for, and approval refuses a swap, give-away or pick-up that would remove someone&rsquo;s leave or give them two overlapping shifts (the request card warns beforehand). Staff can now withdraw their own pending request in the Staff Portal. Unlocking a timesheet row asks first and is recorded in the audit. Clocking in on a leave day keeps the reason you type. Approving an Arrival or Departure note now settles only the end of the day the note is about &mdash; the other end follows the normal roster and grace-period rule, as everywhere else.</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Approved leave can no longer be lost to a swap, and a swap can no longer double-book anyone.</strong> Approving leave now marks the roster shift as leave, the Staff Portal won&rsquo;t offer a shift you&rsquo;re on leave for, and approval refuses a swap, give-away or pick-up that would remove someone&rsquo;s leave or give them two overlapping shifts (the request card warns beforehand). Staff can now withdraw their own pending request in the Staff Portal. Unlocking a timesheet row asks first and is recorded in the audit. Clocking in on a leave day keeps the reason you type. Approving an Arrival or Departure note now settles only the end of the day the note is about &mdash; the other end follows the normal roster and grace-period rule, as everywhere else. On a split-shift day the kiosk now checks each tap against the nearest rostered block, so the second block no longer asks for a late-arrival reason.</div>
                 </div>
               </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
@@ -5611,9 +5611,9 @@ async function processRFID(card){
   const isoNow=now.toISOString();
   const open=_entries.find(en=>en.employeeId===emp.id&&en.date===todayKey&&en.clockIn&&!en.clockOut);
   const action=open?'out':'in';
-  const scheduled=getScheduledTimes(emp.id,todayKey);
-  const scheduledMin=scheduled?(action==='in'?scheduled.startMin:scheduled.endMin):null;
   const actualMin=now.getHours()*60+now.getMinutes();
+  const scheduled=getScheduledTimes(emp.id,todayKey,{action,atMin:actualMin,openInMin:open?.clockIn?timeToMin(open.clockIn):null});
+  const scheduledMin=scheduled?(action==='in'?scheduled.startMin:scheduled.endMin):null;
   const diff=scheduledMin!==null?Math.abs(actualMin-scheduledMin):0;
   const isAfter=scheduledMin!==null?actualMin>scheduledMin:false;
   const sheetTimeStr=roundToRoster(timeStr,scheduledMin);
@@ -13496,7 +13496,36 @@ function getWeekType(dateStr){
   return weeksDiff%2===0?'A':'B';
 }
 
-function getScheduledTimes(employeeId,dateStr){
+/* `tap` (kiosk only): {action:'in'|'out', atMin, openInMin}. On a split day the kiosk used
+   to grade every tap against the day's FIRST roster row, so clocking in for a second block
+   (e.g. a 19:00 meeting after a 07:45 shift) prompted "435 min after scheduled time" and
+   raised a bogus Arrival/Departure note — seen live 26 Aug and 29 Oct 2026.
+   With `tap`, blocks that touch (10:30 end = 10:30 start) are first merged into ONE span —
+   to the person it is one continuous shift — and then:
+     in  → the first span that has not yet ended at the tap (after the last one: the last).
+           Deliberately NOT "nearest start": that graded a 75-min-late arrival for 08:30 as
+           early for a 10:30 block and dropped the Arrival note (Opus review, 12 Nov 2026).
+     out → the span the open clock-in belongs to (same rule), or a LATER span whose end is
+           nearer the tap (worked straight through two blocks).
+   Day-off rows are skipped, so a day-off row sorted first no longer hides a real block, and
+   so are blocks marked on_leave (v3.7) — leave for the morning block must not make an
+   on-time 10:30 arrival for the afternoon block read as 120 min late.
+   Without `tap` (rbAddShift's default times) behaviour is unchanged. */
+function getScheduledTimes(employeeId,dateStr,tap=null){
+  if(tap){
+    const spans=[];
+    _rosterShifts.filter(s=>s.employee_id===employeeId&&s.date===dateStr&&!s.is_day_off&&!s.on_leave&&s.start_time&&s.end_time)
+      .map(s=>({startMin:timeToMin(s.start_time),endMin:timeToMin(s.end_time)})).sort((x,y)=>x.startMin-y.startMin)
+      .forEach(b=>{ const last=spans[spans.length-1];
+        if(last&&b.startMin<=last.endMin) last.endMin=Math.max(last.endMin,b.endMin); else spans.push({...b}); });
+    if(spans.length){
+      const spanAt=min=>spans.find(x=>x.endMin>min)||spans[spans.length-1];
+      if(tap.action==='in') return spanAt(tap.atMin);
+      const from=spanAt(tap.openInMin!=null?tap.openInMin:tap.atMin);
+      return spans.filter(x=>x.startMin>=from.startMin)
+        .reduce((b,x)=>Math.abs(x.endMin-tap.atMin)<Math.abs(b.endMin-tap.atMin)?x:b);
+    }
+  }
   // 1. Check explicit roster_shifts first (fortnight-by-fortnight roster)
   const shift=_rosterShifts.find(s=>s.employee_id===employeeId&&s.date===dateStr);
   if(shift){ if(shift.is_day_off||!shift.start_time||!shift.end_time) return null; return{startMin:timeToMin(shift.start_time),endMin:timeToMin(shift.end_time)}; }
