@@ -4472,6 +4472,43 @@ function inNursingPool(emp){
    (managers are noClockExpected; same rates), so it is a DISPLAY lane: the roster builder gets
    a Home row, and every Who's On surface, the phone app and the timesheet row say so with a
    house icon + words (not colour alone). Never a clinic: the travel checks stay '75plus' only. */
+/* Cover shifts this person could actually take: not overlapping one of their own shifts, not on
+   a day with a leave entry, not inside approved leave. ONE rule for the phone app's list, the
+   Staff Portal's Pick Up list and the kiosk's "shifts available" count (Joel, 12 Nov 2026).
+   Pure — arguments only. Raw or normalised rows both work: date/start_time/end_time/is_day_off
+   for shifts, .date for leave, normalised requests. */
+function coverEligibleFor(open,mine,leave,reqs,me){
+  const m=t=>{ if(!t) return null; const p=String(t).split(':'); return (+p[0])*60+(+p[1]||0); };
+  const overlap=(s1,e1,s2,e2)=>m(s1)<m(e2)&&m(s2)<m(e1);
+  return (open||[]).filter(s=>{
+    if(s.is_day_off||!s.start_time||!s.end_time) return false;
+    if((mine||[]).some(x=>x.date===s.date&&!x.is_day_off&&x.start_time&&overlap(x.start_time,x.end_time,s.start_time,s.end_time))) return false;
+    if((leave||[]).some(l=>l.date===s.date)) return false;
+    if((reqs||[]).some(r=>r.type==='leave'&&r.status==='approved'&&r.initiatorId===me.id&&r.leaveStartDate<=s.date&&r.leaveEndDate>=s.date)) return false;
+    return true;
+  }).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
+}
+/* Cover is only on offer from a PUBLISHED fortnight (Joel, 12 Nov 2026). Unpublishing hides that
+   fortnight's cover from staff; republishing shows it again — nothing is deleted or re-created,
+   so a pick-up request already sent keeps pointing at a real shift. Read fresh each time (a
+   handful of rows: published fortnights from a fortnight ago on), because a manager may have
+   unpublished on another device. Returns null when it can't tell — no cycle anchor to place
+   dates in fortnights, or the read failed — and null means "don't filter". */
+async function coverPublishedKeys(){
+  if(!_rosterConfig?.cycle_start_date) return null;
+  try{
+    const from=rbDateKey(new Date(Date.now()-15*86400000));
+    const rows=await db.get('roster_fortnights',{is_published:true,fn_start:{gte:from}});
+    return new Set((rows||[]).map(f=>f.fn_start+'|'+f.role));
+  }catch(e){ return null; }
+}
+function coverPublishedOnly(list,keys){
+  if(!keys) return list||[];
+  return (list||[]).filter(s=>{
+    const ph=(_emps||[]).find(e=>String(e.id)===String(s.employee_id));
+    return keys.has(rbFnStartForDate(s.date)+'|'+(ph?staffGroupFor(ph):''));
+  });
+}
 const WFH_LANE='wfh';
 const WFH_LABEL='Work from home';
 const isWfh=s=>!!s&&s!=='off'&&s.lane===WFH_LANE;
@@ -5838,9 +5875,9 @@ function greet(d){const h=d.getHours();return h<12?'Good morning,':h<17?'Good af
    Both are filtered reads (one person's unseen notifications; open cover in the next six
    months), so they stay a few rows however large the tables grow. null = not loaded, and
    the row is simply left off rather than shown as zero. */
-let _flashNotifs=null,_flashCover=null;
+let _flashNotifs=null,_flashCover=null,_flashMine=[],_flashLeave=[],_flashPubKeys=null;
 async function _loadFlashExtras(emp){
-  _flashNotifs=null; _flashCover=null;
+  _flashNotifs=null; _flashCover=null; _flashMine=[]; _flashLeave=[]; _flashPubKeys=null;
   const today=rbDateKey(new Date());
   const sixMonthsStr=rbDateKey(new Date(Date.now()+6*30.5*86400000));
   // Same placeholder rule as the Staff Portal's Pick Up list (renderRequestForm).
@@ -5851,7 +5888,13 @@ async function _loadFlashExtras(emp){
     placeholderIds.length
       ? db.get('roster_shifts',{employee_id:{in:`(${placeholderIds.join(',')})`},date:{gt:today,lte:sixMonthsStr}})
           .then(r=>{ _flashCover=r.filter(s=>!s.is_day_off&&s.start_time&&s.end_time); }).catch(()=>{})
-      : Promise.resolve().then(()=>{ _flashCover=[]; })
+      : Promise.resolve().then(()=>{ _flashCover=[]; }),
+    /* This person's own shifts and leave over the same window, so the count only includes
+       cover they could actually take — the phone app's rule (m2_eligibleOpen), Joel 12 Nov
+       2026. One person, filtered reads: not a table poll. */
+    placeholderIds.length?db.get('roster_shifts',{employee_id:emp.id,date:{gt:today,lte:sixMonthsStr}}).then(r=>{ _flashMine=r||[]; }).catch(()=>{}):null,
+    placeholderIds.length?db.get('entries',{employee_id:emp.id,date:{gt:today,lte:sixMonthsStr},leave_type:{'not.is':'null'}}).then(r=>{ _flashLeave=(r||[]).filter(e=>!e.deleted); }).catch(()=>{}):null,
+    placeholderIds.length?coverPublishedKeys().then(k=>{ _flashPubKeys=k; }):null
   ]);
 }
 /* The clock-in list: what is waiting for this person in the Staff Portal. Each item opens
@@ -5867,7 +5910,8 @@ function _kioskFlashMsg(emp){
   const flaggedNotes=_notes.filter(n=>n.employeeId===emp.id&&n.status==='flagged'&&!n.staffAcknowledged).length;
   const outcomes=(_flashNotifs||[]).filter(n=>n.employeeId===emp.id&&staffNotifUnread(n)&&n.type!=='incoming_swap'&&n.type!=='incoming_giveaway').length;
   const updates=flaggedNotes+outcomes;
-  const cover=(_flashCover||[]).length;
+  // Filtered at display time so it uses this tap's fresh _requests (approved leave).
+  const cover=coverPublishedOnly(coverEligibleFor(_flashCover||[],_flashMine,_flashLeave,_requests||[],emp),_flashPubKeys).length;
   const items=[];
   if(unseenReqs>0) items.push({icon:'📋',text:unseenReqs===1?'1 request awaiting a response':`${unseenReqs} requests awaiting a response`,dest:'requests'});
   if(updates>0) items.push({icon:'🔔',text:updates===1?'1 update from management':`${updates} updates from management`,dest:'list'});
@@ -13624,8 +13668,11 @@ function srCoverShiftsList(emp, today){
   /* Uncapped, matching the Staff Portal's Pick Up list — see the note at _reqCoverShifts.
      This board is read-only, so a truncated list here was purely a lie about how much
      cover the clinic needs, which is the opposite of what it exists to show. */
-  const future=_rosterShifts
-    .filter(s=>s.employee_id===emp.id&&s.date>today&&!s.is_day_off&&s.start_time&&s.end_time)
+  // Published fortnights only, like every pick-up list (coverPublishedOnly) — this board is
+  // staff-facing on the kiosk. Uses the already-loaded _rosterFortnights.
+  const _pubKeys=_rosterConfig?.cycle_start_date?new Set((_rosterFortnights||[]).filter(f=>f.is_published).map(f=>f.fn_start+'|'+f.role)):null;
+  const future=coverPublishedOnly(_rosterShifts
+    .filter(s=>s.employee_id===emp.id&&s.date>today&&!s.is_day_off&&s.start_time&&s.end_time),_pubKeys)
     .sort((a,b)=>a.date.localeCompare(b.date));
   const header=`<div class="sr-person-header" style="border-bottom-color:rgba(230,126,34,0.3);">
     <div class="sr-person-avatar" style="background:#fdebd0;color:#e67e22;">${initials}</div>
@@ -16544,6 +16591,14 @@ async function renderRequestForm(){
        The six-month window below is the real bound and does the actual work; the list is
        scrollable in its own right, so its length no longer costs anything. */
     _reqCoverShifts=allShifts.filter(s=>placeholderIds.has(s.employee_id)&&s.date>today&&s.date<=sixMonthsStr&&!s.is_day_off&&s.start_time&&s.end_time).sort((a,b)=>a.date.localeCompare(b.date));
+    /* Only cover this person could take — not overlapping one of their own shifts, not on a
+       day they have leave, not inside approved leave. The phone app's rule (m2_eligibleOpen),
+       so the Pick Up list, the kiosk count and the phone agree (Joel, 12 Nov 2026). */
+    try{
+      const _lvAll=(await db.get('entries',{employee_id:emp.id,date:{gt:today,lte:sixMonthsStr},leave_type:{'not.is':'null'}})).filter(e=>!e.deleted);
+      _reqCoverShifts=coverEligibleFor(_reqCoverShifts,_reqMyShifts,_lvAll,_requests||[],emp);
+    }catch(e){}
+    _reqCoverShifts=coverPublishedOnly(_reqCoverShifts,await coverPublishedKeys());
   }catch(e){ _reqMyShifts=[]; _reqCoverShifts=[]; }
   const myShiftOptions=_reqMyShifts.length
     ?_reqMyShifts.map(s=>s.on_leave?`<option value="${s.id}" disabled>${reqFmtDate(s.date)} ${s.start_time}–${s.end_time} (Not in)</option>`:`<option value="${s.id}">${reqFmtDate(s.date)} ${s.start_time}–${s.end_time}</option>`).join('')
@@ -17155,6 +17210,12 @@ function reqApprovalWarnings(r){
   }
   if(r.type==='giveaway'){ const c=clash(r.colleagueId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd,null); if(c) w.push(`${nm(r.colleagueName)} already works ${reqHm(c.start_time)}–${reqHm(c.end_time)} that day — would double-book`); }
   if(r.type==='pickup'){ const c=clash(r.initiatorId,r.initiatorShiftDate,r.initiatorShiftStart,r.initiatorShiftEnd,null); if(c) w.push(`${nm(r.initiatorName)} already works ${reqHm(c.start_time)}–${reqHm(c.end_time)} that day — would double-book`); }
+  // Not blocking: the manager decides. Staff can no longer see this cover while it's unpublished.
+  if(r.type==='pickup'&&_rosterConfig?.cycle_start_date){
+    const ie=(_emps||[]).find(e=>String(e.id)===String(r.initiatorId));
+    const g=ie?staffGroupFor(ie):r.initiatorRole;
+    if(g&&!rbIsPublishedForRole(rbFnStartForDate(r.initiatorShiftDate),g)) w.push(`This fortnight's roster is unpublished, so this cover shift is no longer on offer to staff`);
+  }
   return w;
 }
 function buildReqAdminCard(r,isPending){
@@ -18956,15 +19017,10 @@ async function m2_myRequests(me){
 function m2_leaveRows(rows){ return rows.map(normaliseEntry).filter(e=>e.leaveType&&!e.deleted); }
 /* Open shifts THIS person could take: their staff group, no overlap with a shift they
    already have that day, not on their leave (entries OR an approved leave request). */
-function m2_eligibleOpen(open,mine,leave,reqs,me){
-  return open.filter(s=>{
-    if(s.is_day_off||!s.start_time||!s.end_time) return false;
-    if(mine.some(m=>m.date===s.date&&!m.is_day_off&&m.start_time&&m2_overlap(m.start_time,m.end_time,s.start_time,s.end_time))) return false;
-    if(leave.some(l=>l.date===s.date)) return false;
-    if(reqs.some(r=>r.type==='leave'&&r.status==='approved'&&r.initiatorId===me.id&&r.leaveStartDate<=s.date&&r.leaveEndDate>=s.date)) return false;
-    return true;
-  }).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
-}
+// The rule lives in the main script (coverEligibleFor) so the kiosk and Staff Portal can use it
+// without depending on this script — which is kept separate precisely so a fault here can't
+// break the kiosk.
+function m2_eligibleOpen(open,mine,leave,reqs,me){ return coverEligibleFor(open,mine,leave,reqs,me); }
 function m2_pendingFor(reqs,me,shiftId){ return reqs.find(r=>r.initiatorId===me.id&&!reqIsClosed(r)&&String(r.initiatorShiftId)===String(shiftId))||null; }
 function m2_waitingOnMe(reqs,me){ return reqs.filter(r=>r.colleagueId===me.id&&r.status==='pending_peer'&&!reqIsLapsed(r)); }
 /* Swaps badge: a NUMBER = someone waiting on your answer; a DOT = open cover not seen yet. */
@@ -18990,7 +19046,7 @@ async function m2_loadShifts(){
     m2_myRequests(me)
   ]);
   const lv=m2_leaveRows(leave);
-  const openOk=m2_eligibleOpen(open,mine,lv,reqs,me);
+  const openOk=coverPublishedOnly(m2_eligibleOpen(open,mine,lv,reqs,me),await coverPublishedKeys());
   m2_updateBadge(reqs,openOk);
   return {mine,leave:lv,open:openOk,notifs:notifs.map(normaliseNotif),notes:notes.map(normaliseNote),reqs};
 }
@@ -19145,7 +19201,7 @@ async function m2_loadSwaps(){
     db.get('roster_shifts',{employee_id:me.id,date:{gte:t,lte:to}}),
     db.get('entries',{employee_id:me.id,date:{gte:t,lte:to},leave_type:{'not.is':'null'}})
   ]);
-  const openOk=m2_eligibleOpen(open,mine,m2_leaveRows(leave),reqs,me);
+  const openOk=coverPublishedOnly(m2_eligibleOpen(open,mine,m2_leaveRows(leave),reqs,me),await coverPublishedKeys());
   await reqFetchShiftProblems(reqs);   // one small read: are any of my requests' shifts gone/changed?
   return {reqs,open:openOk};
 }
