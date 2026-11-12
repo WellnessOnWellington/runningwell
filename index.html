@@ -2212,7 +2212,9 @@
   .m2-cal.pkcal { column-gap:0; }   /* so a picked range reads as one continuous band */
   .m2-cal .m2-cal-d.pk.pend { background:repeating-linear-gradient(135deg,#EEE5E7 0 3px,#FFFFFF 3px 8px); }
   .m2-cal .m2-cal-d.pk.past { color:#CBBFC2; background:none; box-shadow:none; }
-  .m2-cal .m2-cal-d.pk.blocked { color:#B3A7AA; background:#EDE6E8; text-decoration:line-through; }
+  /* Unpickable = the Leave calendar's leave yellow + a struck number (Joel 12 Nov): yellow means
+     "someone's on leave" in both calendars; the strike says you can't pick it. */
+  .m2-cal .m2-cal-d.pk.blocked { color:#9C8B66; background:#FBF0CC; text-decoration:line-through; }
   .m2-cal .m2-cal-d.pk.mine { box-shadow:inset 0 0 0 1.5px var(--burgundy); color:var(--burgundy); }
   .m2-cal .m2-cal-d.pk.rng { background:#F1D9DE; color:var(--charcoal); border-radius:0; box-shadow:none; }
   .m2-cal .m2-cal-d.pk.rs, .m2-cal .m2-cal-d.pk.re { background:var(--burgundy); color:#fff; }
@@ -2259,7 +2261,7 @@
   /* 'grow': the standard height is a floor, not a ceiling — slightly longer content makes a
      slightly taller panel; scrolling starts only at the 90% cap (max-height). */
   .m2-sheet.fixed.grow { height:auto; min-height:min(560px, calc(var(--vvh,100vh) * 0.72)); }
-  .m2-sheet.fixed.grow.full { height:calc(var(--vvh,100vh) * 0.9); }
+  .m2-sheet.fixed.grow.full { height:calc(var(--vvh,100vh) * 0.9); min-height:0 !important; }   /* typing: the keyboard's space wins over any floor */
   .m2-sheet.fixed .m2-sheet-body { flex:1; min-height:0; }
   .m2-sheet.fixed .m2-step { flex:1 0 auto; }
   .m2-sheet.fixed .m2-foot { margin-top:auto; position:sticky; bottom:calc(-24px - env(safe-area-inset-bottom)); margin-bottom:calc(-24px - env(safe-area-inset-bottom)); padding:12px 0 calc(16px + env(safe-area-inset-bottom)); background:#FDFAF9; box-shadow:0 -10px 12px -10px rgba(45,36,38,0.10); z-index:1; }
@@ -19604,6 +19606,7 @@ function m2_sheetRender(animate,dir){
   sheet.classList.remove('full'); sheet.style.transform='';
   sheet.classList.toggle('fixed',m2_fixedOn()&&!!m2_sheet[0].fixed);
   sheet.classList.toggle('grow',m2_panelMode()==='grow'&&!!m2_sheet[0].fixed);
+  sheet.style.minHeight=(m2_panelMode()==='grow'&&m2_sheet[0].floorPx)?m2_sheet[0].floorPx+'px':'';
   m2_el('m2-sheet-title').textContent=step.title||'';
   const nav=m2_el('m2-sheet-nav'), first=m2_sheet.length===1;
   nav.innerHTML=first?M2_ICON.down:M2_ICON.back; nav.setAttribute('aria-label',first?'Close':'Back');
@@ -19647,7 +19650,7 @@ function m2_sheetHide(){
   const wrap=m2_el('m2-sheet-wrap'), sheet=m2_el('m2-sheet'); if(!wrap) return;
   /* A drag leaves an inline translateY(dy) that would override the closed position and freeze
      the sheet under the finger; clear it so the close slides on from where the finger let go. */
-  if(sheet){ sheet.style.transition=''; sheet.style.transform=''; }
+  if(sheet){ sheet.style.transition=''; sheet.style.transform=''; sheet.style.minHeight=''; }
   wrap.classList.remove('open'); m2_sheet=[];
   /* Hide only once the slide has finished (it used to hide at 220 ms of a 260 ms slide). */
   let done=false;
@@ -19917,6 +19920,7 @@ function m2_openLeaveForm(o){
       const upd=()=>{ const [a]=dates(); send.disabled=!ok.checked||blocked||!a; };
       typeEl.onchange=recheck; ok.onchange=upd;
       if(!o.fixed) m2_el('m2-lv-dates').onclick=()=>{ m2_sheetSaveDraft(); const [a,b]=dates(); m2_openLeavePicker({key,type:typeEl.value,start:a,end:b}); };
+      if(!o.fixed&&m2_panelMode()==='grow'&&m2_sheet[0]===step&&!step.floorPx){ step.floorPx=m2_leaveFlowFloor(); m2_el('m2-sheet').style.minHeight=step.floorPx+'px'; }
       showDates(); recheck();
       send.onclick=()=>{ const [a,b]=dates(); m2_commit(reqBuildLeave(me,typeEl.value,a,b||a,m2_el('m2-lv-reason').value.trim()),key); };
     }};
@@ -19972,13 +19976,36 @@ let m2_pk=null;
 function m2_openLeavePicker(o){
   const t=m2_today();
   m2_pk={key:o.key,type:o.type,a:o.start||null,b:o.end||null,ms:m2_monthStart(o.start||m2_month||t),note:''};
-  m2_sheetPush({title:'Choose dates',render:()=>`
-    <div class="m2-monthnav"><button class="m2-icon-btn" aria-label="Previous month" onclick="m2_pkMove(-1)">${M2_ICON.left}</button>
-      <div class="m2-monthlabel" id="m2-pk-label">${m2_esc(m2_monthLabel(m2_pk.ms))}</div>
-      <button class="m2-icon-btn" aria-label="Next month" onclick="m2_pkMove(1)">${M2_ICON.right}</button></div>
-    <div class="m2-calwrap" id="m2-pk-wrap"><div class="m2-calpage" id="m2-pk-grid"><div class="m2-empty">Loading…</div></div></div>
-    <div class="m2-foot"><div class="m2-pk-note" id="m2-pk-note" role="status"></div><div class="m2-pk-sum" id="m2-pk-sum"></div><button class="m2-btn" id="m2-pk-done" onclick="m2_pkDone()" disabled>Done</button></div>`,
+  m2_sheetPush({title:'Choose dates',render:()=>m2_pkMarkup(m2_pk.ms,`<div class="m2-empty">Loading…</div>`),
     after:()=>{ m2_pkDraw(); m2_bindPkSwipe(); }});
+}
+function m2_pkMarkup(ms,gridHTML,probe){
+  const id=x=>probe?'':` id="${x}"`;   // the height probe must not duplicate the real ids
+  return `
+    <div class="m2-monthnav"><button class="m2-icon-btn" aria-label="Previous month" onclick="m2_pkMove(-1)">${M2_ICON.left}</button>
+      <div class="m2-monthlabel"${id('m2-pk-label')}>${m2_esc(m2_monthLabel(ms))}</div>
+      <button class="m2-icon-btn" aria-label="Next month" onclick="m2_pkMove(1)">${M2_ICON.right}</button></div>
+    <div class="m2-calwrap"${id('m2-pk-wrap')}><div class="m2-calpage"${id('m2-pk-grid')}>${gridHTML}</div></div>
+    <div class="m2-foot"><div class="m2-pk-note"${id('m2-pk-note')} role="status"></div><div class="m2-pk-sum"${id('m2-pk-sum')}>Tap your first day of leave</div><button class="m2-btn"${id('m2-pk-done')} onclick="m2_pkDone()" disabled>Done</button></div>`;
+}
+/* "+ Request leave" opens at the date picker's height (Joel 12 Nov): the picker is the tallest
+   step of that flow and always the same size (six weeks), so the form starts there and
+   moving to the dates is a pure sideways slide. Measured, not guessed: the picker is laid out
+   invisibly inside the sheet for one moment and its height read. Capped at 90% of the screen. */
+function m2_leaveFlowFloor(){
+  const sheet=m2_el('m2-sheet'); if(!sheet) return 0;
+  const savedPk=m2_pk, ms=m2_monthStart(m2_month||m2_today());
+  m2_pk={type:'annual_leave',a:null,b:null,ms,note:''};
+  const probe=document.createElement('div');
+  probe.className='m2-sheet-body'; probe.setAttribute('aria-hidden','true');
+  probe.style.cssText='position:absolute;left:0;right:0;top:0;visibility:hidden;pointer-events:none;overflow:visible;';
+  probe.innerHTML=`<div class="m2-step">${m2_pkMarkup(ms,m2_pkGrid(m2_pkBlank(ms)),true)}</div>`;
+  sheet.appendChild(probe);
+  const h=(m2_el('m2-sheet-grab')?.offsetHeight||0)+(m2_el('m2-sheet-head')?.offsetHeight||0)+probe.offsetHeight;
+  probe.remove(); m2_pk=savedPk;
+  // Cap = the sheet's own max-height (90% of the visible area, keyboard-aware via --vvh).
+  const cap=parseFloat(getComputedStyle(sheet).maxHeight)||((window.visualViewport&&window.visualViewport.height)||window.innerHeight)*0.9;
+  return Math.round(Math.min(h,cap));
 }
 async function m2_pkDraw(){
   const pk=m2_pk, grid=m2_el('m2-pk-grid'); if(!pk||!grid) return;
