@@ -2,7 +2,7 @@
    Strategy: network-first with offline fallback.
    Increment CACHE_VER on each deploy to bust stale cache. */
 
-const CACHE_VER = 'rw-v19';
+const CACHE_VER = 'rw-v20';
 /* Relative to this file, so they resolve under /runningwell/ on GitHub Pages. They were
    root-absolute ('/', '/index.html', …), which on a project site point at
    wellnessonwellington.github.io/ itself — all four 404, addAll rejects, and the worker

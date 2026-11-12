@@ -1275,8 +1275,13 @@
   .rb-tl-leave-gap:hover { border-color:rgba(160,114,40,0.95); background:rgba(253,243,226,0.75); }
   .rb-tl-leave-gap-text { font-size:0.6rem; font-weight:800; color:#8a5a12; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis; letter-spacing:0.01em; }
-  .rb-tl-row.leave-clash { background:rgba(139,37,53,0.05); }
-  .rb-tl-row.leave-clash .rb-tl-name { background:rgba(139,37,53,0.08); }
+  .rb-tl-row.leave-clash { background:rgba(139,37,53,0.09); }
+  .rb-tl-row.leave-clash .rb-tl-name { background:rgba(139,37,53,0.14); }
+  /* A WORKED shift on a day with approved leave — the same "Leave approved" look as Who's On,
+     loud on purpose: unresolved, it pays a working day the leave record says was a day off. */
+  .rb-shift-bar.leave-clash-bar { background:repeating-linear-gradient(135deg,#f5c030 0 9px,#fbe3a0 9px 18px); box-shadow:inset 0 0 0 2px var(--burgundy); }
+  .rb-shift-bar.leave-clash-bar .rb-shift-label { color:#3d2600; }
+  .rb-clash-tag { font-size:0.52rem; font-weight:900; letter-spacing:0.06em; color:#fff; background:var(--burgundy); border-radius:999px; padding:1px 6px; margin-right:4px; white-space:nowrap; pointer-events:none; }
   .rb-tl-leave-warn { flex:0 0 auto; font-size:0.72rem; line-height:1; cursor:pointer; }
 
   .rb-shift-bar { position:absolute; top:6px; height:30px; border-radius:6px; background:linear-gradient(135deg,var(--burgundy),#c0495c); cursor:move; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,0.15); min-width:14px; user-select:none; overflow:visible; }
@@ -3693,7 +3698,7 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.8 &middot; November 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.9 &middot; November 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
@@ -3701,6 +3706,13 @@
                  rule, never by hand: fading per row was forgotten at every bump from v2.2 to v3.3,
                  which left eleven old releases looking current. -->
             <div class="about-history" style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.9</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">November 2026 &mdash; Approved leave reaches the roster</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>A shift added or copied onto a day with approved leave now starts out as that leave.</strong> If it can&rsquo;t be (a public holiday, or leave already recorded), or someone sets it back to a worked shift, the bar is striped yellow and marked &ldquo;LEAVE APPROVED&rdquo;. Cover for annual leave is held back until the fortnight is published; the Publish dialog lists the cover shifts that will be offered, each with a tick box.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.8</div>
                 <div>
@@ -5211,7 +5223,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.8';
+const APP_VERSION='3.9';
 const APP_VERSION_DATE='November 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
@@ -9268,6 +9280,10 @@ async function rbSpawnCoverForLeave(shift, leaveType){
      srCoverShiftsList — filter `date > today`, so a cover shift for today or earlier is
      invisible to everyone who could fill it while still sitting on the roster forever. */
   if(shift.date<=rbDateKey(new Date())) return null;
+  /* HELD until the fortnight is published (Joel, 12 Nov 2026). A draft roster is something
+     managers play with; cover spawned from it reached staff at once. Publishing releases it —
+     rbCoverHeldForFortnight lists what is waiting and the publish dialog says how many. */
+  if(_rosterConfig?.cycle_start_date&&!rbIsPublishedForRole(rbFnStartForDate(shift.date),r)) return null;
   const ph=rbCoverPlaceholderFor(r);
   if(!ph) return null;
   // One cover row per block, ever. Re-marking leave (annual → personal → annual) or an
@@ -9282,6 +9298,31 @@ async function rbSpawnCoverForLeave(shift, leaveType){
     _rosterShifts.push(row);
     return row;
   }catch(e){ console.error('Could not create cover shift',e); return null; }
+}
+
+/* Annual-leave blocks in this fortnight whose cover is being held until publish: future,
+   on annual leave, no cover row yet, and none already picked up. */
+function rbCoverHeldForFortnight(fnKey,role){
+  if(!AUTO_COVER_ENABLED[role]) return [];
+  const days=new Set(getFortnight14Days(fnKey)), today=rbDateKey(new Date());
+  const ids=new Set(rbGetEmpsForRole(role).filter(e=>!e.is_placeholder).map(e=>String(e.id)));
+  return (_rosterShifts||[]).filter(s=>days.has(s.date)&&s.date>today&&!s.is_day_off&&s.start_time&&s.end_time
+    &&ids.has(String(s.employee_id))
+    &&(_entries||[]).some(e=>e.leaveType==='annual_leave'&&!e.deleted&&String(e.shiftId)===String(s.id))
+    &&!(_rosterShifts||[]).some(c=>String(c.cover_for_shift_id)===String(s.id))
+    &&!rbCoverPickedUpFor(s,role))
+    .sort((a,b)=>a.date.localeCompare(b.date)||String(a.start_time).localeCompare(String(b.start_time)));
+}
+// Called once the fortnight is published. Returns how many cover shifts were offered.
+async function rbReleaseHeldCover(fnKey,role,skip=new Set()){
+  let n=0;
+  for(const sh of rbCoverHeldForFortnight(fnKey,role)){ if(skip.has(String(sh.id))) continue; if(await rbSpawnCoverForLeave(sh,'annual_leave')) n++; }
+  return n;
+}
+function rbHeldCoverLine(s){
+  const e=(_emps||[]).find(x=>String(x.id)===String(s.employee_id));
+  const d=new Date(s.date+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+  return `${e?e.name:'Unknown'} — ${d}, ${String(s.start_time).slice(0,5)}–${String(s.end_time).slice(0,5)}`;
 }
 
 /* Remove the cover shift for a block whose leave has gone away. Returns the rows
@@ -9420,7 +9461,37 @@ async function rbMarkLeave(empId, date, shiftId, leaveType){
   rbPastFortGuard(date,proceed,cancel);
 }
 
-async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,existingLeave){
+/* A shift placed on a day with APPROVED leave starts out as that leave (Joel, 12 Nov 2026) —
+   the leave was decided already, and a shift is what lets payroll pay it. Used by Add shift and
+   Copy fortnight. Same refusals as the dropdown (finals unknown, finalised period, a worked
+   entry already on the block, leave already there); any refusal returns null and the
+   rostered-on-leave warning stays on screen instead. The manager can still set the bar to
+   Worked Shift — and if the person turns up anyway, the kiosk converts it with a note. */
+async function rbAutoApplyLeave(shift, opts={}){
+  if(!shift||shift.is_day_off) return null;
+  const req=rbApprovedLeaveOn(shift.employee_id,shift.date);
+  if(!req||!req.leaveType) return null;
+  const emp=(_emps||[]).find(e=>String(e.id)===String(shift.employee_id));
+  if(!emp||emp.is_placeholder) return null;
+  if(!_tsFinalLoaded||reqPeriodFinalised(shift.date)) return null;
+  if(rbWorkedEntryCoveringShift(emp.id,shift)) return null;
+  /* Leave already recorded for this day in a form this block can't see — a hand-entered row
+     with no shift_id, or one on another block overlapping these hours — means the leave is
+     handled. Writing another would export twice (Opus review). */
+  const _s=timeStrToMin(shift.start_time), _e=timeStrToMin(shift.end_time);
+  const dayLeave=(_entries||[]).filter(e=>e.leaveType&&!e.deleted&&String(e.employeeId)===String(emp.id)&&e.date===shift.date);
+  if(dayLeave.some(e=>!e.shiftId||String(e.shiftId)===String(shift.id)
+    ||((e.finalStart||e.clockIn)&&(e.finalEnd||e.clockOut)&&timeStrToMin(e.finalStart||e.clockIn)<_e&&timeStrToMin(e.finalEnd||e.clockOut)>_s))) return null;
+  // Public holidays are paid as the holiday, not drawn from annual leave — leave that to a person.
+  if(_publicHolidays?.has(shift.date)) return null;
+  const role=rbRoleForEmp(emp.id);
+  const lt=formatLeaveType(req.leaveType);
+  return rbMarkLeaveApply(emp.id,shift.date,shift.id,req.leaveType,shift,emp,role,null,{
+    requestId:req.id, note:`Block ${String(shift.start_time).slice(0,5)}–${String(shift.end_time).slice(0,5)} added on approved leave — applied automatically`,
+    toast:`${empFirstName(emp)} is on approved ${lt.toLowerCase()} — shift added as ${lt}`, ...opts});
+}
+
+async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,existingLeave,opts={}){
   if(!leaveType){
     const snapLeave=existingLeave?{...existingLeave}:null;
     const sMin2=timeStrToMin(shift.start_time)||TL_START;
@@ -9469,7 +9540,8 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
       Object.assign(existingLeave,{leaveType,clockIn,clockOut,hours,shiftId,
         approvedBy:_attr.approved_by,approvedAt:_attr.approved_at});
     }else{
-      const row={id:'L'+Date.now(),employee_id:empId,employee_name:emp.name,role:emp.role,date,clock_in:clockIn,clock_out:clockOut,hours,leave_type:leaveType,shift_id:shiftId,status:'normal',..._attr};
+      const row={id:'L'+Date.now()+(opts.idSuffix||''),employee_id:empId,employee_name:emp.name,role:emp.role,date,clock_in:clockIn,clock_out:clockOut,hours,leave_type:leaveType,shift_id:shiftId,status:'normal',..._attr};
+      if(opts.requestId) row.request_id=opts.requestId;
       const returned=await db.insert('entries',row);
       const saved=Array.isArray(returned)?returned[0]:returned;
       _entries.push(normaliseEntry({...row,id:saved?.id||row.id}));
@@ -9486,7 +9558,7 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
     let _cover=null;
     if(leaveType==='annual_leave') _cover=await rbSpawnCoverForLeave(shift,leaveType);
     else await rbRemoveCoverForShift(shiftId);
-    rbPushUndo('leave marked',async()=>{
+    if(!opts.noUndo) rbPushUndo('leave marked',async()=>{
       if(newLeaveId){ await db.delete('entries',newLeaveId); _entries=_entries.filter(e=>e.id!==newLeaveId); }
       await db.update('roster_shifts',shift.id,{on_leave:false});
       shift.on_leave=false;
@@ -9495,14 +9567,16 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
     });
     // Say it plainly rather than opening a dialog to ask — the bar appears on the
     // screen the manager is already looking at, and Undo takes it back.
-    showToast(formatLeaveType(leaveType)+' marked'+(_cover?' · cover shift created':''));
-    renderDayTimelineForRole(role); renderTimesheets();
+    if(opts.toast!==false) showToast((opts.toast||formatLeaveType(leaveType)+' marked')+(_cover?' · cover shift created':''));
+    if(!opts.noRender){ renderDayTimelineForRole(role); renderTimesheets(); }
     await logLeaveEvent({
       event:'marked', employeeId:empId, employeeName:emp.name, role:emp.role,
       leaveType, startDate:date, endDate:date, daysApplied:1, daysUnrostered:0,
-      note:`Block ${clockIn}–${clockOut} marked from the roster`,
+      requestId:opts.requestId||null,
+      note:opts.note||`Block ${clockIn}–${clockOut} marked from the roster`,
     });
-  }catch(err){showToast('Could not save leave');console.error(err);}
+    return newLeaveId||null;
+  }catch(err){showToast('Could not save leave');console.error(err); return null;}
 }
 
 /* The leave entry covering a rostered BLOCK, or null.
@@ -13749,6 +13823,18 @@ function rbGetFnStart(){
   return base;
 }
 
+/* The roster fortnight (its Monday — roster_fortnights.fn_start) containing dateKey.
+   rbGetFnStart's arithmetic, asked about any date instead of "today + the builder offset". */
+function rbFnStartForDate(dateKey){
+  const toMonday=d=>{const day=d.getDay();const diff=day===0?-6:1-day;return new Date(d.getFullYear(),d.getMonth(),d.getDate()+diff);};
+  const t=toMonday(new Date(String(dateKey).slice(0,10)+'T12:00:00'));
+  const anchor=_rosterConfig?.cycle_start_date;
+  if(!anchor) return rbDateKey(t);
+  const a=toMonday(new Date(anchor+'T12:00:00'));
+  const base=new Date(a); base.setDate(base.getDate()+_fnIndex(t,a)*14);
+  return rbDateKey(base);
+}
+
 function rbDateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 
 function rbFnLabel(start){
@@ -13861,11 +13947,28 @@ function rbTogglePublishForRole(role){
       warn+='</div>';
       document.getElementById('rb-confirm-msg').innerHTML+=warn;
     }
+    const held=rbCoverHeldForFortnight(key,role);
+    if(held.length){
+      let cv='<div style="background:rgba(230,126,34,0.08);border:1.5px solid rgba(230,126,34,0.6);border-radius:8px;padding:0.7rem 0.9rem;margin-top:0.9rem;text-align:left;">';
+      cv+=`<div style="font-size:0.8rem;font-weight:800;color:#8A4310;margin-bottom:0.3rem;">🙋 ${held.length} cover shift${held.length!==1?'s':''} will be offered to staff</div>`;
+      cv+=held.map(h=>`<label style="display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;color:var(--charcoal);cursor:pointer;"><input type="checkbox" class="rb-held-cover" data-sid="${escHtml(String(h.id))}" checked>${escHtml(rbHeldCoverLine(h))}</label>`).join('');
+      cv+=`<div style="font-size:0.72rem;color:var(--muted);margin-top:0.25rem;">Annual leave in this fortnight. Cover is held back until the roster is published — untick any that are already arranged.</div></div>`;
+      document.getElementById('rb-confirm-msg').innerHTML+=cv;
+    }
   }
   const okBtn=document.getElementById('rb-confirm-ok');
   okBtn.textContent=published?'Unpublish':'Publish';
   okBtn.className=published?'rb-confirm-ok danger':'rb-confirm-ok';
-  _rbConfirmCallback=()=>rbSetPublishedForRole(key,role,!published);
+  _rbConfirmCallback=async()=>{
+    // Read the ticks BEFORE anything re-renders the dialog away.
+    const _boxes=[...document.querySelectorAll('#rb-confirm-msg .rb-held-cover')];
+    const _skip=new Set(_boxes.filter(b=>!b.checked).map(b=>b.dataset.sid));
+    await rbSetPublishedForRole(key,role,!published);
+    if(!published&&rbIsPublishedForRole(key,role)){
+      const n=await rbReleaseHeldCover(key,role,_skip);
+      if(n){ renderRoster(); showToast(`${RB_ROLE_LABELS[role]} roster published · ${n} cover shift${n!==1?'s':''} offered to staff`); }
+    }
+  };
   overlay.classList.add('show');
 }
 
@@ -14050,16 +14153,33 @@ async function rbCopyModalProceed(){
   try{
     await db.bulkInsert('roster_shifts',toInsert);
     _rosterShifts.push(...toInsert);
-    renderRoster();
+    // Copied shifts that land on approved leave arrive AS that leave (see rbAutoApplyLeave).
+    // One undo for the lot: the leave rows go with the shifts they belong to.
+    const leaveIds=[];
+    for(let i=0;i<toInsert.length;i++){
+      const sh=toInsert[i];
+      if(!rbApprovedLeaveOn(sh.employee_id,sh.date)) continue;
+      await rbAutoApplyLeave(sh,{noUndo:true,noRender:true,toast:false,idSuffix:'_'+i});
+      // Read back from the cache, not the return value: a half-finished write (entry saved,
+      // later step failed) returns null but still left a row the undo must remove.
+      const _le=_entries.find(e=>e.leaveType&&String(e.shiftId)===String(sh.id));
+      if(_le) leaveIds.push(_le.id);
+    }
+    renderRoster(); renderTimesheets();
     const copiedIds=toInsert.map(s=>s.id);
     rbPushUndo(`${toInsert.length} shifts copied`,async()=>{
+      for(const id of leaveIds){ await db.delete('entries',id); }
+      _entries=_entries.filter(e=>!leaveIds.includes(e.id));
+      // Cover released for these blocks (the fortnight may have been published since) goes too.
+      for(const id of copiedIds){ await rbRemoveCoverForShift(id); }
       await Promise.all(copiedIds.map(id=>db.delete('roster_shifts',id)));
       _rosterShifts=_rosterShifts.filter(s=>!copiedIds.includes(s.id));
-      renderRoster();
+      renderRoster(); renderTimesheets();
     });
+    const lv=leaveIds.length?` · ${leaveIds.length} on approved leave, added as leave`:'';
     const msg=conflicts.length
-      ?`${toInsert.length} shift${toInsert.length!==1?'s':''} copied, ${conflicts.length} skipped due to duplication\nCtrl+Z to undo`
-      :`${toInsert.length} shift${toInsert.length!==1?'s':''} copied for ${RB_ROLE_LABELS[role]}\nCtrl+Z to undo`;
+      ?`${toInsert.length} shift${toInsert.length!==1?'s':''} copied, ${conflicts.length} skipped due to duplication${lv}\nCtrl+Z to undo`
+      :`${toInsert.length} shift${toInsert.length!==1?'s':''} copied for ${RB_ROLE_LABELS[role]}${lv}\nCtrl+Z to undo`;
     showToast(msg);
   }catch(e){showToast('Copy error: '+e.message.slice(0,80));console.error(e);}
 }
@@ -14348,8 +14468,9 @@ function renderDayTimelineForRole(role){
     const leaveClass=currentLeave?' on-leave '+currentLeave.replace(/_/g,'-'):'';
     const lockedClass=readOnly?' locked':'';
     const coverClass=emp.is_placeholder?' cover-required':'';
-    return`<div class="rb-shift-bar${leaveClass}${lockedClass}${coverClass}${_wfh?' wfh':''}" data-shift-id="${s.id}" style="left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%"${drag} title="${emp.name}: ${lbl}${_wfh?' · '+WFH_LABEL:''}${currentLeave?' ('+formatLeaveType(currentLeave)+')':''}">
-      ${lHandle}${laneBtn}${homeBtn}<span class="rb-shift-label">${_wfh?WFH_ICON:''}${lbl}</span>${rHandle}${leaveBtn}${splitBtn}${delBtn}
+    const _clash=!currentLeave&&!_isSlot&&rbLeaveGapFor(emp.id,selectedDay)?.kind==='rostered';
+    return`<div class="rb-shift-bar${leaveClass}${lockedClass}${coverClass}${_wfh?' wfh':''}${_clash?' leave-clash-bar':''}" data-shift-id="${s.id}" style="left:${lPct.toFixed(2)}%;width:${wPct.toFixed(2)}%"${drag} title="${emp.name}: ${lbl}${_wfh?' · '+WFH_LABEL:''}${currentLeave?' ('+formatLeaveType(currentLeave)+')':''}${_clash?' · LEAVE APPROVED — rostered to work. Set the dropdown to the leave, or change the leave in the Leave Log':''}">
+      ${lHandle}${laneBtn}${homeBtn}${_clash?'<span class="rb-clash-tag">LEAVE APPROVED</span>':''}<span class="rb-shift-label">${_wfh?WFH_ICON:''}${lbl}</span>${rHandle}${leaveBtn}${splitBtn}${delBtn}
     </div>`;
   }
   /* Approved leave this day that the roster does not reflect. Two shapes, two
@@ -14484,22 +14605,19 @@ async function rbAddShift(empId,date,role){
     _rbUndoStack.push(undoEntry);
     try{
       await db.insert('roster_shifts',row);
-      /* A shift landing on approved leave is not an error — annual leave still
-         needs a shift for payroll to pay it, so this is usually exactly the right
-         move, just half-finished. Ask, rather than block or auto-apply: the leave
-         may also have been cancelled, and only the manager knows which. */
-      const gap=rbLeaveGapFor(empId,date);
-      if(gap){
-        document.getElementById('rb-confirm-title').textContent='Approved Leave on This Day';
-        document.getElementById('rb-confirm-msg').innerHTML=
-          `<strong>${escHtml(_emps.find(e=>e.id===empId)?.name||'This person')}</strong> has approved leave on this date:<br>`+
-          `<strong>${escHtml(rbLeaveGapText(gap))}</strong><br><br>`+
-          `The shift has been added. Mark it as leave so payroll pays it?`;
-        const ok=document.getElementById('rb-confirm-ok');
-        ok.textContent='Mark as Leave'; ok.className='rb-confirm-ok';
-        _rbConfirmCallback=()=>rbMarkLeave(empId,date,row.id,gap.req.leaveType);
-        _rbConfirmCancelCallback=null;
-        document.getElementById('rb-confirm-overlay').classList.add('show');
+      /* A shift landing on approved leave starts out AS that leave (Joel, 12 Nov 2026). This
+         used to ask, and a dismissed question left a worked shift on approved leave with only a
+         faint row tint to show for it. If it can't be applied (finalised period, a timesheet
+         entry already there), the rostered-on-leave warning stays loud on the bar. */
+      if(rbApprovedLeaveOn(empId,date)){
+        const applied=await rbAutoApplyLeave(row);
+        if(!applied){
+          const _g=rbLeaveGapFor(empId,date);
+          showToast(_g?.kind==='rostered'
+            ?(_publicHolidays?.has(date)?'Shift added — approved leave on a public holiday: mark it by hand':'Shift added — approved leave today, see the warning on the shift')
+            :'Shift added — leave is already recorded for this day');
+          renderDayTimelineForRole(r);
+        }
       } else showToast('Shift added');
     }catch(e){
       const idx=_rbUndoStack.indexOf(undoEntry); if(idx!==-1) _rbUndoStack.splice(idx,1);
