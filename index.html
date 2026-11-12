@@ -2220,6 +2220,7 @@
   .m2-cal .m2-cal-d.pk.rs, .m2-cal .m2-cal-d.pk.re { background:var(--burgundy); color:#fff; }
   .m2-cal .m2-cal-d.pk.rs { border-radius:8px 0 0 8px; } .m2-cal .m2-cal-d.pk.re { border-radius:0 8px 8px 0; } .m2-cal .m2-cal-d.pk.rs.re { border-radius:8px; }
   .m2-pk-note:empty { display:none; }
+  .m2-pk-note.info { color:#6E5F62; font-weight:600; }
   .m2-pk-note { min-height:20px; font-size:13px; font-weight:700; color:var(--burgundy); line-height:1.4; }
   .m2-pk-sum { font-size:14px; color:#6E5F62; } .m2-pk-sum b { color:var(--charcoal); }
   .m2-cal-d.lv { background:#FBF0CC; }
@@ -20047,7 +20048,7 @@ function m2_pkTap(k){
   const pk=m2_pk; if(!pk||Date.now()<m2_pkNoTap) return;
   const d=m2_pkCache[pk.ms]; if(!d) return;
   const st=m2_pkState(d,k);
-  pk.note='';
+  pk.note=''; pk.noteInfo=false;
   if(st==='past'){ pk.note="Leave can't start in the past — ask your manager to record it."; }
   else if(st==='mine'){ pk.note='You already have leave on this day.'; }
   else if(st==='blocked'){ const id=[...d.annual[k]][0]; pk.note=`${m2_first(m2_emp(id)||{name:'A colleague'})} already has leave on this day, please talk to your manager.`; }
@@ -20058,6 +20059,14 @@ function m2_pkTap(k){
     const bad=m2_pkFirstBad(pk.a,k);
     if(bad){ pk.a=k; pk.b=null; pk.note=bad.mine?'That range crosses leave you already have — starting again from here.':`That range crosses ${bad.name}'s leave — starting again from here.`; }
     else pk.b=k;
+  }
+  /* Option C (Joel 12 Nov): a striped day explains itself when tapped — who asked, that it
+     isn't approved, and that you can still ask. The day is still picked; the note is grey
+     (information), not burgundy like the blocked-day message. */
+  if(!pk.note&&!st&&d.pending[k]){
+    const names=[...d.pending[k]].map(id=>m2_first(m2_emp(id)||{name:'A colleague'}));
+    const who=names.length>2?`${names.slice(0,-1).join(', ')} and ${names[names.length-1]}`:names.join(' and ');
+    pk.note=`${who} ${names.length>1?'have':'has'} asked for leave on this day — not yet approved. You can still request it.`; pk.noteInfo=true;
   }
   const grid=m2_el('m2-pk-grid'); if(grid) grid.innerHTML=m2_pkGrid(d);
   m2_pkFoot();
@@ -20073,7 +20082,7 @@ function m2_pkFirstBad(a,b){
 }
 function m2_pkFoot(){
   const pk=m2_pk, sum=m2_el('m2-pk-sum'), done=m2_el('m2-pk-done'), note=m2_el('m2-pk-note'); if(!sum) return;
-  note.textContent=pk.note||'';
+  note.textContent=pk.note||''; note.classList.toggle('info',!!pk.noteInfo);
   if(!pk.a){ sum.textContent='Tap your first day of leave'; done.disabled=true; return; }
   const b=pk.b||pk.a;
   sum.innerHTML=pk.b?`<b>${m2_esc(m2_pkRangeLabel(pk.a,b))}</b>`:`<b>${m2_esc(m2_pkRangeLabel(pk.a,pk.a))}</b> · tap your last day, or Done for one day`;
