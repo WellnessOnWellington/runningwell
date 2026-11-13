@@ -18656,12 +18656,10 @@ window.addEventListener('load', ()=>{
 const M2_DOOR_KEY='rw_m2_door', M2_WHO_KEY='rw_m2_who', M2_LIVE_KEY='rw_m2_live', M2_FIXED_KEY='rw_m2_fixed';
 /* Fixed-height shift panels (Joel 9 Nov, on trial): ON unless switched off in Preview options.
    Remove the toggle once Joel picks; the pinned footers work either way. */
-/* Panel height for the shift flow, on trial (Joel 12 Nov — choosing on his phone):
-   'grow'  = standard height as a MINIMUM, growing to fit before ever scrolling (default),
-   'fixed' = always the standard height (slightly-too-long content scrolls),
-   'auto'  = every panel sized to its content. */
-const M2_PANEL_KEY='rw_m2_panel';
-function m2_panelMode(){ const v=m2_load(M2_PANEL_KEY); if(v==='grow'||v==='fixed'||v==='auto') return v; return m2_load(M2_FIXED_KEY)===false?'auto':'grow'; }
+/* Panel height for the shift flow: 'grow' = standard height as a MINIMUM, growing to fit before
+   ever scrolling. Trialled 12 Nov against 'fixed' and 'auto' (content-sized); Joel chose Grow on
+   13 Nov and the toggle was removed. The other branches below are now unreachable but harmless. */
+function m2_panelMode(){ return 'grow'; }   // Joel settled on Grow (13 Nov 2026); the Preview options control is gone
 function m2_fixedOn(){ return m2_panelMode()!=='auto'; }
 const M2_LAST_KEY='rw_m2_last', M2_SEEN_KEY='rw_m2_seen_open', M2_HIDDEN_KEY='rw_m2_hidden';
 const M2_DOOR_DAYS=7, M2_WHO_DAYS=30, M2_DOOR_MAX_FAILS=5, M2_DOOR_LOCK_MS=60000;
@@ -20853,8 +20851,6 @@ function m2_previewOptions(){
   return `<section><h2 class="m2-h2">Preview options</h2><div class="m2-box" style="gap:0;padding:0 14px">
     <label class="m2-row" style="cursor:pointer"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Live actions</span><span style="font-size:13px;color:#6E5F62">${live?'On — actions save for real':'Off — actions show what would be saved'}</span></span>
       <input type="checkbox" ${live?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_LIVE_KEY,this.checked);m2_markLive();m2_sheetRender(false)"></label>
-    <div class="m2-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:10px 0"><span style="display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Panel height</span><span style="font-size:13px;color:#6E5F62">${({grow:'Standard height, grows to fit before scrolling',fixed:'Always the standard height — long content scrolls',auto:'Each panel fits its content'})[m2_panelMode()]}</span></span>
-      <div class="m2-seg" role="tablist" aria-label="Panel height">${[['grow','Grow'],['fixed','Fixed'],['auto','Fit']].map(([v,l])=>`<button role="tab" aria-selected="${m2_panelMode()===v}" onclick="m2_store(M2_PANEL_KEY,'${v}');m2_sheetRender(false)">${l}</button>`).join('')}</div></div>
     <button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;cursor:pointer;padding:0" onclick="m2_exit()">Exit preview to the kiosk</button>
     <button class="m2-row" style="width:100%;border:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;color:var(--burgundy);cursor:pointer;padding:0" onclick="m2_lockDevice()">Lock the preview on this device</button>
   </div></section>`;
@@ -20867,7 +20863,6 @@ function m2_openAccount(goTo){
       <div style="display:flex;flex-direction:column"><span style="font-family:'Lora',serif;font-size:19px;font-weight:600;color:var(--charcoal)">${m2_esc(me.name)}</span><span style="font-size:14px;color:#6E5F62">${m2_esc(m2_groupLabel(m2_groupOf(me)).replace(/s$/,''))} · signed in on this device</span></div></div>
     <div class="m2-box" style="gap:0;padding:0 14px">
       ${row('Timesheets','Your two most recent pay periods',()=>m2_openTimesheets())}
-      ${row('Switch to roster view','',()=>{ m2_store(M2_LAST_MODE_KEY,'roster'); m2_store(M2_WHO_KEY,{kind:'team',until:Date.now()+M2_WHO_DAYS*86400000}); m2_who={kind:'team'}; m2_sheetClose(); m2_enterShell(true); })}
       ${row('Sign out','',()=>m2_signOut(false))}
       ${row('Forget me on this device','',()=>m2_openForget(),'var(--burgundy)')}
     </div>
