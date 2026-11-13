@@ -18856,7 +18856,7 @@ async function m2_loadBase(){
 
 /* ── signing in: two ways in (Joel, 7 Nov) ────────────────────────────
    "Sign in as me" (name + personal PIN, same check and lockout as the Staff Portal) or
-   "Just checking the roster" (the shared roster PIN). Remembered on the device for 30 days;
+   "Who’s On only" (the shared roster PIN). Remembered on the device for 30 days;
    Sign out / Forget me in the avatar panel. */
 async function m2_showApp(){
   m2_el('m2-door').hidden=true; m2_el('m2-app').hidden=false;
@@ -18874,7 +18874,9 @@ function m2_showStart(){
   m2_who=null; m2_el('m2-shell').hidden=true;
   const st=m2_el('m2-start'); st.hidden=false;
   let last=null; try{ last=localStorage.getItem('rw_last_staff_id'); }catch(e){}
-  // Preselect whatever this device used last: the roster-only choice, or the last person.
+  // Preselect whatever this device used last: Who's On only, or the last person. With nothing
+  // remembered (or a person who has since left) it falls to the first option, Who's On only —
+  // there is no empty "choose your name" choice any more (Joel, 13 Nov 2026).
   const pre=m2_load(M2_LAST_MODE_KEY)==='roster'?M2_ROSTER_ONLY:last;
   const people=m2_emps.filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
   st.innerHTML=`
@@ -18887,8 +18889,8 @@ function m2_showStart(){
     </div>
     <h1 class="m2-q">Who's using this device?</h1>
     <div class="m2-card" style="display:flex;flex-direction:column;gap:12px">
-      <label class="m2-label">Name
-        <select class="m2-select" id="m2-si-name" onchange="m2_signInMode()"><option value="">Choose your name</option><option value="${M2_ROSTER_ONLY}"${pre===M2_ROSTER_ONLY?' selected':''}>Just checking the roster</option><optgroup label="Staff">${people.map(e=>`<option value="${m2_esc(e.id)}"${e.id===pre?' selected':''}>${m2_esc(e.name)}</option>`).join('')}</optgroup></select></label>
+      <label class="m2-label">Sign in as
+        <select class="m2-select" id="m2-si-name" onchange="m2_signInMode()"><option value="${M2_ROSTER_ONLY}"${pre===M2_ROSTER_ONLY?' selected':''}>Who’s On only</option><optgroup label="Staff">${people.map(e=>`<option value="${m2_esc(e.id)}"${e.id===pre?' selected':''}>${m2_esc(e.name)}</option>`).join('')}</optgroup></select></label>
       <div class="m2-sub" id="m2-si-desc" style="margin-top:-4px"></div>
       <div class="m2-label"><span id="m2-si-pinlabel">Your PIN</span>
         <div id="m2-si-pinbox"></div></div>
@@ -18947,7 +18949,7 @@ function m2_signInPerson(){
   // the "Incorrect PIN — N attempts remaining" message rather than replacing it.
   if(!pin&&err.textContent){ try{ pinEl.focus(); }catch(e){} return; }
   err.textContent='';
-  if(!id){ err.textContent='Choose your name (or \u201cJust checking the roster\u201d), then tap Sign in.'; return; }
+  if(!id){ err.textContent='Choose your name, then tap Sign in.'; return; }   // unreachable now; kept as a guard
   if(!pin){ err.textContent='Please enter your PIN.'; return; }
   const emp=m2_emp(id);
   if(!emp){ err.textContent='Staff member not found.'; return; }
@@ -20860,7 +20862,7 @@ function m2_openAccount(goTo){
       <div style="display:flex;flex-direction:column"><span style="font-family:'Lora',serif;font-size:19px;font-weight:600;color:var(--charcoal)">${m2_esc(me.name)}</span><span style="font-size:14px;color:#6E5F62">${m2_esc(m2_groupLabel(m2_groupOf(me)).replace(/s$/,''))} · signed in on this device</span></div></div>
     <div class="m2-box" style="gap:0;padding:0 14px">
       ${row('Timesheets','Your two most recent pay periods',()=>m2_openTimesheets())}
-      ${row('Switch to roster view','',()=>{ m2_store(M2_WHO_KEY,{kind:'team',until:Date.now()+M2_WHO_DAYS*86400000}); m2_who={kind:'team'}; m2_sheetClose(); m2_enterShell(true); })}
+      ${row('Switch to roster view','',()=>{ m2_store(M2_LAST_MODE_KEY,'roster'); m2_store(M2_WHO_KEY,{kind:'team',until:Date.now()+M2_WHO_DAYS*86400000}); m2_who={kind:'team'}; m2_sheetClose(); m2_enterShell(true); })}
       ${row('Sign out','',()=>m2_signOut(false))}
       ${row('Forget me on this device','',()=>m2_openForget(),'var(--burgundy)')}
     </div>
