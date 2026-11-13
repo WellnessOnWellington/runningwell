@@ -19166,7 +19166,7 @@ function m2_updateTarget(i,d){
 /* A flagged timesheet entry's details: what is known about it, and what to do. */
 function m2_openFlagged(n){
   const rows=[['Date',n.date?m2_long(n.date):''],['Time',n.time||''],['Your reason',n.reason||'']].filter(([,v])=>v);
-  m2_sheetOpen({title:'Needs a look',render:()=>`
+  m2_sheetOpen({title:'Needs a look',fixed:true,render:()=>`
     <div class="m2-warn">${M2_ICON.warn}<span>${m2_esc(staffNoteMessage(n))}</span></div>
     ${rows.length?`<div class="m2-box" style="gap:0;padding:4px 14px">${rows.map(([k,v])=>`<div class="m2-row"><span style="width:96px;font-size:13px;font-weight:800;color:#6E5F62">${m2_esc(k)}</span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(v)}</span></div>`).join('')}</div>`:''}
     <div class="m2-note">Your manager has flagged this to talk through with you. Nothing changes on your timesheet until they resolve it. Remove it from your list with the × once you've seen it.</div>`});
@@ -20144,9 +20144,13 @@ function m2_sheetRender(animate,dir){
   const oldPane=slide?body.firstElementChild:null, oldTop=slide?oldPane.offsetTop-body.scrollTop:0;
   wrap.hidden=false;
   sheet.classList.remove('full'); sheet.style.transform='';
-  sheet.classList.toggle('fixed',m2_fixedOn()&&!!m2_sheet[0].fixed);
-  sheet.classList.toggle('grow',m2_panelMode()==='grow'&&!!m2_sheet[0].fixed);
-  sheet.style.minHeight=(m2_panelMode()==='grow'&&m2_sheet[0].floorPx)?m2_sheet[0].floorPx+'px':'';
+  /* `small` steps (destructive confirmations: Withdraw, Forget me) always shrink to their
+     content, whatever panel they open from — the sudden small panel is part of the warning
+     (Joel, 13 Nov 2026). Every other step takes its panel's height rule. */
+  const _small=!!step.small;
+  sheet.classList.toggle('fixed',!_small&&m2_fixedOn()&&!!m2_sheet[0].fixed);
+  sheet.classList.toggle('grow',!_small&&m2_panelMode()==='grow'&&!!m2_sheet[0].fixed);
+  sheet.style.minHeight=(!_small&&m2_panelMode()==='grow'&&m2_sheet[0].floorPx)?m2_sheet[0].floorPx+'px':'';
   m2_el('m2-sheet-title').textContent=step.title||'';
   const nav=m2_el('m2-sheet-nav'), first=m2_sheet.length===1;
   nav.innerHTML=first?M2_ICON.down:M2_ICON.back; nav.setAttribute('aria-label',first?'Close':'Back');
@@ -20739,7 +20743,7 @@ async function m2_clashes(me,date,start,end,ignoreShiftId){
 }
 function m2_openPickup(s){
   const me=m2_me(), ph=m2_emp(s.employee_id), group=m2_groupOf(ph);
-  m2_sheetOpen({title:'',render:()=>`
+  m2_sheetOpen({title:'',fixed:true,render:()=>`
     ${m2_sheetHeader('Open shift','#8A4310',m2_long(s.date),m2_range(s.start_time,s.end_time),m2_groupLabel(group).replace(/s$/,'')+' · cover shift')}
     <section><h2 class="m2-h2">${m2_esc(m2_groupLabel(group))} on that day</h2><div id="m2-pu-day"><div class="m2-note">Loading…</div></div></section>
     <div id="m2-pu-act"><div class="m2-note">Checking…</div></div>`,
@@ -20808,7 +20812,7 @@ async function m2_openRequest(r){
     :canWithdraw?`<div class="m2-foot"><button class="m2-btn ghost" onclick="${m2_on(()=>m2_openWithdraw(r))}">Withdraw request</button></div>`:'';
   if(r.type==='leave'){
     const rows=[['Leave',formatLeaveType(r.leaveType)],['When',m2_requestWhen(r)]];
-    m2_sheetOpen({title:m2_requestTitle(r),render:()=>`<div class="m2-box" style="gap:0;padding:4px 14px">${rows.map(([k,v])=>`<div class="m2-row"><span style="width:84px;font-size:13px;font-weight:800;color:#6E5F62">${m2_esc(k)}</span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(v)}</span></div>`).join('')}</div>${progress}${reason}${foot}`});
+    m2_sheetOpen({title:m2_requestTitle(r),fixed:true,render:()=>`<div class="m2-box" style="gap:0;padding:4px 14px">${rows.map(([k,v])=>`<div class="m2-row"><span style="width:84px;font-size:13px;font-weight:800;color:#6E5F62">${m2_esc(k)}</span><span style="flex:1;font-size:15px;font-weight:700;color:var(--charcoal)">${m2_esc(v)}</span></div>`).join('')}</div>${progress}${reason}${foot}`});
     return;
   }
   /* Which shift I give and which I take, from my side of the request. */
@@ -20839,7 +20843,7 @@ async function m2_openRequest(r){
 }
 function m2_openWithdraw(r){
   const me=m2_me(), real=r.colleagueId&&m2_emps.some(e=>e.id===r.colleagueId&&!e.is_placeholder)&&r.status==='pending_peer';
-  m2_sheetPush({title:'Withdraw this request?',render:()=>`
+  m2_sheetPush({title:'Withdraw this request?',small:true,render:()=>`
     <div class="m2-note" style="font-size:14px">${m2_esc(m2_requestTitle(r))} · ${m2_esc(m2_requestWhen(r))}. It will be cancelled${real?` and ${m2_esc(String(r.colleagueName).split(' ')[0])} will be told`:''}. Nothing on the roster changes.</div>
     <button class="m2-btn" id="m2-wd-send">Withdraw</button>`,
     after:()=>{ m2_el('m2-wd-send').onclick=()=>m2_commit(reqBuildWithdraw(r,me)); }});
@@ -20858,7 +20862,7 @@ function m2_previewOptions(){
 function m2_openAccount(goTo){
   const me=m2_me(); if(!me) return;
   const row=(label,sub,fn,colour)=>`<button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;cursor:pointer;padding:0;min-height:54px" onclick="${m2_on(fn)}"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:16px;font-weight:${sub?800:700};color:${colour||'var(--charcoal)'}">${m2_esc(label)}</span>${sub?`<span style="font-size:13px;color:#6E5F62">${m2_esc(sub)}</span>`:''}</span>${sub?M2_ICON.chev:''}</button>`;
-  m2_sheetOpen({title:'',render:()=>`
+  m2_sheetOpen({title:'',fixed:true,render:()=>`
     <div style="display:flex;align-items:center;gap:12px;padding-top:4px"><span style="width:48px;height:48px;flex-shrink:0;border-radius:24px;background:var(--blush);color:var(--burgundy);font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center">${m2_esc(m2_initials(me))}</span>
       <div style="display:flex;flex-direction:column"><span style="font-family:'Lora',serif;font-size:19px;font-weight:600;color:var(--charcoal)">${m2_esc(me.name)}</span><span style="font-size:14px;color:#6E5F62">${m2_esc(m2_groupLabel(m2_groupOf(me)).replace(/s$/,''))} · signed in on this device</span></div></div>
     <div class="m2-box" style="gap:0;padding:0 14px">
@@ -20872,7 +20876,7 @@ function m2_openAccount(goTo){
 }
 function m2_openForget(){
   const me=m2_me();
-  m2_sheetPush({title:`Forget ${m2_first(me)} on this device?`,render:()=>`
+  m2_sheetPush({title:`Forget ${m2_first(me)} on this device?`,small:true,render:()=>`
     <div class="m2-note" style="font-size:14px">You'll be signed out, and next time you'll choose your name again. Your shifts and requests are not affected.</div>
     <button class="m2-btn" onclick="m2_signOut(true)">Forget me</button>`});
 }
