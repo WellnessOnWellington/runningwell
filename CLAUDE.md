@@ -238,6 +238,8 @@ else pushes normally.
 
 ## Conventions
 
+- **Version bump = these places, together:** `APP_VERSION` and `APP_VERSION_DATE` (index.html ~5279 — they feed the Settings › About line, the kiosk credit, the phone app's sign-in footer and its account panel); a new release-history entry at the top of `.about-history`; the static fallback text in `#about-version`; and `sw.js` `CACHE_VER`. Change the date to the month of release even when the version label stays the same.
+
 - Match the surrounding code: it is dense, comment-heavy where something is
   non-obvious, and uses no semicolon-free or modern-syntax flourishes.
 - All DB access goes through the single `db` object (~line 3229). **Keep it that

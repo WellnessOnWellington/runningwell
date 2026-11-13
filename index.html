@@ -2009,6 +2009,10 @@
   .m2-empty { text-align:center; padding:1.5rem 1rem; color:#6E5F62; font-size:0.92rem; }
 
   /* start screen */
+  /* Version (left) and credit (right) pinned to the foot of the sign-in screen. Both read
+     APP_VERSION / APP_VERSION_DATE, the same constants as the About line and the kiosk
+     credit, so a version bump updates all of them at once. */
+  .m2-start-foot { margin-top:auto; display:flex; justify-content:space-between; gap:12px; padding-top:16px; font-size:11px; font-weight:600; color:#8F8285; }
   .m2-start { flex:1; overflow-y:auto; padding:calc(2rem + env(safe-area-inset-top)) 1.1rem calc(1.5rem + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:18px; }
   .m2-brand { display:flex; flex-direction:column; align-items:center; gap:10px; }
   .m2-brand img { height:56px; width:auto; display:block; }
@@ -18856,7 +18860,7 @@ async function m2_loadBase(){
 
 /* ── signing in: two ways in (Joel, 7 Nov) ────────────────────────────
    "Sign in as me" (name + personal PIN, same check and lockout as the Staff Portal) or
-   "Who’s On only" (the shared roster PIN). Remembered on the device for 30 days;
+   "Roster only" (the shared roster PIN). Remembered on the device for 30 days;
    Sign out / Forget me in the avatar panel. */
 async function m2_showApp(){
   m2_el('m2-door').hidden=true; m2_el('m2-app').hidden=false;
@@ -18874,8 +18878,8 @@ function m2_showStart(){
   m2_who=null; m2_el('m2-shell').hidden=true;
   const st=m2_el('m2-start'); st.hidden=false;
   let last=null; try{ last=localStorage.getItem('rw_last_staff_id'); }catch(e){}
-  // Preselect whatever this device used last: Who's On only, or the last person. With nothing
-  // remembered (or a person who has since left) it falls to the first option, Who's On only —
+  // Preselect whatever this device used last: Roster only, or the last person. With nothing
+  // remembered (or a person who has since left) it falls to the first option, Roster only —
   // there is no empty "choose your name" choice any more (Joel, 13 Nov 2026).
   const pre=m2_load(M2_LAST_MODE_KEY)==='roster'?M2_ROSTER_ONLY:last;
   const people=m2_emps.filter(e=>!e.is_placeholder).sort((a,b)=>a.name.localeCompare(b.name));
@@ -18890,13 +18894,14 @@ function m2_showStart(){
     <h1 class="m2-q">Who's using this device?</h1>
     <div class="m2-card" style="display:flex;flex-direction:column;gap:12px">
       <label class="m2-label">Sign in as
-        <select class="m2-select" id="m2-si-name" onchange="m2_signInMode()"><option value="${M2_ROSTER_ONLY}"${pre===M2_ROSTER_ONLY?' selected':''}>Who’s On only</option><optgroup label="Staff">${people.map(e=>`<option value="${m2_esc(e.id)}"${e.id===pre?' selected':''}>${m2_esc(e.name)}</option>`).join('')}</optgroup></select></label>
+        <select class="m2-select" id="m2-si-name" onchange="m2_signInMode()"><option value="${M2_ROSTER_ONLY}"${pre===M2_ROSTER_ONLY?' selected':''}>Roster only</option><optgroup label="Staff">${people.map(e=>`<option value="${m2_esc(e.id)}"${e.id===pre?' selected':''}>${m2_esc(e.name)}</option>`).join('')}</optgroup></select></label>
       <div class="m2-sub" id="m2-si-desc" style="margin-top:-4px"></div>
       <div class="m2-label"><span id="m2-si-pinlabel">Your PIN</span>
         <div id="m2-si-pinbox"></div></div>
       <div class="m2-err" id="m2-si-err" role="alert"></div>
       <button class="m2-btn" id="m2-si-btn" onclick="m2_signIn()">Sign in</button>
-    </div>`;
+    </div>
+    <div class="m2-start-foot"><span>Version ${m2_esc(APP_VERSION)} · ${m2_esc(APP_VERSION_DATE)}</span><span>Built by Dr Joel Jaya</span></div>`;
   m2_signInMode();
 }
 /* PIN entry as boxes that sign in on the last digit (Joel, 12 Nov 2026 — like the desktop Who's On
