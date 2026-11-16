@@ -2045,9 +2045,6 @@
   .m2-bar.who .m2-title { flex:1 1 auto; min-width:0; }
   #m2-bar-mid { display:flex; align-items:center; gap:4px; flex-shrink:0; }
   #m2-bar-mid:empty { display:none; }
-  /* Who's On hides the Preview pill (Joel 8 Nov: dot removed for room). Every other tab still
-     shows it. ⚠ LAUNCH STEP: live actions are OFF by default (dry run) — switch them on. */
-  .m2-bar.who .m2-pill { display:none; }
   .m2-month.fn { font-size:16px; letter-spacing:-0.01em; }
   .m2-bar.who .m2-signin-btn { white-space:nowrap; flex-shrink:0; padding:0 10px; font-size:13px; min-height:36px; }
   /* Today button (Joel 8 Nov, replaces the "Back to today" text link that appeared and
@@ -2659,21 +2656,10 @@
   </div>
 </div>
 
-<!-- PHONE APP PREVIEW (m2) — the staff phone app being rebuilt. Reached only at #m2 (or five
-     quick taps on the clock, touch screens only) with a partner's PIN, until the viewport gate
-     replaces this door (Runningwell-Vault/phone_ui_plan.md step 9). One root node, so that
-     gate is a one-line change. Behaviour: the m2 script block. Pages are drawn by JS. -->
+<!-- PHONE APP (m2) — the staff phone app, LIVE since v4.0 (16 Nov 2026). Phones open it
+     automatically (m2_phoneGate); any device can reach it at #m2. One root node; behaviour is
+     in the m2 script block and pages are drawn by JS. -->
 <div class="view m2-root" id="view-m2">
-  <div class="m2-door" id="m2-door" hidden>
-    <div class="m2-card">
-      <div class="m2-door-title">Phone app preview</div>
-      <div class="m2-sub" style="margin-bottom:1.1rem;">The new staff phone app, still being built. Partners only &mdash; staff can&rsquo;t see it yet.</div>
-      <input class="m2-input m2-pin" id="m2-door-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Partner PIN" aria-label="Partner PIN" onkeydown="if(event.key==='Enter')m2_doorSubmit()">
-      <div class="m2-err" id="m2-door-err" role="alert" style="margin:0.5rem 0 0.3rem;"></div>
-      <button class="m2-btn" id="m2-door-btn" onclick="m2_doorSubmit()">Open preview</button>
-    </div>
-    <div style="text-align:center;"><button class="m2-link" onclick="m2_exit()">Back to the kiosk</button></div>
-  </div>
 
   <div class="m2-app" id="m2-app" hidden>
     <div class="m2-start" id="m2-start" hidden></div>
@@ -2681,7 +2667,6 @@
       <header class="m2-bar">
         <h1 class="m2-title" id="m2-title">My Shifts</h1>
         <span id="m2-bar-mid"></span>
-        <span class="m2-pill" id="m2-preview-pill">Preview</span>
         <span id="m2-bar-right"></span>
       </header>
       <div class="m2-subbar" id="m2-subbar" hidden></div>
@@ -3718,7 +3703,7 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.10 &middot; November 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 4.0 &middot; November 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
@@ -3726,6 +3711,13 @@
                  rule, never by hand: fading per row was forgotten at every bump from v2.2 to v3.3,
                  which left eleven old releases looking current. -->
             <div class="about-history" style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v4.0</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">November 2026 &mdash; The phone app</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Running Well now has a phone app for staff.</strong> Opening the site on a phone goes straight to it; desktops and the clinic kiosk are unchanged. Sign in once with your usual PIN (remembered for 30 days), or choose <em>Roster only</em> with the shared roster PIN. Four tabs: <em>My Shifts</em> (your next shift, what&rsquo;s coming up and what&rsquo;s changed), <em>Swaps</em> (swap or give away a shift, pick up cover, answer a colleague, withdraw a request), <em>Leave</em> (request leave and see the team calendar) and <em>Who&rsquo;s On</em> (by day or by person). Everything you do saves straight away and reaches managers exactly as it does from the Staff Portal. Your timesheet PDFs are in the panel behind your initials. Managers can still reach the full site from the <em>Manager login</em> link.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.10</div>
                 <div>
@@ -5287,7 +5279,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.10';
+const APP_VERSION='4.0';
 const APP_VERSION_DATE='November 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
@@ -5500,10 +5492,19 @@ let _rwPageHash=null;
 });
 
 // Simple hash of page content to detect new deploys
+let _rwLastVersionCheck=0;
 async function rwCheckVersion(){
   if(location.protocol==='file:') return;
+  /* On the phone app every check downloads the whole page (~1.4 MB) over the staff member's
+     mobile data: check at most every 10 minutes there, and never while the app is in the
+     background. The kiosk and desktops keep the 60-second check. */
+  if(document.documentElement.classList.contains('m2-on')){
+    if(document.hidden||Date.now()-_rwLastVersionCheck<10*60*1000) return;
+  }
+  _rwLastVersionCheck=Date.now();
   try{
-    const r=await fetch(location.href+'?_v='+Date.now(),{cache:'no-store'});
+    // origin+path, not location.href: with #m2 in the address the ?_v= landed inside the fragment.
+    const r=await fetch(location.origin+location.pathname+'?_v='+Date.now(),{cache:'no-store'});
     if(!r.ok) return;
     const text=await r.text();
     const hash=text.length+'_'+[...text.slice(0,800)].reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0);
@@ -5556,6 +5557,8 @@ function rwDbGuard(){
 
 // Every 15s: reload if new version detected AND page has been idle 2+ min
 setInterval(()=>{
+  // Never while a phone-app panel is open — a half-filled request would be lost (Opus, v4.0).
+  if(typeof m2_sheet!=='undefined'&&m2_sheet.length) return;
   if(_rwVersionChanged&&Date.now()-_rwLastActivity>2*60*1000){
     localStorage.setItem(RW_STATE_KEY,'whosOn');
     location.reload();
@@ -5577,7 +5580,9 @@ rwUpdateDbStatus();
   if(saved==='whosOn'){
     localStorage.removeItem(RW_STATE_KEY);
     // Defer until app is fully initialised
-    setTimeout(()=>{ if(typeof showStaffRoster==='function') showStaffRoster(); },500);
+    // Not over the phone app (#m2): it would draw the desktop roster on top of it, with the
+    // phone's scroll lock still on (Opus review, v4.0).
+    setTimeout(()=>{ if(location.hash==='#m2') return; if(typeof showStaffRoster==='function') showStaffRoster(); },500);
   }
 })();
 
@@ -18621,6 +18626,9 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 window.addEventListener('load', ()=>{
+  // The phone app loads its own (filtered) data; this whole-table preload is for the kiosk
+  // front page on a narrow screen only. The phone gate has set #m2 by now.
+  if(location.hash==='#m2') return;
   if(window.matchMedia('(max-width:960px)').matches){
     Promise.all([db.get('employees'),db.get('entries'),db.get('roster_shifts')]).then(([emps,entries,shifts])=>{
       _emps=emps.filter(e=>e.active!==false);
@@ -18684,12 +18692,9 @@ window.addEventListener('load', ()=>{
      `employees` and `timesheet_finalizations`, which are a few dozen rows.
 
    Writes go through the shared request builders in the main script (reqBuild*), so the rows
-   are identical to the Staff Portal's. With "Live actions" off (the default) an action shows
-   what WOULD be written and saves nothing.
+   are identical to the Staff Portal's, and since v4.0 every action saves for real.
 ═══════════════════════════════════════════ */
 const M2_DOOR_KEY='rw_m2_door', M2_WHO_KEY='rw_m2_who', M2_LIVE_KEY='rw_m2_live', M2_FIXED_KEY='rw_m2_fixed';
-/* Fixed-height shift panels (Joel 9 Nov, on trial): ON unless switched off in Preview options.
-   Remove the toggle once Joel picks; the pinned footers work either way. */
 /* Panel height for the shift flow: 'grow' = standard height as a MINIMUM, growing to fit before
    ever scrolling. Trialled 12 Nov against 'fixed' and 'auto' (content-sized); Joel chose Grow on
    13 Nov and the toggle was removed. The other branches below are now unreachable but harmless. */
@@ -18744,13 +18749,10 @@ function m2_groupColour(g){ return (M2_GROUPS.find(x=>x[0]===g)||[0,0,'#8B2535']
 function m2_groupLabel(g){ return (M2_GROUPS.find(x=>x[0]===g)||[0,g])[1]; }
 function m2_store(k,v){ try{ v==null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 function m2_load(k){ try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ return null; } }
-function m2_live(){ return m2_load(M2_LIVE_KEY)===true; }
-function m2_markLive(){
-  const p=m2_el('m2-preview-pill'); if(!p) return;
-  const live=m2_live();
-  p.classList.toggle('live',live); p.textContent=live?'Preview · Live':'Preview';
-  p.title=live?'Live actions on — actions save for real':'Dry run — actions show what would be saved';
-}
+// Launched (v4.0, Joel 16 Nov 2026): every action saves for real. The preview's dry-run path,
+// its "Live actions" switch and the Preview badge are gone.
+function m2_live(){ return true; }
+function m2_markLive(){}
 function m2_toast(msg){
   const t=m2_el('m2-toast'); if(!t) return;
   t.textContent=msg; t.hidden=false; clearTimeout(m2_toast._t);
@@ -18817,46 +18819,17 @@ function m2_route(){
 async function m2_open(){
   showView('m2');
   m2_bindListeners();
-  if(await m2_doorStillOpen()) m2_showApp(); else m2_showDoor();
+  m2_showApp();   // launched: no partner door (v4.0)
 }
-async function m2_doorStillOpen(){
-  const rec=m2_load(M2_DOOR_KEY);
-  if(!rec||!rec.mid||!(rec.until>Date.now())) return false;
-  try{ return (await db.get('managers')).map(normaliseMgr).some(m=>m.id===rec.mid&&m.active&&m.role==='partner'); }
-  catch(e){ return false; }
-}
-function m2_showDoor(){
-  m2_el('m2-app').hidden=true; m2_el('m2-door').hidden=false;
-  m2_el('m2-door-err').textContent='';
-  const inp=m2_el('m2-door-pin'); inp.value=''; setTimeout(()=>inp.focus(),80);
-}
-async function m2_doorSubmit(){
-  const inp=m2_el('m2-door-pin'), err=m2_el('m2-door-err'), btn=m2_el('m2-door-btn');
-  if(Date.now()<m2_doorLockedUntil){ err.textContent='Too many tries — please wait a minute.'; return; }
-  const pin=inp.value.trim(); inp.value='';
-  if(!pin){ err.textContent='Enter a partner PIN.'; return; }
-  btn.disabled=true; err.textContent='';
-  let mgrs=null; try{ mgrs=(await db.get('managers')).map(normaliseMgr); }catch(e){}
-  btn.disabled=false;
-  if(!mgrs){ err.textContent="Couldn't reach the database — check your connection."; return; }
-  const mgr=mgrs.find(m=>m.active&&m.role==='partner'&&m.pinHash===hashPIN(pin));
-  if(!mgr){
-    m2_doorFails++;
-    if(m2_doorFails>=M2_DOOR_MAX_FAILS){ m2_doorFails=0; m2_doorLockedUntil=Date.now()+M2_DOOR_LOCK_MS; err.textContent='Too many tries — please wait a minute.'; }
-    else err.textContent="That PIN doesn't open the preview.";
-    inp.focus(); return;
-  }
-  m2_doorFails=0;
-  m2_store(M2_DOOR_KEY,{mid:mgr.id,until:Date.now()+M2_DOOR_DAYS*86400000});
-  m2_showApp();
-}
-function m2_lockDevice(){ m2_store(M2_DOOR_KEY,null); m2_sheetHide(); m2_showDoor(); }
 /* Leaves by dropping #m2 without adding a history entry. An open sheet's history steps are
    unwound first, so Back afterwards can't land on an old #m2 entry and reopen the preview. */
-function m2_exit(){
+// `view`: where to land (Manager login passes 'login'). Shown INSIDE leave(), which runs 80ms
+// late on Android after unwinding history — a showView after m2_exit() would be overwritten.
+function m2_exit(view){
+  try{ sessionStorage.setItem(M2_FULL_SITE_KEY,'1'); }catch(e){}
   const n=M2_USE_HISTORY?m2_sheet.length+(m2_guard?1:0):0;
   m2_guard=false;
-  const leave=()=>{ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} document.documentElement.classList.remove('m2-on'); showView('kiosk'); };
+  const leave=()=>{ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} document.documentElement.classList.remove('m2-on'); showView(view||'kiosk'); };
   m2_sheetHide();
   if(n){ m2_suppressPop++; try{ history.go(-n); }catch(e){ m2_suppressPop--; } setTimeout(leave,80); }
   else leave();
@@ -18895,7 +18868,7 @@ async function m2_loadBase(){
    "Roster only" (the shared roster PIN). Remembered on the device for 30 days;
    Sign out / Forget me in the avatar panel. */
 async function m2_showApp(){
-  m2_el('m2-door').hidden=true; m2_el('m2-app').hidden=false;
+  m2_el('m2-app').hidden=false;
   m2_pushGuard();
   try{ await m2_loadBase(); }catch(e){ m2_el('m2-start').hidden=false; m2_el('m2-shell').hidden=true; m2_el('m2-start').innerHTML=`<div class="m2-empty">Couldn't reach the database — check your connection.<br><br><button class="m2-btn plain" onclick="m2_showApp()">Try again</button></div>`; return; }
   const rec=m2_load(M2_WHO_KEY);
@@ -18933,6 +18906,7 @@ function m2_showStart(){
       <div class="m2-err" id="m2-si-err" role="alert"></div>
       <button class="m2-btn" id="m2-si-btn" onclick="m2_signIn()">Sign in</button>
     </div>
+    <div style="text-align:center"><button class="m2-link" onclick="m2_exit('login')">Manager login</button></div>
     <div class="m2-start-foot"><span>Version ${m2_esc(APP_VERSION)} · ${m2_esc(APP_VERSION_DATE)}</span><span>Built by Dr Joel Jaya</span></div>`;
   m2_signInMode();
 }
@@ -19223,7 +19197,7 @@ function m2_bannerItems(d){
   });
   return items.filter(i=>!hidden.has(i.id));
 }
-/* Acknowledging is a write. With Live actions off it only hides the item on this device. */
+/* Acknowledging is a write: hidden on this device straight away, then saved. */
 async function m2_ack(items){
   const hidden=new Set(m2_load(M2_HIDDEN_KEY)||[]);
   items.forEach(i=>hidden.add(i.id));
@@ -20307,15 +20281,9 @@ function m2_sheetHeader(eyebrow,colour,title,big,sub){
     ${big?`<span class="m2-bigtime">${m2_esc(big)}</span>`:''}${sub?`<span style="font-size:14px;color:#6E5F62">${m2_esc(sub)}</span>`:''}</div>`;
 }
 
-/* ── writing: dry run unless "Live actions" is on ─────────────────────── */
+/* ── writing ─────────────────────────────────────────────────────────── */
 async function m2_commit(built,draftKey){
   if(!built||!built.ok){ m2_toast(built?.message||'Something went wrong'); return false; }
-  if(!m2_live()){
-    m2_sheetPush({title:'Dry run',render:()=>`<div class="m2-warn">${M2_ICON.warn}<span><b>Nothing was saved.</b> Live actions are off in this preview. This is exactly what would be written:</span></div>
-      <div class="m2-dry-list">${built.writes.map(w=>m2_esc(`${w.op.toUpperCase()} ${w.table}${w.id?' '+w.id:''}\n${JSON.stringify(w.row||w.patch,null,1)}`)).join('\n\n')}</div>
-      <div class="m2-note">Turn on Live actions in the account panel (preview options) to save for real.</div>`});
-    return false;
-  }
   try{
     await reqApplyWrites(built.writes);
     if(draftKey) m2_clearDraft(draftKey);
@@ -20892,15 +20860,6 @@ function m2_openWithdraw(r){
 }
 
 /* ── avatar panel, timesheets, preview options ────────────────────────── */
-function m2_previewOptions(){
-  const live=m2_live();
-  return `<section><h2 class="m2-h2">Preview options</h2><div class="m2-box" style="gap:0;padding:0 14px">
-    <label class="m2-row" style="cursor:pointer"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:800;color:var(--charcoal)">Live actions</span><span style="font-size:13px;color:#6E5F62">${live?'On — actions save for real':'Off — actions show what would be saved'}</span></span>
-      <input type="checkbox" ${live?'checked':''} style="width:22px;height:22px;accent-color:#8B2535" onchange="m2_store(M2_LIVE_KEY,this.checked);m2_markLive();m2_sheetRender(false)"></label>
-    <button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;cursor:pointer;padding:0" onclick="m2_exit()">Exit preview to the kiosk</button>
-    <button class="m2-row" style="width:100%;border:none;background:none;text-align:left;font-family:'Nunito',sans-serif;font-size:15px;font-weight:700;color:var(--burgundy);cursor:pointer;padding:0" onclick="m2_lockDevice()">Lock the preview on this device</button>
-  </div></section>`;
-}
 function m2_openAccount(goTo){
   const me=m2_me(); if(!me) return;
   const row=(label,sub,fn,colour)=>`<button class="m2-row" style="width:100%;border-left:none;border-right:none;border-top:none;background:none;text-align:left;font-family:'Nunito',sans-serif;cursor:pointer;padding:0;min-height:54px" onclick="${m2_on(fn)}"><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:16px;font-weight:${sub?800:700};color:${colour||'var(--charcoal)'}">${m2_esc(label)}</span>${sub?`<span style="font-size:13px;color:#6E5F62">${m2_esc(sub)}</span>`:''}</span>${sub?M2_ICON.chev:''}</button>`;
@@ -20912,8 +20871,7 @@ function m2_openAccount(goTo){
       ${row('Sign out','',()=>m2_signOut(false))}
       ${row('Forget me on this device','',()=>m2_openForget(),'var(--burgundy)')}
     </div>
-    ${m2_previewOptions()}
-    <div style="display:flex;align-items:center;justify-content:space-between"><button class="m2-link" onclick="m2_exit();showView('login')">Manager login</button><span class="m2-note">Running Well v${m2_esc(APP_VERSION)}</span></div>`});
+    <div style="display:flex;align-items:center;justify-content:space-between"><button class="m2-link" onclick="m2_exit('login')">Manager login</button><span class="m2-note">Running Well v${m2_esc(APP_VERSION)}</span></div>`});
   if(goTo==='timesheets') m2_openTimesheets();
 }
 function m2_openForget(){
@@ -20963,7 +20921,25 @@ function m2_bindListeners(){
 }
 
 window.addEventListener('hashchange',m2_route);
-document.addEventListener('DOMContentLoaded',()=>{ m2_route(); m2_bindSecretTap(); });
+/* PHONE GATE (v4.0, Joel 16 Nov 2026 — "automatic on phones", step 9 of the plan): a phone that
+   opens the site with no #fragment goes straight to the phone app. A phone = coarse pointer AND
+   the screen's SHORT side ≤ 520px, so the desktop kiosk (mouse) and tablets (7" ~600, iPad 768+)
+   are untouched. Leaving the app (Manager login) sets a per-tab flag so it doesn't bounce straight
+   back; the #m2 link keeps working everywhere. */
+const M2_FULL_SITE_KEY='rw_full_site';
+function m2_isPhone(){
+  // ≤520: phones are 360–430 on the short side; 7" tablets (~600) stay on the full site.
+  try{ return matchMedia('(pointer: coarse)').matches&&Math.min(screen.width,screen.height)<=520; }catch(e){ return false; }
+}
+function m2_phoneGate(){
+  try{
+    if(location.hash) return;
+    if(sessionStorage.getItem(M2_FULL_SITE_KEY)==='1') return;
+    if(!m2_isPhone()) return;
+    history.replaceState(null,'',location.pathname+location.search+'#m2');
+  }catch(e){}
+}
+document.addEventListener('DOMContentLoaded',()=>{ m2_phoneGate(); m2_route(); m2_bindSecretTap(); });
 </script>
 </body>
 </html>
