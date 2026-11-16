@@ -3718,7 +3718,7 @@
           <div style="padding:0.5rem 0 1.25rem;">
             <div style="font-size:0.82rem;color:var(--charcoal);font-weight:700;margin-bottom:0.2rem;">Running Well</div>
             <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.1rem;">Built by Dr Joel Jaya</div>
-            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.9 &middot; November 2026</div>
+            <div id="about-version" style="font-size:0.78rem;color:var(--muted);">Version 3.10 &middot; November 2026</div>
           </div>
           <div style="border-top:1.5px solid var(--border);padding-top:1rem;">
             <div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.75rem;">Release History</div>
@@ -3726,6 +3726,13 @@
                  rule, never by hand: fading per row was forgotten at every bump from v2.2 to v3.3,
                  which left eleven old releases looking current. -->
             <div class="about-history" style="display:flex;flex-direction:column;gap:0.85rem;">
+              <div style="display:flex;gap:0.75rem;align-items:baseline;">
+                <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.10</div>
+                <div>
+                  <div style="font-size:0.76rem;font-weight:700;color:var(--charcoal);margin-bottom:0.15rem;">November 2026 &mdash; Deleted cover stays deleted</div>
+                  <div style="font-size:0.74rem;color:var(--muted);line-height:1.5;"><strong>Publishing no longer re-creates cover shifts.</strong> In v3.9 a cover shift a manager had deleted came back every time the fortnight was republished. Cover is now created once, when annual leave goes on the roster, and staff can&rsquo;t see it until the fortnight is published &mdash; on Who&rsquo;s On, the Staff Portal, the kiosk and the phone app. The Publish dialog lists the cover shifts that will go on offer; untick any already arranged and they are deleted for good (a pending pick-up is shown next to its line). A pick-up by a manager in the nursing pool now counts, and cover isn&rsquo;t offered again for a shift someone has already picked up.</div>
+                </div>
+              </div>
               <div style="display:flex;gap:0.75rem;align-items:baseline;">
                 <div style="font-size:0.72rem;font-weight:800;color:var(--burgundy);white-space:nowrap;min-width:3.5rem;">v3.9</div>
                 <div>
@@ -5280,7 +5287,7 @@ function showLoading(on) {
 // them. The static text in the markup is only what shows before that handler runs, so
 // editing it alone changes nothing — which is how v3.0 shipped still reading 2.7, and
 // v2.7 before it shipped reading 2.6. Bump these, and keep the markup in step.
-const APP_VERSION='3.9';
+const APP_VERSION='3.10';
 const APP_VERSION_DATE='November 2026';
 const _ROLES=['Receptionist','Nurse','Manager'];
 // The single per-role threshold: within it, no prompt/flag and the shift auto-approves;
@@ -9333,7 +9340,7 @@ function rbCoverPlaceholderFor(role){
    get it wrong. Every caller passes a row carrying a real employee_id, including the
    synthetic half rbSplitShift builds. Fixing the five call sites instead would have left
    a sixth, added later, free to make the same mistake. */
-async function rbSpawnCoverForLeave(shift, leaveType){
+async function rbSpawnCoverForLeave(shift, leaveType, quiet=false){
   // Annual only for now. Personal/carer's leave is the more urgent cover case, but it
   // is also the one marked same-day, which the future-date rule below excludes anyway.
   if(leaveType!=='annual_leave') return null;
@@ -9344,10 +9351,34 @@ async function rbSpawnCoverForLeave(shift, leaveType){
      srCoverShiftsList — filter `date > today`, so a cover shift for today or earlier is
      invisible to everyone who could fill it while still sitting on the roster forever. */
   if(shift.date<=rbDateKey(new Date())) return null;
-  /* HELD until the fortnight is published (Joel, 12 Nov 2026). A draft roster is something
-     managers play with; cover spawned from it reached staff at once. Publishing releases it —
-     rbCoverHeldForFortnight lists what is waiting and the publish dialog says how many. */
-  if(_rosterConfig?.cycle_start_date&&!rbIsPublishedForRole(rbFnStartForDate(shift.date),r)) return null;
+  /* Created straight away, as before v3.9. v3.9 HELD cover in unpublished fortnights and
+     re-created it at publish by INFERRING what had been held — which brought back every cover
+     shift a manager had deliberately deleted, on every republish (16 Nov 2026: 19/23/26 Nov).
+     Staff can't see cover from an unpublished fortnight anyway (coverPublishedOnly on every
+     pick-up surface, srShiftForEmp on Who's On), so a cover row made now simply waits, and the
+     Publish dialog lists it with a tick box. Nothing ever re-creates a deleted cover shift. */
+  // Someone already picked up cover for this block (leave revoked and re-approved, undo, ...):
+  // offering it again would roster two people for one slot. Say so instead.
+  // Matched by date + exact span + group, which two people on leave with the same standard
+  // hours share — so COUNT: refuse only when pick-ups plus cover rows already standing account
+  // for every annual-leave block of this shape that day (Opus review, 16 Nov 2026).
+  const _pu=rbCoverPickedUpFor(shift,r);
+  if(_pu){
+    const st=String(shift.start_time).slice(0,5), en=String(shift.end_time).slice(0,5);
+    const same=x=>x.date===shift.date&&String(x.start_time||'').slice(0,5)===st&&String(x.end_time||'').slice(0,5)===en;
+    const grpEmp=id=>{ const e=(_emps||[]).find(x=>String(x.id)===String(id)); return e&&!e.is_placeholder&&staffGroupFor(e)===r; };
+    const blocks=(_rosterShifts||[]).filter(x=>same(x)&&!x.is_day_off&&grpEmp(x.employee_id)
+      &&((_entries||[]).some(e=>e.leaveType==='annual_leave'&&!e.deleted&&String(e.shiftId)===String(x.id))||String(x.id)===String(shift.id))).length;
+    const pickups=(_requests||[]).filter(q=>q.type==='pickup'&&q.status==='approved'&&q.initiatorShiftDate===shift.date
+      &&String(q.initiatorShiftStart||'').slice(0,5)===st&&String(q.initiatorShiftEnd||'').slice(0,5)===en
+      &&(()=>{ const pe=(_emps||[]).find(e=>String(e.id)===String(q.initiatorId)); return (pe?staffGroupFor(pe):q.initiatorRole)===r; })()).length;
+    const standing=(_rosterShifts||[]).filter(x=>same(x)&&x.cover_for_shift_id
+      &&(()=>{ const p=(_emps||[]).find(e=>String(e.id)===String(x.employee_id)); return p&&staffGroupFor(p)===r; })()).length;
+    if(pickups+standing>=blocks){
+      if(!quiet){ try{ showToast(`${_pu.initiatorName||'Someone'} already picked up the cover for this shift — no new cover offered`); }catch(e){} }
+      return null;
+    }
+  }
   const ph=rbCoverPlaceholderFor(r);
   if(!ph) return null;
   // One cover row per block, ever. Re-marking leave (annual → personal → annual) or an
@@ -9364,27 +9395,18 @@ async function rbSpawnCoverForLeave(shift, leaveType){
   }catch(e){ console.error('Could not create cover shift',e); return null; }
 }
 
-/* Annual-leave blocks in this fortnight whose cover is being held until publish: future,
-   on annual leave, no cover row yet, and none already picked up. */
-function rbCoverHeldForFortnight(fnKey,role){
-  if(!AUTO_COVER_ENABLED[role]) return [];
+/* Cover shifts in this fortnight that publishing will put in front of staff: future rows on a
+   placeholder of this group. Listed in the Publish dialog — unticking one deletes it. */
+function rbCoverInFortnight(fnKey,role){
   const days=new Set(getFortnight14Days(fnKey)), today=rbDateKey(new Date());
-  const ids=new Set(rbGetEmpsForRole(role).filter(e=>!e.is_placeholder).map(e=>String(e.id)));
-  return (_rosterShifts||[]).filter(s=>days.has(s.date)&&s.date>today&&!s.is_day_off&&s.start_time&&s.end_time
-    &&ids.has(String(s.employee_id))
-    &&(_entries||[]).some(e=>e.leaveType==='annual_leave'&&!e.deleted&&String(e.shiftId)===String(s.id))
-    &&!(_rosterShifts||[]).some(c=>String(c.cover_for_shift_id)===String(s.id))
-    &&!rbCoverPickedUpFor(s,role))
+  const ph=new Set((_emps||[]).filter(e=>e.is_placeholder&&staffGroupFor(e)===role).map(e=>String(e.id)));
+  return (_rosterShifts||[]).filter(s=>ph.has(String(s.employee_id))&&days.has(s.date)&&s.date>today&&!s.is_day_off&&s.start_time&&s.end_time)
     .sort((a,b)=>a.date.localeCompare(b.date)||String(a.start_time).localeCompare(String(b.start_time)));
 }
-// Called once the fortnight is published. Returns how many cover shifts were offered.
-async function rbReleaseHeldCover(fnKey,role,skip=new Set()){
-  let n=0;
-  for(const sh of rbCoverHeldForFortnight(fnKey,role)){ if(skip.has(String(sh.id))) continue; if(await rbSpawnCoverForLeave(sh,'annual_leave')) n++; }
-  return n;
-}
+// "Fiona Bridson — Thu 19 Nov, 09:00–17:00": named by the person whose leave it covers.
 function rbHeldCoverLine(s){
-  const e=(_emps||[]).find(x=>String(x.id)===String(s.employee_id));
+  const src=s.cover_for_shift_id?(_rosterShifts||[]).find(x=>String(x.id)===String(s.cover_for_shift_id)):null;
+  const e=(_emps||[]).find(x=>String(x.id)===String(src?src.employee_id:s.employee_id));
   const d=new Date(s.date+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
   return `${e?e.name:'Unknown'} — ${d}, ${String(s.start_time).slice(0,5)}–${String(s.end_time).slice(0,5)}`;
 }
@@ -9428,7 +9450,9 @@ function rbCoverPickedUpFor(shift, role){
     &&r.initiatorShiftDate===shift.date
     &&String(r.initiatorShiftStart||'').slice(0,5)===st
     &&String(r.initiatorShiftEnd||'').slice(0,5)===en
-    &&(!role||r.initiatorRole===role))||null;
+    // By staff GROUP, not job title: a nursing-pool manager picking up nurse cover is stored
+    // with initiatorRole 'Manager' and was never matched (16 Nov 2026, Sue / 19 Nov).
+    &&(!role||(()=>{ const pe=(_emps||[]).find(e=>String(e.id)===String(r.initiatorId)); return (pe?staffGroupFor(pe):r.initiatorRole)===role; })()))||null;
 }
 
 /* ── Marking leave by hand ───────────────────────────────────────────────
@@ -9620,7 +9644,7 @@ async function rbMarkLeaveApply(empId,date,shiftId,leaveType,shift,emp,role,exis
        annual, retract on anything else — the else branch is a no-op when there was never
        any cover, so it costs one round trip on a path a manager is already waiting on. */
     let _cover=null;
-    if(leaveType==='annual_leave') _cover=await rbSpawnCoverForLeave(shift,leaveType);
+    if(leaveType==='annual_leave') _cover=await rbSpawnCoverForLeave(shift,leaveType,opts.toast===false);
     else await rbRemoveCoverForShift(shiftId);
     if(!opts.noUndo) rbPushUndo('leave marked',async()=>{
       if(newLeaveId){ await db.delete('entries',newLeaveId); _entries=_entries.filter(e=>e.id!==newLeaveId); }
@@ -13219,6 +13243,11 @@ function srRenderFortnight(startStr, days, emps, published, today){
 
 function srShiftForEmp(empId,date){
   const shift=_rosterShifts.find(s=>s.employee_id===empId&&s.date===date);
+  // A cover shift in an unpublished fortnight isn't on offer yet — staff-facing views skip it.
+  if(shift&&_rosterConfig?.cycle_start_date){
+    const ph=(_emps||[]).find(e=>e.id===empId);
+    if(ph?.is_placeholder&&!rbIsPublishedForRole(rbFnStartForDate(date),staffGroupFor(ph))) return null;
+  }
   // `id` is carried so srLeaveLook can match leave to THIS block rather than to
   // the day. Every caller spreads or reads named fields, so it is additive.
   if(shift){if(shift.is_day_off)return'off';if(shift.start_time&&shift.end_time)return{id:shift.id,start:shift.start_time,end:shift.end_time,lane:shift.lane||null};}
@@ -14014,12 +14043,15 @@ function rbTogglePublishForRole(role){
       warn+='</div>';
       document.getElementById('rb-confirm-msg').innerHTML+=warn;
     }
-    const held=rbCoverHeldForFortnight(key,role);
+    const held=rbCoverInFortnight(key,role);
     if(held.length){
       let cv='<div style="background:rgba(230,126,34,0.08);border:1.5px solid rgba(230,126,34,0.6);border-radius:8px;padding:0.7rem 0.9rem;margin-top:0.9rem;text-align:left;">';
       cv+=`<div style="font-size:0.8rem;font-weight:800;color:#8A4310;margin-bottom:0.3rem;">🙋 ${held.length} cover shift${held.length!==1?'s':''} will be offered to staff</div>`;
-      cv+=held.map(h=>`<label style="display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;color:var(--charcoal);cursor:pointer;"><input type="checkbox" class="rb-held-cover" data-sid="${escHtml(String(h.id))}" checked>${escHtml(rbHeldCoverLine(h))}</label>`).join('');
-      cv+=`<div style="font-size:0.72rem;color:var(--muted);margin-top:0.25rem;">Annual leave in this fortnight. Cover is held back until the roster is published — untick any that are already arranged.</div></div>`;
+      // A pick-up request already waiting on a line is shown, so unticking (which deletes the
+      // shift and leaves that request stale) is a decision made knowingly.
+      const _pend=id=>(_requests||[]).find(q=>q.type==='pickup'&&!reqIsClosed(q)&&String(q.initiatorShiftId)===String(id));
+      cv+=held.map(h=>{ const pq=_pend(h.id); return `<label style="display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;color:var(--charcoal);cursor:pointer;"><input type="checkbox" class="rb-held-cover" data-sid="${escHtml(String(h.id))}" checked>${escHtml(rbHeldCoverLine(h))}${pq?` <span style="color:var(--burgundy);font-weight:800;">· pick-up pending (${escHtml(String(pq.initiatorName||'').split(' ')[0])})</span>`:''}</label>`; }).join('');
+      cv+=`<div style="font-size:0.72rem;color:var(--muted);margin-top:0.25rem;">Cover shifts in this fortnight. Staff can only see them once the roster is published. <strong>Untick any already arranged — unticked cover shifts are deleted.</strong></div></div>`;
       document.getElementById('rb-confirm-msg').innerHTML+=cv;
     }
   }
@@ -14029,11 +14061,13 @@ function rbTogglePublishForRole(role){
   _rbConfirmCallback=async()=>{
     // Read the ticks BEFORE anything re-renders the dialog away.
     const _boxes=[...document.querySelectorAll('#rb-confirm-msg .rb-held-cover')];
-    const _skip=new Set(_boxes.filter(b=>!b.checked).map(b=>b.dataset.sid));
+    const _drop=_boxes.filter(b=>!b.checked).map(b=>b.dataset.sid), _offer=_boxes.length-_drop.length;
     await rbSetPublishedForRole(key,role,!published);
-    if(!published&&rbIsPublishedForRole(key,role)){
-      const n=await rbReleaseHeldCover(key,role,_skip);
-      if(n){ renderRoster(); showToast(`${RB_ROLE_LABELS[role]} roster published · ${n} cover shift${n!==1?'s':''} offered to staff`); }
+    if(!published&&rbIsPublishedForRole(key,role)&&_boxes.length){
+      let gone=0;
+      for(const id of _drop){ try{ await db.delete('roster_shifts',id); _rosterShifts=_rosterShifts.filter(x=>String(x.id)!==String(id)); gone++; }catch(e){ console.error('Could not delete cover shift',e); } }
+      renderRoster();
+      showToast(`${RB_ROLE_LABELS[role]} roster published · ${_offer} cover shift${_offer!==1?'s':''} offered to staff`+(gone?` · ${gone} removed`:''));
     }
   };
   overlay.classList.add('show');
@@ -19680,8 +19714,12 @@ async function m2_fetchPerson(person,off,force){
 function m2_prefetchPerson(person,off){
   [-1,1].forEach(n=>{ const c=m2_pCache[person+'|'+(off+n)]; if(!c||Date.now()-c.at>M2_FRESH_MS) m2_fetchPerson(person,off+n).catch(()=>{}); });
 }
+/* Published fortnights for the Who's On pages: cover tiles from an unpublished fortnight are
+   hidden (it isn't on offer yet). Refreshed with each Who's On load; null = can't tell, show. */
+let m2_coverKeys=null;
 async function m2_loadWhoson(){
   if(!m2_day) m2_day=m2_today();
+  m2_coverKeys=await coverPublishedKeys();
   if(m2_wmode==='day'){ const d=await m2_fetchDay(m2_day,true); m2_prefetchAround(m2_day); return d; }
   if(!m2_person) m2_person=m2_me()?.id||m2_emps.find(e=>!e.is_placeholder)?.id;
   const person=m2_person, off=m2_pOffset;
@@ -19748,7 +19786,7 @@ function m2_dayPage(d){
   const working=d.shifts.filter(s=>!s.is_day_off&&s.start_time&&s.end_time);
   let any=false;
   m2_groupsOrdered().forEach(([g,label,colour])=>{
-    const rows=working.filter(s=>{ const e=m2_emp(s.employee_id); return e&&m2_groupOf(e)===g; })
+    const rows=working.filter(s=>{ const e=m2_emp(s.employee_id); return e&&m2_groupOf(e)===g&&!(e.is_placeholder&&m2_coverKeys&&!coverPublishedOnly([s],m2_coverKeys).length); })
       .sort((a,b)=>{ const pa=m2_emp(a.employee_id).is_placeholder?1:0, pb=m2_emp(b.employee_id).is_placeholder?1:0; return pa-pb||a.start_time.localeCompare(b.start_time); });
     if(!rows.length) return; any=true;
     html+=`<section style="margin-top:12px"><h2 class="m2-h2"><span class="m2-dot" style="background:${colour}"></span>${label}</h2>`;
@@ -20758,7 +20796,11 @@ function m2_openPickup(s){
         act.innerHTML=`${clashes.map(c=>`<div class="m2-warn">${M2_ICON.warn}<span><b>${m2_esc(c)}</b> You can still ask; a manager will check it.</span></div>`).join('')}
           <div class="m2-note">A manager approves your pick-up. You'll see it under Swaps → Your requests.</div>
           <button class="m2-btn green">${clashes.length?'Pick up anyway':'Pick up shift'}</button>`;
-        act.querySelector('button').onclick=()=>m2_commit(reqBuildPickup(me,s,ph));
+        act.querySelector('button').onclick=async()=>{
+          // Cover from an unpublished fortnight isn't on offer (the manager may still be changing it).
+          if(!coverPublishedOnly([s],await coverPublishedKeys()).length){ act.innerHTML='<div class="m2-note">This cover shift isn\u2019t on offer yet — its roster hasn\u2019t been published.</div>'; return; }
+          m2_commit(reqBuildPickup(me,s,ph));
+        };
       }catch(e){ const a=m2_el('m2-pu-act'); if(a) a.innerHTML=`<div class="m2-note">Couldn't check this shift — try again.</div>`; }
     }});
 }
