@@ -6631,7 +6631,7 @@ function switchTab(name,btn){
   if(name==='notes')      renderApprovals();
   if(name==='team')       renderTeam();
   if(name==='roster')     renderRoster();
-  if(name==='requests'){  renderRequests(); reqExpirySweep(); }
+  if(name==='requests'){  renderRequests(); reqExpirySweep(); reqRefreshAndRender(); }
   if(name==='analytics'){ try{ _anCache=new Map(); anRender(); }catch(e){ console.error('Analytics failed',e); } }
   if(name==='settings'){  renderManagersTab(); wosInitPinBoxes(); renderAnchorDate(); renderRequestSettings(); renderBreakExceptions(); }
   if(name==='analytics'){ renderBreakExceptionLog(); }
@@ -17177,6 +17177,69 @@ function buildRecentDecisionRow(r){
 const REQ_LEAVE_HORIZON_DAYS=56;
 let _reqShowAllLeave=false;
 function reqToggleShowAllLeave(){ _reqShowAllLeave=!_reqShowAllLeave; renderRequests(); }
+
+/* ── Keeping the manager's request list current (Joel, 16 Nov 2026) ─────────────────────
+   Every admin tab draws from data loaded once at login. Kiosk taps on the same computer
+   refresh entries/notes/requests as a side effect, so the other tabs LOOK live there — but
+   requests now mostly arrive from phones and the Staff Portal elsewhere, and the Requests tab
+   only showed them after a reload. Three filtered reads, never the whole table (egress): open
+   requests, those decided in the last 7 days (what the tab shows), and the rows this page
+   still holds as open (to see withdrawals and peer answers). MERGED into _requests by id —
+   never replaced (the August egress lesson). Runs when the tab opens, every 60 s while the
+   manager screen is visible, and when the window comes back into focus. */
+let _reqRefreshing=false, _reqWantFull=false;
+/* `full`: also read the last 7 days of decisions (what the tab's history shows). The 60-second
+   check skips it — open requests are the only thing that can arrive unseen, and that read is
+   two-thirds of the bytes (egress estimate 16 Nov: ~5 KB/check instead of ~16 KB). */
+async function reqRefreshFromDb(full){
+  if(_reqRefreshing||!currentManager) return false;
+  _reqRefreshing=true;
+  try{
+    const sig=r=>[r.status,r.peerResponse,r.managerDecidedAt,r.withdrawnAt,r.expiresAt].join('|');
+    // Snapshot BEFORE reading. A row this page changes while the read is in flight (an
+    // approval, decline, revoke, or the expiry sweep) must not be overwritten by the older
+    // server copy — that put a just-approved card back to pending (Opus review, 16 Nov 2026).
+    const before=new Map((_requests||[]).map(r=>[String(r.id),sig(r)]));
+    const openIds=(_requests||[]).filter(r=>!reqIsClosed(r)).map(r=>String(r.id)).filter(id=>/^[A-Za-z0-9_-]+$/.test(id));
+    const reads=[db.get('requests',{status:{in:'(pending_manager,pending_peer)'}})];
+    // Only the open rows that have since CLOSED (withdrawn, expired, decided elsewhere) —
+    // the still-open ones already came back in the read above.
+    if(openIds.length) reads.push(db.get('requests',{id:{in:`(${openIds.join(',')})`},status:{'not.in':'(pending_manager,pending_peer)'}}));
+    if(full) reads.push(db.get('requests',{manager_decided_at:{gte:new Date(Date.now()-7*86400000).toISOString()}}));
+    const rows=(await Promise.all(reads)).flat();
+    const byId=new Map((_requests||[]).map(r=>[String(r.id),r]));
+    let changed=false;
+    rows.forEach(raw=>{
+      const n=normaliseRequest(raw), id=String(n.id), o=byId.get(id);
+      if(!o){ if(before.has(id)) return; _requests.push(n); byId.set(id,n); changed=true; return; }
+      if(sig(o)!==before.get(id)) return;          // changed here mid-read: this page's copy wins
+      if(sig(o)!==sig(n)){ Object.assign(o,n); changed=true; }
+    });
+    return changed;
+  }catch(e){ console.error('Request refresh failed',e); return false; }
+  finally{ _reqRefreshing=false; }
+}
+// The tab's red count + per-role counts, without redrawing the (hidden) list.
+function reqUpdateBadge(){
+  const totalPending=(_requests||[]).filter(r=>r.status==='pending_manager').length;
+  const badge=document.getElementById('req-admin-badge');
+  if(badge){ badge.style.display=totalPending?'':'none'; badge.textContent=totalPending; }
+}
+function reqAfterRefresh(){
+  rbInvalidateLeaveGaps();
+  if(document.getElementById('tab-requests')?.classList.contains('active')) renderRequests(); else reqUpdateBadge();
+}
+// A full refresh asked for while the quick 60 s check is still reading runs straight after it,
+// rather than being dropped (Opus review).
+async function reqRefreshAndRender(full=true){
+  if(_reqRefreshing){ if(full) _reqWantFull=true; return; }
+  if(await reqRefreshFromDb(full)) reqAfterRefresh();
+  if(_reqWantFull){ _reqWantFull=false; if(await reqRefreshFromDb(true)) reqAfterRefresh(); }
+}
+function reqManagerScreenUp(){ return !!currentManager&&!document.hidden&&!!document.getElementById('view-admin')?.classList.contains('active'); }
+setInterval(()=>{ if(reqManagerScreenUp()) reqRefreshAndRender(false); },60000);
+window.addEventListener('focus',()=>{ if(reqManagerScreenUp()) reqRefreshAndRender(); });
+document.addEventListener('visibilitychange',()=>{ if(reqManagerScreenUp()) reqRefreshAndRender(); });
 
 function renderRequests(){
   rbInvalidateLeaveGaps();
