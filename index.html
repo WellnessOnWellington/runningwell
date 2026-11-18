@@ -1978,11 +1978,9 @@
   .m2-root, .m2-root * { -webkit-tap-highlight-color:transparent; box-sizing:border-box; }
   .m2-root { position:fixed; top:var(--vvt,0px); left:0; right:0; height:var(--vvh,100vh); z-index:50; flex-direction:column; align-items:center; background:#F3EDEE; font-family:'Nunito',sans-serif; color:var(--text); }
   .m2-root[hidden] { display:none; }
-  .m2-door, .m2-app { width:100%; max-width:520px; height:100%; display:flex; flex-direction:column; }
-  .m2-door[hidden], .m2-app[hidden], .m2-shell[hidden], .m2-start[hidden] { display:none; }
-  .m2-door { justify-content:center; padding:calc(1.5rem + env(safe-area-inset-top)) 1.25rem calc(1.5rem + env(safe-area-inset-bottom)); }
+  .m2-app { width:100%; max-width:520px; height:100%; display:flex; flex-direction:column; }
+  .m2-app[hidden], .m2-shell[hidden], .m2-start[hidden] { display:none; }
   .m2-card { background:var(--white); border-radius:18px; padding:1.25rem 1.15rem; }
-  .m2-door-title { font-family:'Lora',serif; font-size:1.35rem; font-weight:600; color:var(--charcoal); margin-bottom:0.3rem; }
   .m2-sub { font-size:0.88rem; color:#6E5F62; line-height:1.5; }
   .m2-input, .m2-select, .m2-textarea { width:100%; min-height:48px; font-size:16px; padding:0 12px; border:1.5px solid var(--border-dk); border-radius:11px; font-family:'Nunito',sans-serif; background:var(--white); color:var(--charcoal); }
   .m2-textarea { padding:10px 12px; min-height:80px; resize:none; }
@@ -2026,13 +2024,9 @@
   .m2-shell { flex:1; min-height:0; display:flex; flex-direction:column; }
   .m2-bar { flex-shrink:0; display:flex; align-items:center; gap:6px; padding:calc(0.5rem + env(safe-area-inset-top)) 0.6rem 0.5rem 1rem; background:var(--white); border-bottom:1px solid var(--border); }
   .m2-title { flex:1; min-width:0; margin:0; font-family:'Lora',serif; font-size:22px; font-weight:600; color:var(--charcoal); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .m2-pill { font-size:0.62rem; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#7A5418; background:var(--warning-lt); border-radius:999px; padding:0.2rem 0.55rem; flex-shrink:0; }
   .m2-avatar { width:44px; height:44px; border:none; background:none; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
   .m2-avatar span { width:34px; height:34px; border-radius:17px; background:var(--blush); color:var(--burgundy); font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; }
   .m2-signin-btn { min-height:40px; padding:0 14px; border:1.5px solid var(--burgundy); border-radius:20px; background:var(--white); color:var(--burgundy); font-family:'Nunito',sans-serif; font-size:14px; font-weight:800; cursor:pointer; }
-  /* The Preview pill is the only dry-run signal (the banner broke the visual flow, Joel 8 Nov);
-     with Live actions on it turns burgundy and reads "Preview · Live". */
-  .m2-pill.live { color:#fff; background:var(--burgundy); }
   .m2-body { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:14px 14px 20px; }
   .m2-panel { display:flex; flex-direction:column; gap:16px; }
   /* Who's On, option B3 (Joel 8 Nov): the bar holds the month + Day/Person; a FIXED week strip
@@ -2218,8 +2212,6 @@
   .m2-check { width:20px; height:20px; border-radius:6px; border:2px solid #CDBFC2; box-sizing:border-box; position:relative; flex-shrink:0; }
   .m2-check.on { background:var(--burgundy); border-color:var(--burgundy); }
   .m2-check.on::after { content:''; position:absolute; left:5px; top:1px; width:5px; height:10px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
-  /* Preview pill removed (Joel 10 Nov). ⚠ LAUNCH STEP still stands: switch on live actions. */
-  #m2-preview-pill { display:none !important; }
   .m2-monthnav { display:flex; align-items:center; gap:4px; margin:2px 0 6px; }
   .m2-monthnav .m2-icon-btn { width:44px; height:44px; flex-shrink:0; color:#6E5F62; }
   .m2-monthlabel { flex:1; text-align:center; font-family:'Lora',serif; font-size:18px; font-weight:600; color:var(--charcoal); }
@@ -2316,7 +2308,6 @@
   .m2-sheet-body { position:relative; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:4px 16px calc(24px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:14px; }
   .m2-eyebrow { font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; }
   .m2-bigtime { font-size:26px; font-weight:800; color:var(--charcoal); font-variant-numeric:tabular-nums; }
-  .m2-dry-list { font-family:ui-monospace,Menlo,monospace; font-size:12px; background:var(--white); border:1px solid var(--border); border-radius:10px; padding:10px; white-space:pre-wrap; word-break:break-word; color:var(--text); max-height:40vh; overflow:auto; }
 
   .m2-toast { position:fixed; left:50%; bottom:calc(90px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:70; background:var(--charcoal); color:#fff; font-size:14px; font-weight:700; padding:10px 16px; border-radius:12px; max-width:90vw; text-align:center; }
   .m2-toast[hidden] { display:none; }
@@ -18736,7 +18727,7 @@ window.addEventListener('load', ()=>{
    The door hides the UI, not the code, so this block follows the plan's safety rules:
    - Its own <script>
 /* ═══════════════════════════════════════════
-   PHONE APP PREVIEW (m2) — the staff phone app, built behind a door.
+   PHONE APP (m2) — the staff phone app. Live for all staff since v4.0 (16 Nov 2026); phones open it automatically.
    Design and every rule it implements: Runningwell-Vault/phone_ui_plan.md.
 
    It opens only at #m2 (or five quick taps on the clock, touch screens only) and only with a
@@ -18757,33 +18748,31 @@ window.addEventListener('load', ()=>{
    Writes go through the shared request builders in the main script (reqBuild*), so the rows
    are identical to the Staff Portal's, and since v4.0 every action saves for real.
 ═══════════════════════════════════════════ */
-const M2_DOOR_KEY='rw_m2_door', M2_WHO_KEY='rw_m2_who', M2_LIVE_KEY='rw_m2_live', M2_FIXED_KEY='rw_m2_fixed';
+const M2_WHO_KEY='rw_m2_who';
 /* Panel height for the shift flow: 'grow' = standard height as a MINIMUM, growing to fit before
    ever scrolling. Trialled 12 Nov against 'fixed' and 'auto' (content-sized); Joel chose Grow on
    13 Nov and the toggle was removed. The other branches below are now unreachable but harmless. */
 function m2_panelMode(){ return 'grow'; }   // Joel settled on Grow (13 Nov 2026); the Preview options control is gone
 function m2_fixedOn(){ return m2_panelMode()!=='auto'; }
 const M2_LAST_KEY='rw_m2_last', M2_SEEN_KEY='rw_m2_seen_open', M2_HIDDEN_KEY='rw_m2_hidden';
-const M2_DOOR_DAYS=7, M2_WHO_DAYS=30, M2_DOOR_MAX_FAILS=5, M2_DOOR_LOCK_MS=60000;
+const M2_WHO_DAYS=30;
 const M2_FRESH_MS=30000, M2_RESUME_MS=30*60000;
 const M2_TABS=['shifts','swaps','leave','whoson'];
 const M2_TITLES={shifts:'My Shifts',swaps:'Swaps',leave:'Leave',whoson:"Who's On"};
 const M2_GROUPS=[['Nurse','Nurses','#2F7AAE'],['Receptionist','Reception','#2E8B57'],['Manager','Managers','#7D3C98']];
 const M2_FROM=7*60+30, M2_SPAN=14*60;   // day bars run 7:30am – 9:30pm
 let m2_tab='shifts', m2_who=null, m2_emps=[], m2_cfg=null;
-let m2_doorFails=0, m2_doorLockedUntil=0, m2_typingBound=false, m2_listenersBound=false;
+let m2_typingBound=false, m2_listenersBound=false;
 let m2_data={}, m2_at={}, m2_loading={};
 let m2_day=null, m2_wmode='day', m2_person=null, m2_pOffset=0, m2_month=null, m2_leaveSel=null;
 let m2_fns={}, m2_fnSeq=0;
 let m2_sheet=[], m2_drafts={}, m2_suppressPop=0;
-let m2_secretCount=0, m2_secretLast=0;
 /* Browser history is used ONLY where a hardware/system Back exists to drive it — Android.
    On iPhone/iPad any history entry gives the left-edge swipe somewhere to go "back" to (even
    in an app added to the home screen); the live app never touches history, which is why it
    never swipes back. So on iOS the preview adds none: sheets close with ⌄, the backdrop or a
    drag. Evaluated once; a literal expression that cannot throw. */
 const M2_USE_HISTORY=!(/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
-const M2_SECRET_TAPS=5, M2_SECRET_GAP_MS=1000;
 
 /* ── small helpers ───────────────────────────────────────────────────── */
 function m2_el(id){ return document.getElementById(id); }
@@ -18896,21 +18885,6 @@ function m2_exit(view){
   m2_sheetHide();
   if(n){ m2_suppressPop++; try{ history.go(-n); }catch(e){ m2_suppressPop--; } setTimeout(leave,80); }
   else leave();
-}
-/* Five quick taps on the front-page clock open the door — the way in from an installed app,
-   which has no address bar. TOUCH SCREENS ONLY: on the mouse-driven clinic kiosk an open door
-   would swallow the next staff card tap. */
-function m2_bindSecretTap(){
-  try{
-    if(!window.matchMedia('(pointer:coarse)').matches) return;
-    const clock=m2_el('kiosk-time'); if(!clock) return;
-    clock.addEventListener('click',()=>{
-      const now=Date.now();
-      m2_secretCount=now-m2_secretLast<=M2_SECRET_GAP_MS?m2_secretCount+1:1;
-      m2_secretLast=now;
-      if(m2_secretCount>=M2_SECRET_TAPS){ m2_secretCount=0; try{ history.replaceState(null,'',location.pathname+location.search+'#m2'); }catch(e){} m2_route(); }
-    });
-  }catch(e){ console.error('m2_bindSecretTap',e); }
 }
 
 /* ── base data: staff list, config, finalised periods (all small) ──── */
@@ -21002,7 +20976,7 @@ function m2_phoneGate(){
     history.replaceState(null,'',location.pathname+location.search+'#m2');
   }catch(e){}
 }
-document.addEventListener('DOMContentLoaded',()=>{ m2_phoneGate(); m2_route(); m2_bindSecretTap(); });
+document.addEventListener('DOMContentLoaded',()=>{ m2_phoneGate(); m2_route(); });
 </script>
 </body>
 </html>
