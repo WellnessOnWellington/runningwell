@@ -4506,6 +4506,7 @@ async function coverPublishedKeys(){
 function coverPublishedOnly(list,keys){
   if(!keys) return list||[];
   return (list||[]).filter(s=>{
+    if(rbFnStarted(rbFnStartForDate(s.date))) return true;   // started fortnights always offer their cover
     const ph=(_emps||[]).find(e=>String(e.id)===String(s.employee_id));
     return keys.has(rbFnStartForDate(s.date)+'|'+(ph?staffGroupFor(ph):''));
   });
@@ -13208,7 +13209,7 @@ function renderStaffRoster(){
   if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Individual view</option>'+nameOptions; if(cur)sel.value=cur; }
   if(selMob){ const cur=selMob.value; selMob.innerHTML='<option value="" disabled hidden selected></option>'+nameOptions; if(cur)selMob.value=cur; }
 
-  const fn1Published=srIsPublished(fn1Start);
+  const fn1Published=srIsPublished(fn1Start)||rbFnStarted(fn1Start);   // started fortnights always show
 
   const content=document.getElementById('sr-content');
   if(srLayout==='person'&&!document.getElementById('sr-staff-filter')?.value){
@@ -13242,7 +13243,8 @@ function srShiftForEmp(empId,date){
   // A cover shift in an unpublished fortnight isn't on offer yet — staff-facing views skip it.
   if(shift&&_rosterConfig?.cycle_start_date){
     const ph=(_emps||[]).find(e=>e.id===empId);
-    if(ph?.is_placeholder&&!rbIsPublishedForRole(rbFnStartForDate(date),staffGroupFor(ph))) return null;
+    const _fn=rbFnStartForDate(date);
+    if(ph?.is_placeholder&&!rbFnStarted(_fn)&&!rbIsPublishedForRole(_fn,staffGroupFor(ph))) return null;
   }
   // `id` is carried so srLeaveLook can match leave to THIS block rather than to
   // the day. Every caller spreads or reads named fields, so it is additive.
@@ -13893,10 +13895,19 @@ function renderRosterPanels(){
     const locked=rbIsLockedForRole(fnStart,role);
     const published=rbIsPublishedForRole(fnStart,role);
     const pubBtn=document.getElementById('rb-publish-btn-'+role);
-    if(pubBtn){ pubBtn.innerHTML=published?'&#10003; Published &middot; Unpublish':'&#10003; Publish Roster'; pubBtn.classList.toggle('published',published); }
+    if(pubBtn){
+      const st=rbFnState(rbDateKey(fnStart));
+      pubBtn.innerHTML=!published?'&#10003; Publish Roster'
+        :st==='past'?'&#10003; Published &middot; Past'
+        :st==='current'?(locked?'&#10003; Published &middot; Unlock to edit':'&#128275; Unlocked &middot; Lock again')
+        :'&#10003; Published &middot; Unpublish';
+      pubBtn.classList.toggle('published',published);
+    }
     const copyBtn=document.getElementById('rb-copy-btn-'+role);
-    if(copyBtn) copyBtn.disabled=locked;
-    panel.classList.toggle('published',locked);
+    const _started=rbFnStarted(rbDateKey(fnStart)), _past=rbFnState(rbDateKey(fnStart))==='past';
+    // Copy writes a whole fortnight — never into one that has started (days already worked).
+    if(copyBtn){ copyBtn.disabled=locked||_started; copyBtn.title=_started?'Only a future fortnight can be copied into':''; }
+    panel.classList.toggle('published',locked||_past);
     if(collapsed) return;
     document.getElementById('rb-fn-grid-'+role).style.display=rbSelectedDay?'none':'';
     document.getElementById('rb-tl-'+role).style.display=rbSelectedDay?'block':'none';
@@ -13926,6 +13937,11 @@ function rbFnStartForDate(dateKey){
   const base=new Date(a); base.setDate(base.getDate()+_fnIndex(t,a)*14);
   return rbDateKey(base);
 }
+
+/* A roster fortnight that has STARTED (current or past) always shows to staff, whatever its
+   publish flag (Joel, 18 Nov 2026): people are working from it. Only future fortnights hide
+   while unpublished. */
+function rbFnStarted(fnKey){ return String(fnKey)<=rbDateKey(new Date()); }
 
 function rbDateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 
@@ -13959,13 +13975,17 @@ let _rbCopyPending=null;
    button that does nothing. Adding a shift onto approved leave does exactly
    that — "Mark as Leave" can lead to "Roster Already Published" — and the leave
    was never written, with no error anywhere. */
+// An explanation-only dialog shows just OK. Reset whenever the dialog closes.
+function rbConfirmOkOnly(on){ const c=document.querySelector('#rb-confirm-overlay .rb-confirm-cancel'); if(c) c.style.display=on?'none':''; }
 function rbConfirmClose(){
+  rbConfirmOkOnly(false);
   document.getElementById('rb-confirm-overlay').classList.remove('show');
   const cb=_rbConfirmCancelCallback;
   _rbConfirmCallback=null; _rbConfirmCancelCallback=null;
   if(cb) cb();
 }
 function rbConfirmProceed(){
+  rbConfirmOkOnly(false);
   document.getElementById('rb-confirm-overlay').classList.remove('show');
   const cb=_rbConfirmCallback;
   _rbConfirmCallback=null; _rbConfirmCancelCallback=null;
@@ -14007,12 +14027,47 @@ document.addEventListener('keydown',e=>{
   }
 });
 
+// 'past' (ended) · 'current' (today inside it) · 'future'
+function rbFnState(fnKey){
+  const today=rbDateKey(new Date()), end=new Date(fnKey+'T12:00:00'); end.setDate(end.getDate()+13);
+  return rbDateKey(end)<today?'past':String(fnKey)<=today?'current':'future';
+}
+/* Publish button for a fortnight that has started (Joel, 18 Nov 2026):
+   PAST — never unpublished or unlocked in the app; it's history that timesheets and pay were
+     worked out from. A correction is made directly in the database. The button explains.
+   CURRENT — "Unlock to edit" unlocks it but KEEPS it published: staff keep seeing it, and
+     cover stays on offer. "Lock again" re-locks. No Publish dialog, nothing hidden.
+   FUTURE — unchanged: Unpublish hides it and unlocks it; Publish shows the cover dialog. */
+function rbFnStartedPublishAction(role,key,dateRange){
+  const st=rbFnState(key), published=rbIsPublishedForRole(key,role), locked=rbIsLockedForRole(key,role);
+  if(!published||st==='future') return false;
+  const ok=document.getElementById('rb-confirm-ok');
+  if(st==='past'){
+    document.getElementById('rb-confirm-title').textContent='Past roster';
+    document.getElementById('rb-confirm-msg').innerHTML=`The ${RB_ROLE_LABELS[role]} roster<br><strong>${dateRange}</strong><br>has finished, so it can&rsquo;t be unpublished or unlocked here. Timesheets and pay were worked out from it; if it ever genuinely needs correcting, that is done directly in the database.`;
+    ok.textContent='OK'; ok.className='rb-confirm-ok';
+    // Left unlocked from when it was current? Re-lock it on OK (it's read-only either way).
+    _rbConfirmCallback=()=>{ if(!locked) rbSaveFnLockForRole(key,role,true); }; _rbConfirmCancelCallback=null;
+    rbConfirmOkOnly(true);
+    document.getElementById('rb-confirm-overlay').classList.add('show');
+    return true;
+  }
+  if(!locked){ rbSaveFnLockForRole(key,role,true); return true; }   // "Lock again"
+  document.getElementById('rb-confirm-title').textContent='Unlock to edit?';
+  document.getElementById('rb-confirm-msg').innerHTML=`This unlocks the ${RB_ROLE_LABELS[role]} roster<br><strong>${dateRange}</strong><br>for editing. <strong>Staff will keep seeing it</strong> &mdash; it&rsquo;s the current fortnight &mdash; and changes you make show on their phones straight away. Cover stays on offer. Lock it again when you&rsquo;re done.`;
+  ok.textContent='Unlock to edit'; ok.className='rb-confirm-ok';
+  _rbConfirmCallback=()=>rbSaveFnLockForRole(key,role,false); _rbConfirmCancelCallback=null;
+  document.getElementById('rb-confirm-overlay').classList.add('show');
+  return true;
+}
+
 function rbTogglePublishForRole(role){
   const fnStart=rbGetFnStart();
   const key=rbDateKey(fnStart);
   const end=new Date(fnStart); end.setDate(end.getDate()+13);
   const fmt=d=>d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
   const dateRange=fmt(fnStart)+' – '+fmt(end);
+  if(rbFnStartedPublishAction(role,key,dateRange)) return;
   const published=rbIsPublishedForRole(fnStart,role);
   const overlay=document.getElementById('rb-confirm-overlay');
   document.getElementById('rb-confirm-title').textContent=published?'Unpublish Roster?':'Publish Roster?';
@@ -14039,7 +14094,7 @@ function rbTogglePublishForRole(role){
       warn+='</div>';
       document.getElementById('rb-confirm-msg').innerHTML+=warn;
     }
-    const held=rbCoverInFortnight(key,role);
+    const held=rbFnState(key)==='past'?[]:rbCoverInFortnight(key,role);
     if(held.length){
       let cv='<div style="background:rgba(230,126,34,0.08);border:1.5px solid rgba(230,126,34,0.6);border-radius:8px;padding:0.7rem 0.9rem;margin-top:0.9rem;text-align:left;">';
       cv+=`<div style="font-size:0.8rem;font-weight:800;color:#8A4310;margin-bottom:0.3rem;">🙋 ${held.length} cover shift${held.length!==1?'s':''} will be offered to staff</div>`;
@@ -14164,6 +14219,7 @@ function rbTimesOverlap(s1,e1,s2,e2){
 
 async function rbCopyLastFnForRole(role){
   const fnStart=rbGetFnStart();
+  if(rbFnStarted(rbDateKey(fnStart))){ showToast('Only a future fortnight can be copied into'); return; }
   const prevStart=new Date(fnStart); prevStart.setDate(prevStart.getDate()-14);
   const fnKey=rbDateKey(fnStart);
   const prevKey=rbDateKey(prevStart);
@@ -14513,7 +14569,10 @@ function renderDayTimelineForRole(role){
   const rows=document.getElementById('rb-tl-rows-'+role);
   const cov=document.getElementById('rb-tl-cov-'+role);
   if(!header||!rows||!cov||!selectedDay) return;
-  const isLocked=rbIsLockedForRole(rbGetFnStart(),role);
+  // A fortnight that has ENDED is read-only whatever its flags — past rosters never change in
+  // the app (Joel, 18 Nov 2026); several past ones were left unlocked. The leave dropdown stays
+  // live (late sickness is a timesheet correction, and rbMarkLeave refuses exported periods).
+  const isLocked=rbIsLockedForRole(rbGetFnStart(),role)||rbFnState(rbDateKey(rbGetFnStart()))==='past';
   const isPastDay=selectedDay<rbDateKey(new Date());
   const readOnly=isLocked;
   rows.classList.toggle('published',isLocked&&!isPastDay);
@@ -15051,7 +15110,7 @@ function rbStartDrag(e,shiftId,type){
   const shift=_rosterShifts.find(s=>s.id==shiftId);
   if(!shift) return;
   const shiftRole=rbRoleForEmp(shift.employee_id);
-  if(shiftRole && rbIsLockedForRole(rbGetFnStart(),shiftRole)) return;
+  if(shiftRole && (rbIsLockedForRole(rbGetFnStart(),shiftRole)||rbFnState(rbDateKey(rbGetFnStart()))==='past')) return;
   // Walk up from e.target to find the bar element directly, then its track parent
   let barEl=e.target; while(barEl&&!barEl.classList.contains('rb-shift-bar')) barEl=barEl.parentElement;
   if(!barEl) return;
@@ -17318,7 +17377,8 @@ function reqApprovalWarnings(r){
   if(r.type==='pickup'&&_rosterConfig?.cycle_start_date){
     const ie=(_emps||[]).find(e=>String(e.id)===String(r.initiatorId));
     const g=ie?staffGroupFor(ie):r.initiatorRole;
-    if(g&&!rbIsPublishedForRole(rbFnStartForDate(r.initiatorShiftDate),g)) w.push(`This fortnight's roster is unpublished, so this cover shift is no longer on offer to staff`);
+    const _fnR=rbFnStartForDate(r.initiatorShiftDate);
+    if(g&&!rbFnStarted(_fnR)&&!rbIsPublishedForRole(_fnR,g)) w.push(`This fortnight's roster is unpublished, so this cover shift is no longer on offer to staff`);
   }
   return w;
 }
@@ -18482,7 +18542,7 @@ document.addEventListener('change', e=>{
     const adjOffset=srOffset+dir;
     const adjStart=getFortnightStart(adjOffset);
     const adjDays=getFortnight14Days(adjStart);
-    const adjPublished=srIsPublished(adjStart);
+    const adjPublished=srIsPublished(adjStart)||rbFnStarted(adjStart);
     const staffFilter=document.getElementById('sr-staff-filter')?.value;
     let emps=[..._emps];
     if(staffFilter) emps=emps.filter(e=>e.id===staffFilter);
@@ -19144,6 +19204,39 @@ function m2_updateBadge(reqs,open){
 }
 
 /* ── My Shifts ────────────────────────────────────────────────────────── */
+/* ── DRAFT ROSTERS ARE HIDDEN (Joel, 18 Nov 2026) ───────────────────────────────────────
+   A roster fortnight is published per staff group. Until a group's fortnight is published,
+   the phone shows NONE of its draft shifts — to staff and managers alike (managers check
+   drafts in the desktop builder). Who's On says "Roster not published yet" / "Not published"
+   instead of "Off"; My Shifts lists only published shifts. Approved LEAVE stays visible: it's
+   decided. Published fortnights (a few dozen rows) are cached for 2 minutes. If the app can't
+   tell (no cycle anchor, or the read failed) it shows everything rather than hiding real
+   shifts. Same rule as the desktop Who's On fortnight/person views. */
+let m2_pubCache=null;
+async function m2_pubKeys(force){
+  if(!force&&m2_pubCache&&Date.now()-m2_pubCache.at<120000) return m2_pubCache.keys;
+  let keys=null;
+  if(_rosterConfig?.cycle_start_date){
+    // Ended fortnights always show, so only current/future ones are read (~6 rows).
+    try{ keys=new Set((await db.get('roster_fortnights',{is_published:true,fn_start:{gte:m2_add(m2_today(),-14)}})).map(f=>f.fn_start+'|'+f.role)); }
+    catch(e){ keys=m2_pubCache?.keys??null; }
+  }
+  m2_pubCache={keys,at:Date.now()};
+  return keys;
+}
+function m2_pubOk(date,group){
+  const k=m2_pubCache?.keys; if(!k||!group) return true;
+  const fn=rbFnStartForDate(date);
+  // A fortnight that has STARTED (current or past) always shows — people are working from it;
+  // several past ones were unpublished after the fact for edits (rbFnStarted).
+  if(rbFnStarted(fn)) return true;
+  return k.has(fn+'|'+group);
+}
+// Keep only shifts whose own group's fortnight is published.
+function m2_onlyPublished(shifts){
+  return (shifts||[]).filter(s=>{ const e=m2_emp(s.employee_id); return m2_pubOk(s.date,e?m2_groupOf(e):null); });
+}
+
 async function m2_loadShifts(){
   const me=m2_me(), t=m2_today(), to=m2_add(t,42);
   const ph=m2_placeholderIds(m2_groupOf(me));
@@ -19153,12 +19246,13 @@ async function m2_loadShifts(){
     ph.length?db.get('roster_shifts',{employee_id:{in:`(${ph.join(',')})`},date:{gt:t,lte:to}}):Promise.resolve([]),
     db.get('notifications',{employee_id:me.id,seen_at:{is:'null'}}),
     db.get('notes',{employee_id:me.id,staff_acknowledged:false}),
-    m2_myRequests(me)
+    m2_myRequests(me),
+    m2_pubKeys()
   ]);
   const lv=m2_leaveRows(leave);
   const openOk=coverPublishedOnly(m2_eligibleOpen(open,mine,lv,reqs,me),await coverPublishedKeys());
   m2_updateBadge(reqs,openOk);
-  return {mine,leave:lv,open:openOk,notifs:notifs.map(normaliseNotif),notes:notes.map(normaliseNote),reqs};
+  return {mine:m2_onlyPublished(mine),leave:lv,open:openOk,notifs:notifs.map(normaliseNotif),notes:notes.map(normaliseNote),reqs};
 }
 /* The tag on a "What's changed" tile: what kind of update it is, in the app's chip colours. */
 /* Swipe a "What's changed" tile sideways to remove it — the SWIPE STANDARD (vault plan):
@@ -19262,7 +19356,7 @@ function m2_renderShifts(panel,d){
         <span class="m2-track"><span class="m2-fill" style="${m2_bar(next.start_time,next.end_time)}"></span></span>
         <span style="font-size:13px;color:#6E5F62">${m2_esc(m2_long(next.date))} · ${m2_esc(m2_groupLabel(m2_groupOf(me)).replace(/s$/,''))}</span>${isWfh(next)?`<span class="m2-home-sub" style="font-size:13px">${WFH_ICON} ${WFH_LABEL}</span>`:''}
       </span>${M2_ICON.chev}</button>`;
-  } else html+=`<div class="m2-card m2-empty">No shifts in the next six weeks.</div>`;
+  } else html+=`<div class="m2-card m2-empty">${Array.from({length:43},(_,i)=>m2_add(t,i)).some(k=>!m2_pubOk(k,m2_groupOf(me)))?'No published shifts yet — the roster for the coming weeks isn\u2019t out.':'No shifts in the next six weeks.'}</div>`;
   const banner=m2_bannerItems(d);
   if(banner.length){
     /* Tiles, not lines (Joel 12 Nov): white tiles like the shift and request tiles, a small
@@ -19296,6 +19390,9 @@ function m2_renderShifts(panel,d){
         onclick:m2_on(()=>m2_openShift(s,me))});
     }
   });
+  // Drafts are hidden — say why the list may stop short.
+  const _myG=m2_groupOf(me), _unpub=[...new Set(Array.from({length:43},(_,i)=>m2_add(t,i)).filter(k=>!m2_pubOk(k,_myG)).map(k=>rbFnStartForDate(k)))];
+  _unpub.forEach(fn=>{ html+=`<div class="m2-note" style="margin-top:6px;color:#8F8285">Shifts for ${m2_esc(srFortnightLabel(fn))} will show once that roster is published.</div>`; });
   html+=`</section>`;
   panel.innerHTML=html;
   if(banner.length) m2_bindUpdSwipes(panel,banner);
@@ -19430,7 +19527,8 @@ async function m2_loadLeave(){
   const ms=m2_month, me=m2_me();
   const [mon,mineReq]=await Promise.all([
     m2_fetchMonth(ms,true),
-    me?db.get('requests',{initiator_id:me.id,type:'leave'}):Promise.resolve([])
+    me?db.get('requests',{initiator_id:me.id,type:'leave'}):Promise.resolve([]),
+    m2_pubKeys()
   ]);
   [-1,1].forEach(n=>{ const k=m2_addMonth(ms,n), c=m2_mCache[k]; if(!c||Date.now()-c.at>M2_FRESH_MS) m2_fetchMonth(k).catch(()=>{}); });
   return {...mon,mine:mineReq.map(normaliseRequest)};
@@ -19464,7 +19562,8 @@ function m2_awayTiles(day,sel){
     people.forEach(([id,type])=>{
       const e=m2_emp(id); if(!e) return;
       const mine=!!me&&String(e.id)===String(me.id), name=m2_first(e);   // burgundy name marks you; no "(you)" (Joel 12 Nov)
-      const shifts=d.shifts.filter(s=>String(s.employee_id)===String(id)&&!s.is_day_off&&s.start_time&&s.end_time).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+      // Published shifts only — on a draft day the tile shows the leave without a time bar.
+      const shifts=m2_onlyPublished(d.shifts).filter(s=>String(s.employee_id)===String(id)&&!s.is_day_off&&s.start_time&&s.end_time).sort((a,b)=>a.start_time.localeCompare(b.start_time));
       if(!shifts.length){
         const kind=type==='annual_leave'?'annual':'other';
         html+=m2_pill({size:'md',kind,me:mine,name,blank:'Not rostered',time:m2_leaveTag(kind)});
@@ -19730,7 +19829,7 @@ function m2_prefetchPerson(person,off){
 let m2_coverKeys=null;
 async function m2_loadWhoson(){
   if(!m2_day) m2_day=m2_today();
-  m2_coverKeys=await coverPublishedKeys();
+  [m2_coverKeys]=await Promise.all([coverPublishedKeys(),m2_pubKeys()]);
   if(m2_wmode==='day'){ const d=await m2_fetchDay(m2_day,true); m2_prefetchAround(m2_day); return d; }
   if(!m2_person) m2_person=m2_me()?.id||m2_emps.find(e=>!e.is_placeholder)?.id;
   const person=m2_person, off=m2_pOffset;
@@ -19797,6 +19896,18 @@ function m2_dayPage(d){
   const working=d.shifts.filter(s=>!s.is_day_off&&s.start_time&&s.end_time);
   let any=false;
   m2_groupsOrdered().forEach(([g,label,colour])=>{
+    // Unpublished for this group: no draft shifts — just anyone on approved leave, and a note.
+    if(!m2_pubOk(d.day,g)){
+      const lvRows=working.filter(s=>{ const e=m2_emp(s.employee_id); return e&&!e.is_placeholder&&m2_groupOf(e)===g&&leaveEntryFor(e.id,s.date,s.id,d.entries); });
+      // Only say so when the group has someone rostered (draft) that day — not on closed days.
+      if(!working.some(s=>{ const e=m2_emp(s.employee_id); return e&&!e.is_placeholder&&m2_groupOf(e)===g; })) return;
+      any=true;
+      html+=`<section style="margin-top:12px"><h2 class="m2-h2"><span class="m2-dot" style="background:${colour}"></span>${label}</h2>`;
+      lvRows.forEach(s=>{ const e=m2_emp(s.employee_id), kind=m2_leaveKind(leaveEntryFor(e.id,s.date,s.id,d.entries));
+        html+=m2_pill({size:'md',kind,me:me&&e.id===me.id,name:m2_first(e),blank:'',time:m2_leaveTag(kind)}); });
+      html+=`<div class="m2-note" style="margin:2px 2px 0;color:#8F8285">Roster not published yet</div></section>`;
+      return;
+    }
     const rows=working.filter(s=>{ const e=m2_emp(s.employee_id); return e&&m2_groupOf(e)===g&&!(e.is_placeholder&&m2_coverKeys&&!coverPublishedOnly([s],m2_coverKeys).length); })
       .sort((a,b)=>{ const pa=m2_emp(a.employee_id).is_placeholder?1:0, pb=m2_emp(b.employee_id).is_placeholder?1:0; return pa-pb||a.start_time.localeCompare(b.start_time); });
     if(!rows.length) return; any=true;
@@ -19990,11 +20101,21 @@ function m2_movePerson(n){ if(m2_el('m2-swipe')) m2_slideDay(n); else m2_jumpTo(
 function m2_personPage(d){
   const p=m2_emp(d.person); if(!p) return `<div class="m2-empty">Loading…</div>`;
   let html=`<div>`;
-  const colour=m2_groupColour(m2_groupOf(p));
+  const grp=m2_groupOf(p), colour=m2_groupColour(grp);
+  // "Off" only means a PUBLISHED day with no shift; an unpublished day says so instead.
+  const unpubFns=[...new Set(Array.from({length:14},(_,i)=>m2_add(d.start,i)).filter(k=>!m2_pubOk(k,grp)).map(k=>rbFnStartForDate(k)))];
+  unpubFns.forEach(fn=>{ html+=`<div class="m2-note" style="margin:0 2px 8px;color:#8F8285">Roster for ${m2_esc(srFortnightLabel(fn))} isn\u2019t published yet</div>`; });
   for(let k=d.start;k<=d.end;k=m2_add(k,1)){
     const s=d.shifts.find(x=>x.date===k&&!x.is_day_off&&x.start_time&&x.end_time);
     const label=m2_fmt(k,{weekday:'short',day:'numeric'});
     if(k===m2_add(d.start,7)) html+=`<div style="height:8px"></div>`;
+    if(!m2_pubOk(k,grp)){
+      const lvU=(d.leave||[]).find(l=>l.date===k);
+      const kU=m2_leaveKind(lvU);
+      html+=kU?m2_pill({size:'md',kind:kU,name:label,blank:'',time:m2_leaveTag(kU)})
+              :m2_pill({size:'md',kind:'off',name:label,blank:'Not published'});
+      continue;
+    }
     if(!s){ html+=m2_pill({size:'md',kind:'off',name:label,blank:'Off'}); continue; }
     const lv=leaveEntryFor(p.id,k,s.id,d.leave);
     const kind=m2_leaveKind(lv);
@@ -20341,9 +20462,10 @@ async function m2_dayRoster(date){
   return {shifts,leave:m2_leaveRows(entries)};
 }
 function m2_dayPills(day,group,meId,openShiftId,marks){
-  const rows=day.shifts.filter(s=>!s.is_day_off&&s.start_time&&s.end_time).filter(s=>{ const e=m2_emp(s.employee_id); return e&&m2_groupOf(e)===group; })
-    .sort((a,b)=>a.start_time.localeCompare(b.start_time));
-  if(!rows.length) return `<div class="m2-note">Nobody else rostered.</div>`;
+  const all=day.shifts.filter(s=>!s.is_day_off&&s.start_time&&s.end_time).filter(s=>{ const e=m2_emp(s.employee_id); return e&&m2_groupOf(e)===group; });
+  // A request can point at a draft day (made from the desktop portal, or before drafts were hidden).
+  const rows=m2_onlyPublished(all).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+  if(!rows.length) return `<div class="m2-note">${all.length?'Roster not published yet.':'Nobody else rostered.'}</div>`;
   return `<div style="display:flex;flex-direction:column;gap:4px">`+rows.map(s=>{
     const e=m2_emp(s.employee_id), mine=meId&&e.id===meId, isOpen=e.is_placeholder;
     const mk=marks&&marks[String(s.id)];
@@ -20436,7 +20558,8 @@ function m2_openSwapForm(s){
         sel.innerHTML='<option value="">Loading…</option>';
         try{
           const rows=await db.get('roster_shifts',{employee_id:c.id,date:{gt:m2_today(),lte:m2_add(m2_today(),183)}});
-          theirs=rows.filter(x=>!x.is_day_off&&!x.on_leave&&x.start_time&&x.end_time).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
+          await m2_pubKeys();
+          theirs=m2_onlyPublished(rows).filter(x=>!x.is_day_off&&!x.on_leave&&x.start_time&&x.end_time).sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time));
           sel.innerHTML=theirs.length?'<option value="">Choose their shift</option>'+theirs.map(x=>`<option value="${m2_esc(x.id)}">${m2_esc(m2_short(x.date))} · ${m2_esc(m2_range(x.start_time,x.end_time))}</option>`).join(''):'<option value="">No upcoming shifts</option>';
           sel.disabled=!theirs.length;
           const v=m2_drafts[key]?.shift; if(v&&theirs.some(x=>String(x.id)===String(v))){ sel.value=v; send.disabled=false; }
@@ -20487,7 +20610,8 @@ function m2_openLeaveForm(o){
         if(!a){ t.textContent='Choose dates'; t.classList.remove('set'); sub.textContent=''; return; }
         t.textContent=m2_pkRangeLabel(a,b||a); t.classList.add('set');
         sub.textContent='';
-        try{ const n=(await db.get('roster_shifts',{employee_id:me.id,date:{gte:a,lte:b||a}})).filter(x=>!x.is_day_off&&x.start_time).length;
+        try{ const all=(await db.get('roster_shifts',{employee_id:me.id,date:{gte:a,lte:b||a}})).filter(x=>!x.is_day_off&&x.start_time);
+          await m2_pubKeys(); const n=m2_onlyPublished(all).length;
           if(dates()[0]===a) sub.textContent=n?`Covers ${n} of your shift${n===1?'':'s'}`:'No rostered shifts yet (roster may not be out)'; }catch(e){}
       };
       const recheck=async()=>{
